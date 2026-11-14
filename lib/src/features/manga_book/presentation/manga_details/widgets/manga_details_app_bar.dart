@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../../utils/theme/brand.dart';
 import '../../../../../widgets/shell/detail_navigation_shell_screen.dart';
 
 class MangaDetailsAppBar extends StatelessWidget
@@ -49,7 +50,7 @@ class MangaDetailsAppBar extends StatelessWidget
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: .45 * (1 - t)),
+                        OnImage.shadow.withValues(alpha: .45 * (1 - t)),
                         Colors.transparent,
                       ],
                     ),

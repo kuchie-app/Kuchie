@@ -1,4 +1,5 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -273,7 +274,7 @@ GoRouter routerConfig(Ref ref) {
         ),
       ],
     ],
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: kDebugMode,
     initialLocation: const LibraryRoute(categoryId: 0).location,
     navigatorKey: rootNavigatorKey,
     redirect: (context, state) {

@@ -11,7 +11,194 @@ http.Request _graphqlRequest(String query) =>
     http.Request('POST', Uri.parse('http://x/api/graphql'))
       ..body = jsonEncode({'query': query, 'variables': <String, dynamic>{}});
 
+class _TrackingClient extends http.BaseClient {
+  _TrackingClient(this.respond);
+
+  final Future<http.StreamedResponse> Function(http.BaseRequest request)
+  respond;
+  int closes = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      respond(request);
+
+  @override
+  void close() => closes++;
+}
+
+/// Emits its chunks and done normally; cancelling never completes.
+class _StickyCancelStream extends Stream<List<int>> {
+  _StickyCancelStream(this.chunks);
+
+  final List<List<int>> chunks;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _StickyCancelSubscription(
+    Stream.fromIterable(chunks).listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    ),
+  );
+}
+
+class _StickyCancelSubscription implements StreamSubscription<List<int>> {
+  _StickyCancelSubscription(this._inner);
+
+  final StreamSubscription<List<int>> _inner;
+
+  @override
+  Future<void> cancel() => Completer<void>().future;
+
+  @override
+  void onData(void Function(List<int> data)? handleData) =>
+      _inner.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _inner.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _inner.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
+
+  @override
+  void resume() => _inner.resume();
+
+  @override
+  bool get isPaused => _inner.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture(futureValue);
+}
+
 void main() {
+  group('TimeoutHttpClient close', () {
+    test('an idle client releases its connection at once', () async {
+      final inner = _TrackingClient(
+        (request) async => http.StreamedResponse(Stream.value(<int>[]), 200),
+      );
+      final client = TimeoutHttpClient(
+        const Duration(seconds: 5),
+        inner: inner,
+      );
+      await (await client.send(_graphqlRequest('{ a }'))).stream.drain<void>();
+      expect(inner.closes, 0);
+      client.close();
+      expect(inner.closes, 1);
+    });
+
+    test(
+      'a response body still being read keeps the connection open',
+      () async {
+        final body = StreamController<List<int>>();
+        final inner = _TrackingClient(
+          (request) async =>
+              http.StreamedResponse(body.stream, 200, request: request),
+        );
+        final client = TimeoutHttpClient(
+          const Duration(seconds: 5),
+          inner: inner,
+        );
+
+        final response = await client.send(_graphqlRequest('{ a }'));
+        client.close();
+        expect(inner.closes, 0, reason: 'the caller has not read the body yet');
+
+        final read = http.Response.fromStream(response);
+        body.add(utf8.encode('{"data":{}}'));
+        await body.close();
+        expect((await read).body, '{"data":{}}');
+        expect(inner.closes, 1);
+      },
+    );
+
+    test('a finished body completes even if its source never acknowledges '
+        'a cancel', () async {
+      // flutter_test's mock HttpClient delivers done, but cancelling its
+      // subscription returns a future that never completes.
+      final inner = _TrackingClient(
+        (request) async => http.StreamedResponse(
+          _StickyCancelStream([utf8.encode('ok')]),
+          200,
+          request: request,
+        ),
+      );
+      final client = TimeoutHttpClient(
+        const Duration(seconds: 5),
+        inner: inner,
+      );
+      final response = await client.send(_graphqlRequest('{ a }'));
+      final read = http.Response.fromStream(response);
+      expect((await read.timeout(const Duration(seconds: 1))).body, 'ok');
+    });
+
+    test('a cancelled body releases the connection', () async {
+      final inner = _TrackingClient(
+        (request) async => http.StreamedResponse(
+          StreamController<List<int>>().stream,
+          200,
+          request: request,
+        ),
+      );
+      final client = TimeoutHttpClient(
+        const Duration(seconds: 5),
+        inner: inner,
+      );
+      final response = await client.send(_graphqlRequest('{ a }'));
+      client.close();
+      await response.stream.listen((_) {}).cancel();
+      expect(inner.closes, 1);
+    });
+
+    test('a retry in progress finishes before the connection closes', () async {
+      var attempts = 0;
+      final inner = _TrackingClient((request) async {
+        attempts++;
+        if (attempts == 1) throw http.ClientException('reset');
+        return http.StreamedResponse(Stream.value(<int>[]), 200);
+      });
+      final client = TimeoutHttpClient(
+        const Duration(seconds: 5),
+        retries: 1,
+        retryDelay: Duration.zero,
+        inner: inner,
+      );
+      final pending = client.send(_graphqlRequest('{ a }'));
+      client.close();
+      final response = await pending;
+      expect(attempts, 2);
+      expect(inner.closes, 0);
+      await response.stream.drain<void>();
+      expect(inner.closes, 1);
+    });
+
+    test('a request after close is served, then released', () async {
+      final inner = _TrackingClient(
+        (request) async => http.StreamedResponse(Stream.value(<int>[]), 200),
+      );
+      final client = TimeoutHttpClient(
+        const Duration(seconds: 5),
+        inner: inner,
+      );
+      await (await client.send(_graphqlRequest('{ a }'))).stream.drain<void>();
+      client.close();
+      expect(inner.closes, 1);
+      final response = await client.send(_graphqlRequest('{ a }'));
+      expect(response.statusCode, 200);
+      expect(inner.closes, 1);
+      await response.stream.drain<void>();
+      expect(inner.closes, 2);
+    });
+  });
+
   group('TimeoutHttpClient', () {
     test('multipart uploads send, but a multipart timeout and a mutation '
         'timeout are not retried', () async {

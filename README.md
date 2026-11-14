@@ -44,6 +44,8 @@ flutter analyze
 flutter test
 ```
 
+GitHub Actions runs the same analysis and tests on every pull request (`.github/workflows/ci.yml`).
+
 For the Server collection, start the disposable catalog with `python3 tool/qa/server.py --jar /path/to/Suwayomi-Server.jar` and connect the Simulator to `http://127.0.0.1:14567`. To test Local mode, use the [Local extension fixture](docs/local-extensions.md#try-the-sample). See [Reader XCUITest](ios/ReaderGestureTests/README.md) for the drag and chapter-end scenarios.
 
 ### Distribution

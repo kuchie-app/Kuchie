@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../utils/theme/launch_colors.dart';
+
 const _assetFolder = 'assets/kuchie/splash';
 const _loadingPose = ExactAssetImage('$_assetFolder/kiri-loading.png');
 
@@ -48,7 +50,7 @@ class KuchieStartupSplash extends StatefulWidget {
 enum _Phase { loading, greeting, fading, done }
 
 class _KuchieStartupSplashState extends State<KuchieStartupSplash> {
-  static const _background = Color(0xFF0B0D1A);
+  static const _background = kLaunchScreenBackground;
   static const _greetingLength = Duration(milliseconds: 480);
   static const _handoffLength = Duration(milliseconds: 160);
   static const _greetingBlend = Duration(milliseconds: 80);

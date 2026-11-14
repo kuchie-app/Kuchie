@@ -100,8 +100,9 @@ void main() {
   late final Zone startupZone;
   runZonedGuarded<Future<void>>(() {
     startupZone = Zone.current;
-    return _startApp();
-  }, (error, stack) => startupZone.run(() => _onFatalError(error, stack)));
+    // Only a failure of startup itself is fatal; work it did not await is logged instead.
+    return _startApp().catchError(_onFatalError);
+  }, (error, stack) => startupZone.run(() => _logCrash(error, stack)));
 }
 
 Future<void> _startApp() async {
@@ -528,7 +529,7 @@ void _logCrash(Object error, StackTrace? stack) {
 
 void _onFatalError(Object error, StackTrace stack) {
   _logCrash(error, stack);
-  // After the first frame, async errors must not replace the running app with a startup error screen.
+  // After the first frame, a late startup failure must not replace the running app.
   if (_appRendered) return;
   try {
     runApp(

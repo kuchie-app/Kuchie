@@ -148,7 +148,7 @@ class Toast {
       if (gravity == ToastGravity.TOP) {
         return Positioned(top: 100, left: 24, right: 24, child: toast);
       }
-      final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+      final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
       return Positioned(
         bottom: bottomInset + 24,
         left: 24,

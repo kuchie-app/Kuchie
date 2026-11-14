@@ -30,25 +30,18 @@ extension ContextExtensions on BuildContext {
 
   void get hideKeyboard => FocusScope.of(this).unfocus();
 
-
-  double get horizontal =>
-      (MediaQuery.of(this).orientation == Orientation.portrait
-      ? MediaQuery.of(this).size.width
-      : MediaQuery.of(this).size.height);
+  // Size-only lookups rebuild on resize, not on keyboard or inset changes.
+  double get horizontal => MediaQuery.sizeOf(this).shortestSide;
   double horizontalScale({double scale = 1}) => scale * horizontal;
 
   double verticalScale({double scale = 1}) => scale * vertical;
-  double get vertical =>
-      (MediaQuery.of(this).orientation == Orientation.landscape
-      ? MediaQuery.of(this).size.width
-      : MediaQuery.of(this).size.height);
+  double get vertical => MediaQuery.sizeOf(this).longestSide;
 
-  Size get mediaQuerySize => MediaQuery.of(this).size;
+  Size get mediaQuerySize => MediaQuery.sizeOf(this);
 
   double get height => mediaQuerySize.height;
 
   double get width => mediaQuerySize.width;
-
 
   double widthScale({double scale = 1}) => scale * width;
 
@@ -80,23 +73,23 @@ extension ContextExtensions on BuildContext {
 
   TextTheme get textTheme => Theme.of(this).textTheme;
 
-  EdgeInsets get mediaQueryPadding => MediaQuery.of(this).padding;
+  EdgeInsets get mediaQueryPadding => MediaQuery.paddingOf(this);
 
   MediaQueryData get mediaQuery => MediaQuery.of(this);
 
-  EdgeInsets get mediaQueryViewPadding => MediaQuery.of(this).viewPadding;
+  EdgeInsets get mediaQueryViewPadding => MediaQuery.viewPaddingOf(this);
 
-  EdgeInsets get mediaQueryViewInsets => MediaQuery.of(this).viewInsets;
+  EdgeInsets get mediaQueryViewInsets => MediaQuery.viewInsetsOf(this);
 
-  Orientation get orientation => MediaQuery.of(this).orientation;
+  Orientation get orientation => MediaQuery.orientationOf(this);
 
   bool get isLandscape => orientation == Orientation.landscape;
 
   bool get isPortrait => orientation == Orientation.portrait;
 
-  double get devicePixelRatio => MediaQuery.of(this).devicePixelRatio;
+  double get devicePixelRatio => MediaQuery.devicePixelRatioOf(this);
 
-  TextScaler get textScaleFactor => MediaQuery.of(this).textScaler;
+  TextScaler get textScaleFactor => MediaQuery.textScalerOf(this);
 
   double get mediaQueryShortestSide => mediaQuerySize.shortestSide;
 
@@ -151,7 +144,7 @@ extension ContextExtensions on BuildContext {
       ),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
         ),
         child: sheet,
       ),

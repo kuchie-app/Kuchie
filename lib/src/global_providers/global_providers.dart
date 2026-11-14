@@ -124,6 +124,10 @@ GraphQLClient graphQlClient(Ref ref) {
 
   final customHeaders = ref.watch(customHttpHeadersProvider).value ?? const {};
 
+  // Endpoint switches rebuild this client; release the replaced client's sockets once idle.
+  late final TimeoutHttpClient httpClient;
+  ref.onDispose(() => httpClient.close());
+
   Link link = HttpLink(
     Endpoints.baseApi(
       baseUrl: ref.watch(serverUrlProvider) ?? DBKeys.serverUrl.initial,
@@ -136,7 +140,7 @@ GraphQLClient graphQlClient(Ref ref) {
     defaultHeaders: applyCustomHeaders({
       'Content-Type': 'application/json; charset=utf-8',
     }, customHeaders),
-    httpClient: TimeoutHttpClient(
+    httpClient: httpClient = TimeoutHttpClient(
       Duration(milliseconds: effectiveTimeoutMs),
       retries: retryCount,
       retryDelay: Duration(milliseconds: retryDelayMs),
@@ -222,6 +226,9 @@ GraphQLClient graphQlClient(Ref ref) {
           return const RefreshAuthFailure();
         }
         // Refresh through an unauthenticated client to avoid recursive auth; the coordinator deduplicates.
+        final refreshHttpClient = TimeoutHttpClient(
+          Duration(milliseconds: timeoutMs),
+        );
         final rawClient = GraphQLClient(
           link: HttpLink(
             Endpoints.baseApi(
@@ -230,6 +237,7 @@ GraphQLClient graphQlClient(Ref ref) {
               addPort: ref.read(serverPortToggleProvider).ifNull(),
               isGraphQl: true,
             ),
+            httpClient: refreshHttpClient,
             httpResponseDecoder: kuchieHttpResponseDecoder,
             defaultHeaders: applyCustomHeaders(
               const {},
@@ -239,9 +247,13 @@ GraphQLClient graphQlClient(Ref ref) {
           queryRequestTimeout: Duration(milliseconds: timeoutMs + 2000),
           cache: GraphQLCache(),
         );
-        return await ref
-            .read(authCoordinatorProvider.notifier)
-            .refreshUiAccessToken(gqlClient: rawClient, trigger: 'auth-link');
+        try {
+          return await ref
+              .read(authCoordinatorProvider.notifier)
+              .refreshUiAccessToken(gqlClient: rawClient, trigger: 'auth-link');
+        } finally {
+          refreshHttpClient.close();
+        }
       },
       onNeedsReauth: () {
         if (ref.read(hasStoredCredentialsProvider)) {

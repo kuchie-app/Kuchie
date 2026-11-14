@@ -11,6 +11,7 @@ class Logger {
       printEmojis: false,
       dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
     ),
+    filter: KuchieLogFilter(),
     output: MyConsoleOutput(),
   );
 
@@ -20,6 +21,19 @@ class Logger {
 }
 
 l.Logger get logger => Logger.instance;
+
+/// The package default drops every event in release; keep warnings and above so they reach the crash log.
+class KuchieLogFilter extends l.LogFilter {
+  KuchieLogFilter({bool? debug, this.releaseLevel = l.Level.warning})
+    : _debug = debug ?? kDebugMode;
+
+  final bool _debug;
+  final l.Level releaseLevel;
+
+  @override
+  bool shouldLog(l.LogEvent event) =>
+      event.level >= (_debug ? level ?? l.Level.trace : releaseLevel);
+}
 
 class MyConsoleOutput extends ConsoleOutput {
   @override

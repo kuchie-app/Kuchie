@@ -22,7 +22,9 @@ class TimeoutHttpClient extends http.BaseClient {
     this.isCurrentSession,
     this.retryHeaders,
     http.Client? inner,
-  }) : _inner = inner ?? createFastConnectClient(kConnectionEstablishTimeout);
+  }) : _innerFactory = inner == null
+           ? (() => createFastConnectClient(kConnectionEstablishTimeout))
+           : (() => inner);
 
   final Duration timeout;
   final int retries;
@@ -37,7 +39,11 @@ class TimeoutHttpClient extends http.BaseClient {
   final Future<Map<String, String>> Function(Map<String, String> headers)?
   retryHeaders;
 
-  final http.Client _inner;
+  final http.Client Function() _innerFactory;
+  http.Client? _innerClient;
+
+  /// Reopened on demand so a holder of a closed client can still send requests.
+  http.Client get _inner => _innerClient ??= _innerFactory();
 
   void _checkSession() {
     if (isCurrentSession?.call() == false) {
@@ -45,8 +51,77 @@ class TimeoutHttpClient extends http.BaseClient {
     }
   }
 
+  int _active = 0;
+  bool _closing = false;
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    _active++;
+    var bodyOwnsLease = false;
+    try {
+      final response = await _send(request);
+      bodyOwnsLease = true;
+      return _releaseWithBody(response);
+    } finally {
+      if (!bodyOwnsLease) _release();
+    }
+  }
+
+  /// The caller reads the body after [send] returns, so the lease lasts until the body ends.
+  http.StreamedResponse _releaseWithBody(http.StreamedResponse response) {
+    var released = false;
+    void release() {
+      if (released) return;
+      released = true;
+      _release();
+    }
+
+    StreamSubscription<List<int>>? subscription;
+    final body = StreamController<List<int>>(sync: true);
+    body
+      ..onListen = () {
+        subscription = response.stream.listen(
+          body.add,
+          onError: body.addError,
+          onDone: () {
+            // A finished source needs no cancel; awaiting one would hold back the done event.
+            subscription = null;
+            release();
+            body.close();
+          },
+        );
+      }
+      ..onPause = (() => subscription?.pause())
+      ..onResume = (() => subscription?.resume())
+      ..onCancel = () {
+        final source = subscription;
+        subscription = null;
+        release();
+        return source?.cancel();
+      };
+    return http.StreamedResponse(
+      body.stream,
+      response.statusCode,
+      contentLength: response.contentLength,
+      request: response.request,
+      headers: response.headers,
+      isRedirect: response.isRedirect,
+      persistentConnection: response.persistentConnection,
+      reasonPhrase: response.reasonPhrase,
+    );
+  }
+
+  void _release() {
+    _active--;
+    if (_closing && _active == 0) _closeInner();
+  }
+
+  void _closeInner() {
+    _innerClient?.close();
+    _innerClient = null;
+  }
+
+  Future<http.StreamedResponse> _send(http.BaseRequest request) async {
     if (request is http.MultipartRequest &&
         request.url.path.endsWith('/api/graphql') &&
         (request.headers['authorization']?.startsWith('Basic ') ?? false)) {
@@ -149,10 +224,12 @@ class TimeoutHttpClient extends http.BaseClient {
     }
   }
 
+  /// Lets requests in flight, including their retries and bodies, finish before releasing
+  /// connections; a later request reopens a connection and releases it once idle.
   @override
   void close() {
-    _inner.close();
-    super.close();
+    _closing = true;
+    if (_active == 0) _closeInner();
   }
 
   http.BaseRequest? _cloneRequest(http.BaseRequest original, {Uri? url}) {
