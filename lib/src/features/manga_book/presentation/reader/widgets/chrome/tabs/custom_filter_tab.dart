@@ -1,0 +1,232 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../../../constants/enum.dart';
+import '../../../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../../../widgets/compact_switch.dart';
+import '../../../controller/reader_preview_channel.dart';
+import '../../../controller/reader_settings_model.dart';
+
+int _argbChannel(int argb, int shift) => (argb >> shift) & 0xFF;
+
+int _withArgbChannel(int argb, int shift, int value) =>
+    (argb & ~(0xFF << shift)) | (value << shift);
+
+/// Make transparent tints visible when a colour channel changes; alpha edits keep their chosen value.
+int _ensureVisibleAlpha(int argb, int shift) =>
+    (shift != 24 && _argbChannel(argb, 24) == 0)
+    ? _withArgbChannel(argb, 24, 255)
+    : argb;
+
+class CustomFilterTab extends ConsumerWidget {
+  const CustomFilterTab({super.key, required this.mangaId, this.localSeriesId});
+
+  final int mangaId;
+  final String? localSeriesId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(
+      readerSettingsModelProvider(mangaId, localSeriesId: localSeriesId),
+    );
+    final model = ref.read(
+      readerSettingsModelProvider(
+        mangaId,
+        localSeriesId: localSeriesId,
+      ).notifier,
+    );
+
+    return ListView(
+      primary: false,
+      padding: const EdgeInsets.only(bottom: 12),
+      children: [
+        CompactSwitchListTile(
+          controlAffinity: ListTileControlAffinity.trailing,
+          title: Text(context.l10n.customBrightness),
+          value: settings.customBrightness,
+          onChanged: model.setCustomBrightness,
+        ),
+        if (settings.customBrightness)
+          _PreviewSlider(
+            title: context.l10n.customBrightness,
+            min: -75,
+            max: 100,
+            channel: readerBrightnessPreview,
+            valueOf: (draft) => draft ?? settings.customBrightnessValue,
+            onDrag: (v) => readerBrightnessPreview.value = v,
+            onCommit: (v) {
+              model.setCustomBrightnessValue(v);
+              readerBrightnessPreview.value = null;
+            },
+          ),
+        const Divider(height: 12, indent: 16, endIndent: 16),
+        CompactSwitchListTile(
+          controlAffinity: ListTileControlAffinity.trailing,
+          title: Text(context.l10n.customColorFilter),
+          value: settings.customColorFilter,
+          onChanged: model.setCustomColorFilter,
+        ),
+        if (settings.customColorFilter) ...[
+          for (final (title, shift) in [
+            (context.l10n.colorFilterRed, 16),
+            (context.l10n.colorFilterGreen, 8),
+            (context.l10n.colorFilterBlue, 0),
+            (context.l10n.colorFilterAlpha, 24),
+          ])
+            _PreviewSlider(
+              title: title,
+              min: 0,
+              max: 255,
+              channel: readerColorFilterPreview,
+              valueOf: (draft) =>
+                  _argbChannel(draft ?? settings.colorFilterValue, shift),
+              onDrag: (v) =>
+                  readerColorFilterPreview.value = _ensureVisibleAlpha(
+                    _withArgbChannel(
+                      readerColorFilterPreview.value ??
+                          settings.colorFilterValue,
+                      shift,
+                      v,
+                    ),
+                    shift,
+                  ),
+              onCommit: (v) {
+                model.setColorFilterValue(
+                  _ensureVisibleAlpha(
+                    _withArgbChannel(
+                      readerColorFilterPreview.value ??
+                          settings.colorFilterValue,
+                      shift,
+                      v,
+                    ),
+                    shift,
+                  ),
+                );
+                readerColorFilterPreview.value = null;
+              },
+            ),
+          _SectionLabel(context.l10n.colorFilterBlendMode),
+          _ChipRow(
+            children: [
+              for (final mode in ColorFilterBlendMode.values)
+                FilterChip(
+                  selected: settings.colorFilterBlendMode == mode,
+                  showCheckmark: false,
+                  label: Text(mode.toLocale(context)),
+                  onSelected: (_) => model.setColorFilterBlendMode(mode),
+                ),
+            ],
+          ),
+        ],
+        const Divider(height: 12, indent: 16, endIndent: 16),
+        CompactSwitchListTile(
+          controlAffinity: ListTileControlAffinity.trailing,
+          title: Text(context.l10n.grayscale),
+          value: settings.grayscale,
+          onChanged: model.setGrayscale,
+        ),
+        CompactSwitchListTile(
+          controlAffinity: ListTileControlAffinity.trailing,
+          title: Text(context.l10n.invertedColors),
+          value: settings.invertedColors,
+          onChanged: model.setInvertedColors,
+        ),
+      ],
+    );
+  }
+}
+
+/// Preview writes repaint the overlay only; commit the setting on drag end.
+class _PreviewSlider extends StatelessWidget {
+  const _PreviewSlider({
+    required this.title,
+    required this.min,
+    required this.max,
+    required this.channel,
+    required this.valueOf,
+    required this.onDrag,
+    required this.onCommit,
+  });
+
+  final String title;
+  final int min;
+  final int max;
+  final ValueNotifier<int?> channel;
+  final int Function(int? draft) valueOf;
+  final ValueChanged<int> onDrag;
+  final ValueChanged<int> onCommit;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int?>(
+      valueListenable: channel,
+      builder: (context, draft, _) {
+        final value = valueOf(draft);
+        return ListTile(
+          title: Text(title),
+          subtitle: Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: value.toDouble(),
+                  min: min.toDouble(),
+                  max: max.toDouble(),
+                  divisions: max - min,
+                  label: '$value',
+                  onChanged: (v) => onDrag(v.round()),
+                  onChangeEnd: (v) => onCommit(v.round()),
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text('$value', textAlign: TextAlign.end),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          text,
+          style: context.textTheme.labelLarge?.copyWith(
+            color: context.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipRow extends StatelessWidget {
+  const _ChipRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Wrap(spacing: 8, runSpacing: 4, children: children),
+    );
+  }
+}

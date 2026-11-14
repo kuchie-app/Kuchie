@@ -1,0 +1,43 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/utils/crash/copy_crash_log.dart';
+
+void main() {
+  group('crashLogForClipboard', () {
+    test('prepends the header and redacts the body', () {
+      final dir = Directory.systemTemp.createTempSync('crashlog-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = '${dir.path}/crash.log';
+      File(path).writeAsStringSync(
+        '[2026-01-01] Exception: http://h/img?token=OLD.secret x\n',
+      );
+
+      const header =
+          'Kuchie v1.3.2 (build 42)\n'
+          'Server: unknown\n'
+          'Platform: web\n'
+          '---\n';
+      final out = crashLogForClipboard(path, header: header)!;
+
+      expect(out.startsWith(header), isTrue);
+      expect(out, contains('token=<redacted>'));
+      expect(out.contains('OLD.secret'), isFalse);
+      expect(
+        out,
+        '$header[2026-01-01] Exception: http://h/img?token=<redacted> x\n',
+      );
+
+      // With no header the result is exactly the redacted log.
+      final plain = '${dir.path}/plain.log';
+      File(plain).writeAsStringSync('plain failure, no tokens\n');
+      expect(crashLogForClipboard(plain), 'plain failure, no tokens\n');
+    });
+  });
+}

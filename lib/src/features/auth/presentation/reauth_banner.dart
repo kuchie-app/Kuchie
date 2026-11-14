@@ -1,0 +1,163 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../constants/db_keys.dart';
+import '../../../constants/enum.dart';
+import '../../../global_providers/global_providers.dart';
+import '../../../routes/router_config.dart';
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../utils/motion/reduce_motion.dart';
+import '../../account/data/account_notice.dart';
+import '../../settings/presentation/server/widget/credential_popup/login_credentials_popup.dart';
+import '../data/auth_lifecycle_observer.dart';
+import '../data/auth_recovery_target.dart';
+import '../data/auth_state.dart';
+
+/// Preserves the child layout, including slivers, while showing banners via ScaffoldMessenger.
+class ReauthBannerHost extends ConsumerStatefulWidget {
+  const ReauthBannerHost({super.key, required this.child, this.enabled = true});
+  final bool enabled;
+  final Widget child;
+
+  @override
+  ConsumerState<ReauthBannerHost> createState() => _ReauthBannerHostState();
+}
+
+class _ReauthBannerHostState extends ConsumerState<ReauthBannerHost> {
+  bool _bannerShown = false;
+  late final AuthLifecycleObserver _authObserver;
+
+  @override
+  void initState() {
+    super.initState();
+    // Android Doze suspends timers, so resume must trigger an overdue refresh.
+    _authObserver = AuthLifecycleObserver(ref);
+    if (widget.enabled) _enable();
+  }
+
+  @override
+  void didUpdateWidget(covariant ReauthBannerHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled == oldWidget.enabled) return;
+    if (widget.enabled) {
+      _enable();
+    } else {
+      WidgetsBinding.instance.removeObserver(_authObserver);
+      if (_bannerShown) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !widget.enabled) _clearBanner();
+        });
+      }
+    }
+  }
+
+  void _enable() {
+    WidgetsBinding.instance.addObserver(_authObserver);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.enabled) return;
+      if (ref.read(needsReauthProvider) ||
+          ref.read(accountNoticeProvider) != null) {
+        _showBanner();
+        if (ref.read(authRecoveryTargetProvider) != null) _openSignIn();
+      } else {
+        ref.read(authModeReconcilerProvider).reconcile();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_authObserver);
+    super.dispose();
+  }
+
+  void _showBanner() {
+    if (_bannerShown) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    _bannerShown = true;
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(_buildBanner());
+  }
+
+  void _clearBanner() {
+    if (!_bannerShown) return;
+    _bannerShown = false;
+    ScaffoldMessenger.maybeOf(context)?.clearMaterialBanners();
+  }
+
+  MaterialBanner _buildBanner() {
+    return MaterialBanner(
+      content: Text(switch (ref.read(accountNoticeProvider)) {
+        AccountNoticeKind.passwordUnconfirmed =>
+          context.l10n.accountPasswordUnconfirmed,
+        AccountNoticeKind.passwordSignInRequired =>
+          context.l10n.accountPasswordSignInRequired,
+        null => context.l10n.authSessionExpired,
+      }),
+      leading: const Icon(FluentIcons.warning_24_regular),
+      actions: [
+        TextButton(
+          onPressed: _openSignIn,
+          child: Text(context.l10n.authReauthenticate),
+        ),
+      ],
+    );
+  }
+
+  bool _dialogOpen = false;
+
+  void _openSignIn() {
+    if (_dialogOpen) return;
+    final navigatorContext = rootNavigatorKey.currentState?.overlay?.context;
+    if (navigatorContext == null) return;
+    final mode =
+        ref.read(authRecoveryTargetProvider) ??
+        ref.read(authTypeKeyProvider) ??
+        DBKeys.authType.initial;
+    _dialogOpen = true;
+    showDialog<void>(
+      context: navigatorContext,
+      builder: (_) =>
+          LoginCredentialsPopup(authType: mode, allowModeSelection: true),
+      animationStyle: navigatorContext.motionStyle,
+    ).whenComplete(() => _dialogOpen = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    ref.listen<bool>(needsReauthProvider, (prev, next) {
+      if (next || ref.read(accountNoticeProvider) != null) {
+        _showBanner();
+        if (next) {
+          ref.read(authModeReconcilerProvider).reconcile(authFailure: true);
+        }
+      } else {
+        _clearBanner();
+      }
+    });
+    ref.listen<AccountNoticeKind?>(accountNoticeProvider, (previous, next) {
+      _clearBanner();
+      if (next != null || ref.read(needsReauthProvider)) _showBanner();
+    });
+    ref.listen<AuthType?>(authRecoveryTargetProvider, (previous, next) {
+      _clearBanner();
+      if (next != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !widget.enabled) return;
+          _showBanner();
+          _openSignIn();
+        });
+      }
+    });
+    return widget.child;
+  }
+}

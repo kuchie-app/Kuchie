@@ -1,0 +1,30 @@
+fragment ChapterDto on ChapterType {
+  chapterNumber
+  fetchedAt
+  id
+  user {
+    isBookmarked
+    isDownloaded
+    isRead
+    lastPageRead
+    lastReadAt
+  }
+  mangaId
+  name
+  pageCount
+  realUrl
+  scanlator
+  sourceOrder
+  uploadDate
+  url
+  meta {
+    key
+    value
+  }
+}
+fragment ChapterWithMangaDto on ChapterType {
+  ...ChapterDto,
+  manga {
+    ...MangaBaseDto,
+  }
+}

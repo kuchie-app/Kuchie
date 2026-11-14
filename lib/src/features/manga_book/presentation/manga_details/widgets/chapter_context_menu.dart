@@ -1,0 +1,569 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/toast/toast.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../widgets/ios/apple_glass_popover.dart';
+import '../../../../offline/data/offline_download_providers.dart';
+import '../../../../offline/data/offline_repository.dart';
+import '../../../../offline/data/offline_types.dart';
+import '../../../../offline/presentation/offline_action_confirmations.dart';
+import '../../../../settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
+import '../../../domain/chapter/chapter_model.dart';
+import '../../../widgets/chapter_actions/chapter_bulk_actions.dart';
+import '../../reader/utils/koreader_progress_actions.dart';
+
+RelativeRect menuAnchorForRect(BuildContext context, Rect rect) {
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+  final topLeft = overlay.globalToLocal(rect.topLeft);
+  return RelativeRect.fromRect(topLeft & rect.size, Offset.zero & overlay.size);
+}
+
+RelativeRect menuAnchorForPoint(BuildContext context, Offset point) =>
+    menuAnchorForRect(context, point & const Size(1, 1));
+
+/// Shared chapter actions for touch and desktop menus.
+Future<void> showChapterContextMenu({
+  required BuildContext context,
+  required WidgetRef ref,
+  required RelativeRect position,
+  required String? seriesUrl,
+  required ChapterDto chapter,
+  required ValueNotifier<Map<int, ChapterDto>> selectedChapters,
+  required ValueNotifier<int?> selectionAnchor,
+  required List<ChapterDto> orderedChapters,
+  required List<ChapterDto> bulkChapters,
+  required AsyncCallback refresh,
+  void Function()? refocus,
+  bool updatesMenu = false,
+  bool historyMenu = false,
+  VoidCallback? onViewManga,
+  VoidCallback? onRead,
+  Future<void> Function()? onAddToLibrary,
+  List<ChapterDto>? cachedBulkChapters,
+  Future<List<ChapterDto>?> Function()? loadBulkChapters,
+}) async {
+  final connected = updatesMenu || historyMenu
+      ? false
+      : koSyncOnline(ref)
+      ? await ref
+            .read(koSyncStatusProvider.future)
+            .then((status) => status.isLoggedIn)
+            .catchError((_) => false)
+      : false;
+  if (!context.mounted) return;
+  final selecting =
+      selectedChapters.value.isNotEmpty &&
+      selectedChapters.value.containsKey(chapter.id);
+  final targets = selecting
+      ? selectedChapters.value.values.toList()
+      : [chapter];
+
+  void replaceSelection(Map<int, ChapterDto> next, int anchorId) {
+    selectedChapters.value = next;
+    selectionAnchor.value = anchorId;
+  }
+
+  List<PopupMenuEntry<void>> buildSingleItems() {
+    final read = chapter.user.isRead.ifNull();
+    final bookmarked = chapter.user.isBookmarked.ifNull();
+    final canDownload = canDownloadChapters(ref);
+    final offlineEnabled = ref.read(offlineEnabledProvider);
+    final onDevice =
+        ref.read(offlineChapterStateProvider(chapter.id)).value ==
+        OfflineDeviceState.downloaded;
+    final downloaded = chapter.user.isDownloaded.ifNull();
+    final index = orderedChapters.indexWhere((c) => c.id == chapter.id);
+
+    final PopupMenuItem<void> bookmarkItem = PopupMenuItem(
+      onTap: () async {
+        await toggleChapterBookmark(ref, chapter);
+        await refresh();
+      },
+      child: ChapterMenuRow(
+        icon: bookmarked
+            ? FluentIcons.bookmark_24_filled
+            : FluentIcons.bookmark_24_regular,
+        label: bookmarked ? context.l10n.removeBookmark : context.l10n.bookmark,
+      ),
+    );
+    final PopupMenuItem<void> markReadItem = PopupMenuItem(
+      onTap: () => markChaptersRead(
+        context: context,
+        ref: ref,
+        chapters: [chapter],
+        isRead: !read,
+        refresh: (_) => refresh(),
+      ),
+      child: ChapterMenuRow(
+        icon: Icons.done_rounded,
+        label: read ? context.l10n.markAsUnread : context.l10n.markAsRead,
+      ),
+    );
+    final knownBulk = cachedBulkChapters ?? bulkChapters;
+    final PopupMenuItem<void> markPreviousItem = PopupMenuItem(
+      enabled:
+          previousChapters(knownBulk, chapter).isNotEmpty ||
+          (loadBulkChapters != null && cachedBulkChapters == null),
+      onTap: () async {
+        var list = cachedBulkChapters;
+        if (list == null && loadBulkChapters != null) {
+          try {
+            list = await loadBulkChapters();
+          } catch (_) {
+            list = null;
+          }
+          if (!context.mounted) return;
+          if (list == null) {
+            ref
+                .read(toastProvider)
+                ?.showError(context.l10n.errorSomethingWentWrong);
+            return;
+          }
+        }
+        if (!context.mounted) return;
+        await markPreviousAsRead(
+          context: context,
+          ref: ref,
+          bulkList: list ?? bulkChapters,
+          anchor: chapter,
+          refresh: (_) => refresh(),
+        );
+      },
+      child: ChapterMenuRow(
+        icon: FluentIcons.text_bullet_list_checkmark_20_regular,
+        label: context.l10n.markPreviousAsRead,
+      ),
+    );
+    final PopupMenuItem<void> selectItem = PopupMenuItem(
+      onTap: () => replaceSelection({chapter.id: chapter}, chapter.id),
+      child: ChapterMenuRow(
+        icon: FluentIcons.checkbox_unchecked_24_regular,
+        label: context.l10n.select,
+      ),
+    );
+    final PopupMenuItem<void> selectUnreadItem = PopupMenuItem(
+      onTap: () => replaceSelection({
+        for (final c in orderedChapters)
+          if (!c.user.isRead.ifNull()) c.id: c,
+      }, chapter.id),
+      child: ChapterMenuRow(
+        icon: FluentIcons.multiselect_ltr_24_regular,
+        label: context.l10n.selectUnread,
+      ),
+    );
+    final PopupMenuItem<void> selectAllItem = PopupMenuItem(
+      onTap: () => replaceSelection({
+        for (final c in orderedChapters) c.id: c,
+      }, chapter.id),
+      child: ChapterMenuRow(
+        icon: FluentIcons.select_all_on_24_regular,
+        label: context.l10n.selectAll,
+      ),
+    );
+    final PopupMenuItem<void>? keepOfflineItem = offlineEnabled
+        ? PopupMenuItem(
+            enabled: !onDevice || canDownload,
+            onTap: () async {
+              if (onDevice) {
+                await confirmDeleteChapterFromDevice(ref, chapter.id);
+              } else {
+                try {
+                  await keepChapterOffline(ref, chapter.id);
+                } catch (_) {
+                  if (context.mounted) {
+                    ref
+                        .read(toastProvider)
+                        ?.showError(context.l10n.errorSomethingWentWrong);
+                  }
+                }
+              }
+              await refresh();
+            },
+            child: ChapterMenuRow(
+              icon: onDevice
+                  ? FluentIcons.checkmark_circle_24_filled
+                  : FluentIcons.arrow_circle_down_24_regular,
+              label: onDevice
+                  ? context.l10n.removeFromDevice
+                  : context.l10n.keepOffline,
+            ),
+          )
+        : null;
+    final PopupMenuItem<void> downloadItem = PopupMenuItem(
+      enabled: canDownload,
+      onTap: () => queueServerDownload(
+        context: context,
+        ref: ref,
+        chapterIds: [chapter.id],
+        refresh: (_) => refresh(),
+      ),
+      child: ChapterMenuRow(
+        icon: FluentIcons.cloud_arrow_down_24_regular,
+        label: context.l10n.download,
+      ),
+    );
+    final PopupMenuItem<void>? browserItem =
+        chapterHasBrowserTarget(chapter, seriesUrl)
+        ? PopupMenuItem(
+            onTap: () => openChapterInBrowser(context, ref, chapter, seriesUrl),
+            child: ChapterMenuRow(
+              icon: FluentIcons.globe_24_regular,
+              label: context.l10n.openInBrowser,
+            ),
+          )
+        : null;
+    final deleteItem = _DangerMenuItem(
+      icon: FluentIcons.delete_24_regular,
+      label: context.l10n.deleteFromServer,
+      errorLabel: updatesMenu,
+      onTap: () async {
+        final deleted = await deleteChaptersFromServerWithConfirm(
+          context: context,
+          ref: ref,
+          chapters: [chapter],
+        );
+        if (deleted) await refresh();
+      },
+    );
+
+    final PopupMenuItem<void>? addToLibraryItem = onAddToLibrary == null
+        ? null
+        : PopupMenuItem(
+            onTap: () async {
+              await onAddToLibrary();
+              if (!context.mounted) return;
+              await refresh();
+            },
+            child: ChapterMenuRow(
+              icon: FluentIcons.heart_24_regular,
+              label: context.l10n.addToLibrary,
+            ),
+          );
+    final readItem = onRead == null
+        ? null
+        : PopupMenuItem<void>(
+            onTap: onRead,
+            child: ChapterMenuRow(
+              icon: FluentIcons.book_open_24_regular,
+              label: context.l10n.offlineChapterRead,
+            ),
+          );
+
+    if (historyMenu) {
+      return [
+        if (onViewManga != null) ...[
+          PopupMenuItem(
+            onTap: onViewManga,
+            child: ChapterMenuRow(
+              icon: FluentIcons.book_open_24_regular,
+              label: context.l10n.viewManga,
+            ),
+          ),
+          const PopupMenuDivider(),
+        ],
+        ?addToLibraryItem,
+        bookmarkItem,
+        markReadItem,
+        markPreviousItem,
+        const PopupMenuDivider(),
+        ?browserItem,
+        ?keepOfflineItem,
+        if (!downloaded) downloadItem,
+      ];
+    }
+
+    if (updatesMenu) {
+      return [
+        ?readItem,
+        if (onViewManga != null) ...[
+          PopupMenuItem(
+            onTap: onViewManga,
+            child: ChapterMenuRow(
+              icon: FluentIcons.book_open_24_regular,
+              label: context.l10n.viewManga,
+            ),
+          ),
+          const PopupMenuDivider(),
+        ],
+        bookmarkItem,
+        markReadItem,
+        const PopupMenuDivider(),
+        markPreviousItem,
+        selectItem,
+        selectUnreadItem,
+        selectAllItem,
+        const PopupMenuDivider(),
+        ?keepOfflineItem,
+        if (!downloaded) downloadItem,
+        ?browserItem,
+        const PopupMenuDivider(),
+        deleteItem,
+      ];
+    }
+
+    return [
+      ?readItem,
+      if (readItem != null) selectItem,
+      bookmarkItem,
+      markReadItem,
+      if (connected)
+        for (final push in [true, false])
+          PopupMenuItem(
+            enabled: koSyncOnline(ref),
+            onTap: () async {
+              await syncKoReaderChapter(
+                context: context,
+                ref: ref,
+                chapter: chapter,
+                push: push,
+              );
+              await refresh();
+            },
+            child: ChapterMenuRow(
+              icon: push
+                  ? FluentIcons.cloud_arrow_up_24_regular
+                  : FluentIcons.cloud_arrow_down_24_regular,
+              label: push
+                  ? context.l10n.pushKoReaderProgress
+                  : context.l10n.pullKoReaderProgress,
+            ),
+          ),
+      const PopupMenuDivider(),
+      markPreviousItem,
+      if (readItem == null) selectItem,
+      PopupMenuItem(
+        onTap: () {
+          if (index < 0) return;
+          final next = {
+            ...selectedChapters.value,
+            for (final c in orderedChapters.skip(index + 1).take(10)) c.id: c,
+          };
+          replaceSelection(next, chapter.id);
+        },
+        child: ChapterMenuRow(
+          icon: FluentIcons.task_list_ltr_24_regular,
+          label: context.l10n.selectNext10,
+        ),
+      ),
+      PopupMenuItem(
+        onTap: () {
+          if (index < 0) return;
+          final next = {
+            ...selectedChapters.value,
+            for (final c in orderedChapters.skip(index)) c.id: c,
+          };
+          replaceSelection(next, chapter.id);
+        },
+        child: ChapterMenuRow(
+          icon: FluentIcons.arrow_down_24_regular,
+          label: context.l10n.selectBelow,
+        ),
+      ),
+      selectUnreadItem,
+      selectAllItem,
+      if (selectedChapters.value.isNotEmpty)
+        PopupMenuItem(
+          onTap: () {
+            final ids = selectedChapters.value.keys.toSet();
+            final firstSelected = orderedChapters.indexWhere(
+              (c) => ids.contains(c.id),
+            );
+            final lastSelected = orderedChapters.lastIndexWhere(
+              (c) => ids.contains(c.id),
+            );
+            if (firstSelected < 0 || lastSelected < 0) return;
+            replaceSelection({
+              for (var i = firstSelected; i <= lastSelected; i++)
+                orderedChapters[i].id: orderedChapters[i],
+            }, chapter.id);
+          },
+          child: ChapterMenuRow(
+            icon: FluentIcons.arrow_autofit_height_24_regular,
+            label: context.l10n.selectInBetween,
+          ),
+        ),
+      const PopupMenuDivider(),
+      ?browserItem,
+      if (browserItem != null) const PopupMenuDivider(),
+      ?keepOfflineItem,
+      if (downloaded) deleteItem else downloadItem,
+    ];
+  }
+
+  List<PopupMenuEntry<void>> buildSelectionItems() {
+    final allRead = targets.every((c) => c.user.isRead.ifNull());
+    final allBookmarked = targets.every((c) => c.user.isBookmarked.ifNull());
+    final canDownload = canDownloadChapters(ref);
+    return [
+      PopupMenuItem(
+        enabled: false,
+        child: Text(
+          context.l10n.numSelected(targets.length),
+          style: context.textTheme.labelLarge,
+        ),
+      ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        onTap: () => setChaptersBookmark(
+          ref: ref,
+          chapters: targets,
+          isBookmarked: !allBookmarked,
+          refresh: (_) => refresh(),
+        ),
+        child: ChapterMenuRow(
+          icon: allBookmarked
+              ? FluentIcons.bookmark_24_filled
+              : FluentIcons.bookmark_24_regular,
+          label: allBookmarked
+              ? context.l10n.removeBookmark
+              : context.l10n.bookmark,
+        ),
+      ),
+      PopupMenuItem(
+        onTap: () => markChaptersRead(
+          context: context,
+          ref: ref,
+          chapters: targets,
+          isRead: !allRead,
+          refresh: (_) => refresh(),
+        ),
+        child: ChapterMenuRow(
+          icon: Icons.done_rounded,
+          label: allRead ? context.l10n.markAsUnread : context.l10n.markAsRead,
+        ),
+      ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        enabled: canDownload,
+        onTap: () => keepChaptersOffline(
+          context: context,
+          ref: ref,
+          chapters: targets,
+          refresh: (_) => refresh(),
+        ),
+        child: ChapterMenuRow(
+          icon: FluentIcons.arrow_circle_down_24_regular,
+          label: context.l10n.keepOffline,
+        ),
+      ),
+      PopupMenuItem(
+        enabled: canDownload,
+        onTap: () => queueServerDownload(
+          context: context,
+          ref: ref,
+          chapterIds: [for (final c in targets) c.id],
+          refresh: (_) => refresh(),
+        ),
+        child: ChapterMenuRow(
+          icon: FluentIcons.cloud_arrow_down_24_regular,
+          label: context.l10n.download,
+        ),
+      ),
+      const PopupMenuDivider(),
+      _DangerMenuItem(
+        icon: FluentIcons.delete_24_regular,
+        label: context.l10n.deleteFromServer,
+        onTap: () async {
+          final deleted = await deleteChaptersFromServerWithConfirm(
+            context: context,
+            ref: ref,
+            chapters: targets,
+          );
+          if (deleted) await refresh();
+        },
+      ),
+    ];
+  }
+
+  await showAppleGlassMenu<void>(
+    context: context,
+    position: position,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    items: selecting ? buildSelectionItems() : buildSingleItems(),
+    popUpAnimationStyle: context.motionStyle,
+  );
+  refocus?.call();
+}
+
+class ChapterMenuRow extends StatelessWidget {
+  const ChapterMenuRow({super.key, required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    final muted = context.theme.colorScheme.onSurfaceVariant;
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: muted),
+        const SizedBox(width: 12),
+        Flexible(child: Text(label)),
+      ],
+    );
+  }
+}
+
+class _DangerMenuItem extends PopupMenuEntry<void> {
+  const _DangerMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.errorLabel = false,
+  });
+  final IconData icon;
+  final String label;
+  final AsyncCallback onTap;
+  final bool errorLabel;
+  @override
+  double get height => kMinInteractiveDimension;
+  @override
+  bool represents(void value) => false;
+  @override
+  State<StatefulWidget> createState() => _DangerMenuItemState();
+}
+
+class _DangerMenuItemState extends State<_DangerMenuItem> {
+  void _handleTap() {
+    Navigator.pop(context);
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.theme.colorScheme;
+    return InkWell(
+      onTap: _handleTap,
+      canRequestFocus: true,
+      hoverColor: cs.error.withValues(alpha: 0.12),
+      highlightColor: cs.error.withValues(alpha: 0.18),
+      child: SizedBox(
+        height: widget.height,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 20, color: cs.error),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  widget.label,
+                  style: widget.errorLabel ? TextStyle(color: cs.error) : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

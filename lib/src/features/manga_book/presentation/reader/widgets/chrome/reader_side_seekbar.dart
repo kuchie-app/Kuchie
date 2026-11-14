@@ -1,0 +1,81 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../../utils/theme/brand.dart';
+import '../../../../../../widgets/ios/apple_glass_toolbar.dart';
+import '../brand_page_seekbar.dart';
+
+/// The caller positions this bar using measured ChromeExtents to clear the top and bottom chrome.
+class ReaderSideSeekBar extends StatelessWidget {
+  const ReaderSideSeekBar({
+    super.key,
+    required this.currentIndex,
+    required this.pageCount,
+    required this.onChanged,
+    required this.onPreviousChapter,
+    required this.onNextChapter,
+  });
+
+  final int currentIndex;
+
+  final int pageCount;
+
+  final ValueChanged<int> onChanged;
+
+  /// Null when there is no chapter that way; the button renders disabled.
+  final VoidCallback? onPreviousChapter;
+  final VoidCallback? onNextChapter;
+
+  @override
+  Widget build(BuildContext context) {
+    final navSurface = readerNavSurface(context.theme.colorScheme);
+
+    return Column(
+      children: [
+        AppleGlassToolbarButton(
+          id: 'reader-previous-chapter',
+          symbol: 'chevron.up',
+          label: context.l10n.hotkeyReaderPrevChapter,
+          onPressed: onPreviousChapter,
+          fallback: BrandFilledCircleButton(
+            icon: FluentIcons.previous_24_filled,
+            quarterTurns: 1,
+            color: navSurface,
+            onPressed: onPreviousChapter,
+          ),
+        ),
+        const Gap(8),
+        Expanded(
+          child: BrandPageSeekBar(
+            currentValue: currentIndex,
+            maxValue: pageCount,
+            onChanged: onChanged,
+            axis: Axis.vertical,
+            capsuleColor: navSurface,
+          ),
+        ),
+        const Gap(8),
+        AppleGlassToolbarButton(
+          id: 'reader-next-chapter',
+          symbol: 'chevron.down',
+          label: context.l10n.hotkeyReaderNextChapter,
+          onPressed: onNextChapter,
+          fallback: BrandFilledCircleButton(
+            icon: FluentIcons.next_24_filled,
+            quarterTurns: 1,
+            color: navSurface,
+            onPressed: onNextChapter,
+          ),
+        ),
+      ],
+    );
+  }
+}

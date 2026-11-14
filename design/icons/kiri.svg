@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Kiri app icon">
+  <title>Kiri</title>
+  <defs>
+    <radialGradient id="ground" cx=".65" cy=".29" r=".78" gradientTransform="translate(.02 .01) scale(.97 1)">
+      <stop stop-color="#36304B"/><stop offset=".62" stop-color="#211E34"/><stop offset="1" stop-color="#141422"/>
+    </radialGradient>
+    <linearGradient id="hood" x1=".23" y1=".05" x2=".69" y2=".98">
+      <stop stop-color="#82788E"/><stop offset=".58" stop-color="#4D465D"/><stop offset="1" stop-color="#312D43"/>
+    </linearGradient>
+    <linearGradient id="paper" x1=".15" y1=".03" x2=".84" y2="1">
+      <stop stop-color="#FFF5DF"/><stop offset=".74" stop-color="#F4F0EA"/><stop offset="1" stop-color="#D9CDCA"/>
+    </linearGradient>
+    <linearGradient id="scarf" x1=".09" y1=".19" x2=".91" y2=".81">
+      <stop stop-color="#D5C3FF"/><stop offset=".56" stop-color="#B5AAFF"/><stop offset="1" stop-color="#9180DB"/>
+    </linearGradient>
+    <pattern id="ink-dots" patternUnits="userSpaceOnUse" width="14" height="14" patternTransform="rotate(19)">
+      <circle cx="3.5" cy="3.5" r="2.55" fill="#100F20"/><circle cx="10.5" cy="10.5" r="2.55" fill="#100F20"/>
+    </pattern>
+  </defs>
+  <path d="M0 0h1024v1024H0z" fill="url(#ground)"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M608 627q101-46 177 6l30 109-66 77-129 37-144-36-110 20 49-99 57-83Z" fill="#211F32" stroke="#111020" stroke-width="17"/>
+    <path d="M625 655 489 801l-70 20 82-136Z" fill="#554C65"/>
+    <path d="M625 655 489 801l-70 20 82-136Z" fill="url(#ink-dots)" opacity=".64"/>
+    <path d="M432 815q104-22 193-152l-65 131-73 28Z" fill="url(#paper)"/>
+    <path d="M732 653q34 42 39 102l-53 49-92 25q59-71 106-176Z" fill="#3D354F"/>
+    <path d="M732 653q34 42 39 102l-53 49-92 25q59-71 106-176Z" fill="url(#ink-dots)" opacity=".64"/>
+    <path d="M588 610c-69 21-127-26-196-60-67-31-146-28-239 19l68 38-65 86c89-42 161-60 229-48 63 11 85 63 150 63 31 0 55-15 78-38Z" fill="url(#scarf)" stroke="#151426" stroke-width="18"/>
+    <path d="M177 569c66-40 144-46 215-12 43 21 81 53 111 64-54-12-96-27-130-33-61-10-109 1-152 21Z" fill="#E7D4FF" opacity=".55"/>
+    <path d="M177 569c66-40 144-46 215-12 43 21 81 53 111 64-54-12-96-27-130-33-61-10-109 1-152 21Z" fill="url(#ink-dots)" opacity=".38"/>
+    <path d="M378 645q60-2 117 37 39 17 79-13l36-29-22 35q-37 31-66 27-43-3-83-36Z" fill="#8572C4" opacity=".86"/>
+    <path d="M554 630q63-42 140-33l52 28-6 52-36 14q-67-24-130 12l-39-24Z" fill="url(#scarf)" stroke="#1B162D" stroke-width="15"/>
+    <path d="M565 671q75-46 155-24" fill="none" stroke="#E6D6FF" stroke-width="7" opacity=".69"/>
+    <path d="M233 320c75-28 163-49 274-69l232-52q10-2 14 13l25 63c16 43 33 60 71 91l62 53c-20 113-88 193-195 230-107 38-211 8-286-53-16-76-46-142-91-203-23-30-59-49-106-73Z" fill="#1C1A2C" stroke="#111020" stroke-width="20"/>
+    <path d="M274 320c82-26 148-37 237-55l217-56-212 202-80 178c-21-97-57-187-100-223Z" fill="url(#hood)"/>
+    <path d="M274 320c82-26 148-37 237-55l217-56-212 202-80 178c-21-97-57-187-100-223Z" fill="url(#ink-dots)" opacity=".75"/>
+    <path d="M392 451q51-59 131-92l-28 67-60 160Z" fill="#2A263A" opacity=".84"/>
+    <path d="M304 313q102-29 211-48l207-53" fill="none" stroke="#A297AE" stroke-width="6" opacity=".6"/>
+    <path d="M437 585q81-140 176-239l121-132-86 144-48 77q-72 34-163 150Z" fill="url(#paper)"/>
+    <path d="M437 585q87-143 176-239l121-132" fill="none" stroke="#F8EEDC" stroke-width="5"/>
+    <path d="m730 282 54 30 63 55 42 42q-44-30-79-28-77-21-154 51l-38 33Z" fill="url(#hood)"/>
+    <path d="m730 282 54 30 63 55 42 42q-44-30-79-28-77-21-154 51l-38 33Z" fill="url(#ink-dots)" opacity=".59"/>
+    <path d="M507 531q45 34 85 54l90 57q-94 9-173-54Z" fill="#665B72"/>
+    <path d="M507 531q45 34 85 54l90 57q-94 9-173-54Z" fill="url(#ink-dots)" opacity=".69"/>
+    <path d="M533 541q52-103 121-153c49-35 77-43 116-38 56 7 98 36 116 83 23 62-26 154-112 194-69 8-157-24-241-86Z" fill="url(#paper)" stroke="#191827" stroke-width="13"/>
+    <path d="M552 554q115 76 211 65" fill="none" stroke="#D5C6C5" stroke-width="4.5"/>
+    <ellipse cx="663" cy="515" rx="25.5" ry="28.5" transform="rotate(-17 663 515)" fill="#141321"/>
+    <ellipse cx="799" cy="455" rx="22.5" ry="25.5" transform="rotate(-17 799 455)" fill="#141321"/>
+    <path d="M890 469q-14 67-51 100" fill="none" stroke="#95899F" stroke-width="5" opacity=".64"/>
+  </g>
+</svg>

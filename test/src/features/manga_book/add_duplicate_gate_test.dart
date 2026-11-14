@@ -1,0 +1,128 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/library/domain/category/category_model.dart';
+import 'package:kuchie/src/features/library/domain/category/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/library/presentation/category/controller/edit_category_controller.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_controller.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_manga_list.dart';
+import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/manga_details/widgets/add_to_library_category.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+
+import 'reader/reader_test_fixtures.dart';
+
+MangaDto _manga({required int id, required String title}) =>
+    testManga().copyWith.call(id: id, title: title);
+
+CategoryDto _cat({required int id, required String name}) =>
+    Fragment$CategoryDto(
+      defaultCategory: false,
+      id: id,
+      includeInDownload: Enum$IncludeOrExclude.UNSET,
+      includeInUpdate: Enum$IncludeOrExclude.UNSET,
+      name: name,
+      order: id,
+      mangas: Fragment$CategoryDto$mangas(totalCount: 0),
+      meta: const [],
+    );
+
+GraphQLClient _dummyClient() =>
+    GraphQLClient(link: HttpLink('http://localhost:0'), cache: GraphQLCache());
+
+class _RecordingRepo extends MangaBookRepository {
+  _RecordingRepo() : super(_dummyClient());
+
+  final List<int> addedToLibrary = <int>[];
+
+  @override
+  Future<MangaDto?> addMangaToLibrary(int mangaId) async {
+    addedToLibrary.add(mangaId);
+    return null;
+  }
+
+  @override
+  Future<void> addMangaToCategory(int mangaId, int categoryId) async {}
+}
+
+class _FixedCategories extends CategoryController {
+  @override
+  Future<List<CategoryDto>?> build() async => [_cat(id: 0, name: 'Default')];
+}
+
+class _FixedDefault extends LibraryDefaultCategory {
+  _FixedDefault(this._value);
+  final int _value;
+  @override
+  int? build() => _value;
+}
+
+ProviderContainer _container({
+  required _RecordingRepo repo,
+  required FutureOr<List<MangaDto>?> Function(Ref ref) library,
+}) => ProviderContainer(
+  overrides: [
+    authTypeKeyProvider.overrideWithValue(AuthType.none),
+    mangaBookRepositoryProvider.overrideWithValue(repo),
+    categoryControllerProvider.overrideWith(() => _FixedCategories()),
+    // Default/uncategorized: add proceeds with no picker once the gate clears.
+    libraryDefaultCategoryProvider.overrideWith(() => _FixedDefault(0)),
+    libraryTrackerNamesProvider.overrideWithValue(const {}),
+    libraryMangaListProvider.overrideWith(library),
+  ],
+);
+
+Widget _harness(ProviderContainer c, MangaDto manga) =>
+    UncontrolledProviderScope(
+      container: c,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Consumer(
+          builder: (context, ref, _) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () =>
+                    addMangaToLibraryWithCategory(ref, context, manga),
+                child: const Text('add'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+void main() {
+  testWidgets('a library-list error fails open — the add proceeds', (
+    tester,
+  ) async {
+    final repo = _RecordingRepo();
+    final candidate = _manga(id: 76, title: 'Solo Leveling');
+    final c = _container(
+      repo: repo,
+      library: (ref) async => throw Exception('offline'),
+    );
+    addTearDown(c.dispose);
+
+    await tester.pumpWidget(_harness(c, candidate));
+    await tester.tap(find.text('add'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(repo.addedToLibrary, contains(76));
+  });
+}

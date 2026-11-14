@@ -1,0 +1,60 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 56;
+  objects = {
+    111111111111111111111101 = {isa = PBXBuildFile; fileRef = 111111111111111111111102; };
+    111111111111111111111102 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSliderUITests.swift; sourceTree = "<group>"; };
+    111111111111111111111103 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReaderSliderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+    111111111111111111111104 = {isa = PBXGroup; children = (111111111111111111111102, 111111111111111111111105); sourceTree = "<group>"; };
+    111111111111111111111105 = {isa = PBXGroup; children = (111111111111111111111103); name = Products; sourceTree = "<group>"; };
+    111111111111111111111106 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (111111111111111111111101); runOnlyForDeploymentPostprocessing = 0; };
+    111111111111111111111107 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+    111111111111111111111108 = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = 11111111111111111111110A;
+      buildPhases = (111111111111111111111106, 111111111111111111111107);
+      buildRules = ();
+      dependencies = ();
+      name = ReaderSliderUITests;
+      productName = ReaderSliderUITests;
+      productReference = 111111111111111111111103;
+      productType = "com.apple.product-type.bundle.ui-testing";
+    };
+    111111111111111111111109 = {
+      isa = PBXProject;
+      attributes = {LastSwiftUpdateCheck = 2660; LastUpgradeCheck = 2660; };
+      buildConfigurationList = 11111111111111111111110B;
+      compatibilityVersion = "Xcode 14.0";
+      developmentRegion = en;
+      hasScannedForEncodings = 0;
+      knownRegions = (en, Base);
+      mainGroup = 111111111111111111111104;
+      productRefGroup = 111111111111111111111105;
+      projectDirPath = "";
+      projectRoot = "";
+      targets = (111111111111111111111108);
+    };
+    11111111111111111111110A = {isa = XCConfigurationList; buildConfigurations = (11111111111111111111110C); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+    11111111111111111111110B = {isa = XCConfigurationList; buildConfigurations = (11111111111111111111110D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+    11111111111111111111110C = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        CODE_SIGNING_ALLOWED = NO;
+        GENERATE_INFOPLIST_FILE = YES;
+        PRODUCT_BUNDLE_IDENTIFIER = app.kuchie.reader.uitests;
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SWIFT_VERSION = 5.0;
+        TARGETED_DEVICE_FAMILY = "1,2";
+      };
+      name = Debug;
+    };
+    11111111111111111111110D = {
+      isa = XCBuildConfiguration;
+      buildSettings = {IPHONEOS_DEPLOYMENT_TARGET = 26.0; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphonesimulator"; };
+      name = Debug;
+    };
+  };
+  rootObject = 111111111111111111111109;
+}

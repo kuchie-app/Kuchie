@@ -1,0 +1,216 @@
+import 'dart:async';
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/app_utils.dart';
+import '../../../../utils/misc/toast/toast.dart';
+import '../../../../widgets/popup_widgets/confirm_action.dart';
+import 'data/graphql/__generated__/query.graphql.dart';
+import 'data/syncyomi_settings_provider.dart';
+import 'data/syncyomi_settings_repository.dart';
+import 'domain/sync_yomi.dart';
+
+String syncYomiStepName(BuildContext context, SyncYomiStep step) {
+  final l10n = context.l10n;
+  return switch (step) {
+    SyncYomiStep.starting => l10n.syncYomiStepStarting,
+    SyncYomiStep.creatingBackup => l10n.syncYomiStepCreatingBackup,
+    SyncYomiStep.downloading => l10n.syncYomiStepDownloading,
+    SyncYomiStep.merging => l10n.syncYomiStepMerging,
+    SyncYomiStep.uploading => l10n.syncYomiStepUploading,
+    SyncYomiStep.restoring => l10n.syncYomiStepRestoring,
+    SyncYomiStep.unknown => l10n.syncYomiSyncing,
+  };
+}
+
+class SyncYomiSync {
+  const SyncYomiSync({
+    required this.view,
+    required this.step,
+    required this.running,
+    required this.start,
+  });
+
+  final SyncYomiStatusView view;
+  final SyncYomiStep step;
+  final bool running;
+  final Future<void> Function() start;
+}
+
+/// [onSynced] runs once when a started or observed sync reaches SUCCESS, excluding pre-mount results.
+SyncYomiSync useSyncYomi(WidgetRef ref, {VoidCallback? onSynced}) {
+  final context = useContext();
+  final l10n = context.l10n;
+  final repository = ref.watch(syncyomiSettingsRepositoryProvider);
+  final status = ref.watch(lastSyncStatusProvider);
+  final view = syncYomiStatusView(
+    state: status.value?.state.name,
+    endDate: status.value?.endDate,
+    errorMessage: status.value?.errorMessage,
+  );
+  final startDate = status.value?.startDate;
+  final terminal =
+      view.kind == SyncYomiStatusKind.synced ||
+      view.kind == SyncYomiStatusKind.failed;
+  final requested = useState(false);
+  final requestedFrom = useRef<String?>(null);
+  final sawRunning = useRef(false);
+  // A start stays pending until the status reports a run other than the old one.
+  final finished = terminal && startDate != requestedFrom.value;
+  final pending = requested.value && !finished;
+  final poll = pending || view.kind == SyncYomiStatusKind.syncing;
+  final socketLive = useState(false);
+
+  useEffect(() {
+    if (!poll) {
+      socketLive.value = false;
+      return null;
+    }
+    StreamSubscription<void>? sub;
+    try {
+      sub = ref
+          .read(graphQlSubscriptionClientProvider)
+          .subscribe$SyncStatusChanged(Options$Subscription$SyncStatusChanged())
+          .getData((data) => data.syncStatusChanged)
+          .listen((_) {
+            socketLive.value = true;
+            ref.invalidate(lastSyncStatusProvider);
+          }, onError: (_) => socketLive.value = false);
+    } catch (_) {
+      socketLive.value = false;
+    }
+    return () => sub?.cancel();
+  }, [poll]);
+
+  useEffect(() {
+    if (!poll || socketLive.value) return null;
+    final deadline = DateTime.now().add(const Duration(minutes: 10));
+    Timer? timer;
+    void schedule() {
+      final interval = DateTime.now().isAfter(deadline)
+          ? const Duration(seconds: 30)
+          : const Duration(seconds: 2);
+      timer = Timer(interval, () {
+        if (DateTime.now().isAfter(deadline) && requested.value) {
+          requested.value = false;
+        }
+        if (!ref.read(lastSyncStatusProvider).isLoading) {
+          ref.invalidate(lastSyncStatusProvider);
+        }
+        schedule();
+      });
+    }
+
+    schedule();
+    return () => timer?.cancel();
+  }, [poll, socketLive.value]);
+
+  useEffect(() {
+    if (requested.value && finished) {
+      requested.value = false;
+      sawRunning.value = false;
+      if (view.kind == SyncYomiStatusKind.synced) onSynced?.call();
+      return null;
+    }
+    if (!terminal) {
+      if (view.kind == SyncYomiStatusKind.syncing) sawRunning.value = true;
+      return null;
+    }
+    if (view.kind == SyncYomiStatusKind.synced && sawRunning.value) {
+      sawRunning.value = false;
+      onSynced?.call();
+    }
+    return null;
+  }, [terminal, view.kind, startDate]);
+
+  Future<void> start() async {
+    if (!await confirmAction(
+          context,
+          title: l10n.syncYomiSyncNow,
+          message: l10n.confirmSyncYomiMessage,
+          action: l10n.syncYomiSyncNow,
+        ) ||
+        !context.mounted) {
+      return;
+    }
+    final result = await AppUtils.guard(
+      repository.startSync,
+      ref.read(toastProvider),
+    );
+    if (result == null || !context.mounted) return;
+    final toast = ref.read(toastProvider);
+    switch (result) {
+      case Enum$StartSyncResult.SUCCESS:
+        toast?.show(l10n.syncYomiSyncStarted);
+        requestedFrom.value = terminal ? startDate : null;
+        requested.value = true;
+      case Enum$StartSyncResult.SYNC_IN_PROGRESS:
+        toast?.show(l10n.syncYomiAlreadyRunning);
+        requestedFrom.value = terminal ? startDate : null;
+        requested.value = true;
+      case Enum$StartSyncResult.SYNC_DISABLED:
+        toast?.show(l10n.syncYomiDisabled);
+      case Enum$StartSyncResult.$unknown:
+        break;
+    }
+    if (requested.value) ref.invalidate(lastSyncStatusProvider);
+  }
+
+  return SyncYomiSync(
+    view: view,
+    step: syncYomiStep(status.value?.state.name),
+    running: view.kind == SyncYomiStatusKind.syncing || pending,
+    start: start,
+  );
+}
+
+/// Hidden unless SyncYomi is enabled and configured.
+class SyncYomiSyncButton extends ConsumerWidget {
+  const SyncYomiSyncButton({super.key, this.onSynced});
+
+  final VoidCallback? onSynced;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(syncYomiSettingsProvider).value;
+    if (settings == null ||
+        !settings.enabled ||
+        settings.host.isBlank ||
+        settings.apiKey.isBlank) {
+      return const SizedBox.shrink();
+    }
+    return _SyncYomiSyncAction(onSynced: onSynced);
+  }
+}
+
+class _SyncYomiSyncAction extends HookConsumerWidget {
+  const _SyncYomiSyncAction({this.onSynced});
+
+  final VoidCallback? onSynced;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sync = useSyncYomi(ref, onSynced: onSynced);
+    if (sync.running) {
+      return IconButton(
+        tooltip: syncYomiStepName(context, sync.step),
+        icon: SizedBox.square(
+          dimension: IconTheme.of(context).size ?? 24,
+          child: const CircularProgressIndicator(strokeWidth: 2),
+        ),
+        onPressed: null,
+      );
+    }
+    return IconButton(
+      icon: const Icon(FluentIcons.cloud_sync_24_regular),
+      tooltip: context.l10n.syncYomiSyncNow,
+      onPressed: sync.start,
+    );
+  }
+}

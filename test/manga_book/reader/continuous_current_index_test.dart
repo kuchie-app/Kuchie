@@ -1,0 +1,45 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_utils.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+
+ItemPosition _p(int index, double leading, double trailing) => ItemPosition(
+  index: index,
+  itemLeadingEdge: leading,
+  itemTrailingEdge: trailing,
+);
+
+int? _select(List<ItemPosition> positions, int total) =>
+    InfinityContinuousUtils.selectCurrentIndex(
+      positions,
+      total,
+      minVisibleAreaThreshold: 0.05,
+    );
+
+void main() {
+  group('selectCurrentIndex', () {
+    test('short chapter resting at the top does NOT complete on open', () {
+      // A 3-page chapter that fully fits the viewport, freshly opened: page 0 is
+      // parked at the top (leadingEdge 0). Must NOT return the last page, or the
+      // chapter marks read on open (false tracker bump + delete-on-read).
+      final positions = [
+        _p(0, 0.0, 0.33),
+        _p(1, 0.33, 0.66),
+        _p(2, 0.66, 0.9), // last page bottom within viewport, but at rest
+      ];
+      expect(_select(positions, 3), 0);
+    });
+
+    test('scrolled to the end of a short chapter (page 0 leaving) completes', () {
+      // Same short chapter, but now scrolled: page 0 has slid above the viewport
+      // top (leadingEdge < 0) — the user reached the end, so it completes.
+      final positions = [_p(0, -0.5, 0.2), _p(1, 0.2, 0.6), _p(2, 0.6, 0.9)];
+      expect(_select(positions, 3), 2);
+    });
+  });
+}

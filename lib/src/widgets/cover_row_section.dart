@@ -1,0 +1,355 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../constants/app_sizes.dart';
+import '../utils/extensions/custom_extensions.dart';
+import '../utils/motion/reduce_motion.dart';
+import 'desktop/desktop_page_frame.dart';
+
+/// Supply items or a caller-owned child; arrows/fade appear only on overflow.
+class CoverRowSection extends StatefulWidget {
+  const CoverRowSection({
+    super.key,
+    this.title,
+    this.subtitle,
+    this.onSeeAll,
+    this.padding = EdgeInsets.zero,
+    this.height,
+    this.itemCount,
+    this.itemBuilder,
+    this.separatorBuilder,
+    this.child,
+    this.background,
+    this.itemMargin = kMangaCoverCardInset / 2,
+  });
+
+  final String? title;
+  final String? subtitle;
+  final VoidCallback? onSeeAll;
+  final EdgeInsetsGeometry padding;
+  final double? height;
+  final int? itemCount;
+  final IndexedWidgetBuilder? itemBuilder;
+  final IndexedWidgetBuilder? separatorBuilder;
+  final Widget? child;
+  final Color? background;
+
+  /// Transparent margin around each item; the first item's visible edge sits on the page line.
+  final double itemMargin;
+
+  @override
+  State<CoverRowSection> createState() => _CoverRowSectionState();
+}
+
+class _CoverRowSectionState extends State<CoverRowSection> {
+  final _controller = ScrollController();
+  bool _canBack = false;
+  bool _canForward = false;
+  bool _scheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_scheduleSync);
+  }
+
+  @override
+  void didUpdateWidget(CoverRowSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.itemCount != widget.itemCount) _scheduleSync();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_scheduleSync);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scheduleSync() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      _sync();
+    });
+  }
+
+  void _sync() {
+    if (!mounted) return;
+    var canBack = false;
+    var canForward = false;
+    if (widget.itemCount != null && _controller.hasClients) {
+      final position = _controller.position;
+      canBack = position.pixels > position.minScrollExtent;
+      canForward = position.pixels < position.maxScrollExtent;
+    }
+    if (canBack == _canBack && canForward == _canForward) return;
+    setState(() {
+      _canBack = canBack;
+      _canForward = canForward;
+    });
+  }
+
+  void _scrollBy(int direction) {
+    if (!_controller.hasClients) return;
+    final position = _controller.position;
+    final target =
+        (position.pixels + direction * position.viewportDimension * .8).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
+    if (context.reduceMotion) {
+      _controller.jumpTo(target);
+    } else {
+      _controller.animateTo(
+        target,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Widget _arrow(BuildContext context, {required bool left}) {
+    final enabled = left ? _canBack : _canForward;
+    return Opacity(
+      opacity: enabled ? 1 : .4,
+      child: IconButton.outlined(
+        tooltip: left ? context.l10n.back : context.l10n.next,
+        onPressed: enabled ? () => _scrollBy(left ? -1 : 1) : null,
+        icon: Icon(
+          left ? FluentIcons.chevron_left_24_regular : FluentIcons.chevron_right_24_regular,
+          size: 20,
+        ),
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(34),
+          maximumSize: const Size.square(34),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: EdgeInsets.zero,
+          foregroundColor: context.colorScheme.onSurface,
+          backgroundColor: context.colorScheme.surfaceContainer,
+          side: BorderSide(color: context.colorScheme.outlineVariant),
+          shape: const CircleBorder(),
+        ),
+      ),
+    );
+  }
+
+  Widget _heading(BuildContext context) {
+    final title = Text(widget.title!, style: context.textTheme.titleMedium);
+    final subtitle = widget.subtitle;
+    if (subtitle == null) return title;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        title,
+        Text(
+          subtitle,
+          style: context.textTheme.bodySmall?.copyWith(
+            color: context.theme.hintColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    final heading = _heading(context);
+    final showArrows = _canBack || _canForward;
+    final alignWithChild =
+        context.usesDesktopShell &&
+        widget.itemCount == null &&
+        widget.padding == EdgeInsets.zero;
+    if (context.windowSizeClass >= WindowSizeClass.medium) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          10,
+          alignWithChild ? 0 : 16,
+          8,
+        ).onDesktopPageLine(context),
+        child: Row(
+          children: [
+            Expanded(child: heading),
+            if (widget.onSeeAll != null)
+              TextButton(
+                onPressed: widget.onSeeAll,
+                child: Text(context.l10n.seriesSeeAll),
+              ),
+            // Reserve space to align See all across sections.
+            SizedBox(
+              width: alignWithChild ? 0 : _arrowAreaWidth,
+              child: showArrows && !alignWithChild
+                  ? Row(
+                      children: [
+                        const SizedBox(width: 10),
+                        _arrow(context, left: true),
+                        const SizedBox(width: 8),
+                        _arrow(context, left: false),
+                      ],
+                    )
+                  : null,
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: widget.onSeeAll == null
+          ? heading
+          : Tooltip(
+              message: context.l10n.seriesSeeAll,
+              child: InkWell(
+                onTap: widget.onSeeAll,
+                child: Row(
+                  children: [
+                    Expanded(child: heading),
+                    const Icon(FluentIcons.arrow_right_24_regular),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _headerlessArrows(BuildContext context) => Padding(
+    padding: widget.padding,
+    child: Align(
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _arrow(context, left: true),
+          const SizedBox(width: 8),
+          _arrow(context, left: false),
+        ],
+      ),
+    ),
+  );
+
+  Widget _body(BuildContext context) {
+    if (widget.itemCount == null) {
+      return widget.child ?? const SizedBox.shrink();
+    }
+    _scheduleSync();
+    final list = widget.separatorBuilder == null
+        ? ListView.builder(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            itemCount: widget.itemCount,
+            itemBuilder: widget.itemBuilder!,
+          )
+        : ListView.separated(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            itemCount: widget.itemCount!,
+            itemBuilder: widget.itemBuilder!,
+            separatorBuilder: widget.separatorBuilder!,
+          );
+    final scrollable = ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: list,
+    );
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (_) {
+        _scheduleSync();
+        return false;
+      },
+      child: CoverRowEdgeFade(
+        fade: _canForward,
+        background: widget.background ?? context.colorScheme.surface,
+        child: scrollable,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var body = _body(context);
+    if (widget.height != null && widget.itemCount != null) {
+      body = SizedBox(height: widget.height, child: body);
+    }
+    if (widget.itemCount != null) {
+      body = DesktopBoxBleed(start: widget.itemMargin, child: body);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.title != null)
+          _header(context)
+        else if (context.windowSizeClass >= WindowSizeClass.medium &&
+            (_canBack || _canForward))
+          _headerlessArrows(context),
+        Padding(
+          key: const ValueKey('cover-row-body'),
+          padding: widget.padding
+              .resolve(Directionality.of(context))
+              .onDesktopPageLine(context),
+          child: body,
+        ),
+      ],
+    );
+  }
+}
+
+/// Keep the scrollable in place when toggling fade so its offset survives.
+@visibleForTesting
+class CoverRowEdgeFade extends StatelessWidget {
+  const CoverRowEdgeFade({
+    super.key,
+    required this.fade,
+    required this.background,
+    required this.child,
+  });
+
+  final bool fade;
+  final Color background;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.passthrough,
+      clipBehavior: Clip.none,
+      children: [
+        ClipRect(child: child),
+        // Overhang 1 px to cover fractional edge pixels.
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: -1,
+          width: 40,
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: fade ? 1 : 0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      background.withValues(alpha: 0),
+                      background,
+                      background,
+                    ],
+                    stops: const [0, 0.95, 1],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// 10 gap + 34 + 8 + 34: the arrows and their spacing.
+const double _arrowAreaWidth = 86;

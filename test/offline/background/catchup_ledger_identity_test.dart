@@ -1,0 +1,32 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/constants/db_keys.dart';
+import 'package:kuchie/src/features/offline/data/background/catchup_work_spec.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('account replacement retains each catalogue retry history', () async {
+    SharedPreferences.setMockInitialValues({
+      DBKeys.offlineCatalogServerId.name: 'A',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final store = CatchupStateStore(preferences);
+    await store.writeLedger(
+      'A',
+      const CatchupLedger(queuedServerRetries: {'1:0': 5}),
+    );
+    await store.clearState(preserveLedger: true);
+    await preferences.setString(DBKeys.offlineCatalogServerId.name, 'B');
+    await store.writeLedger(
+      'B',
+      const CatchupLedger(queuedServerRetries: {'1:0': 2}),
+    );
+    await store.clearState(preserveLedger: true);
+    expect(store.readLedger('A').queuedServerRetries, {'1:0': 5});
+    expect(store.readLedger('B').queuedServerRetries, {'1:0': 2});
+    await store.clearState();
+    expect(store.readLedger('B').queuedServerRetries, isEmpty);
+    expect(store.readLedger('A').queuedServerRetries, {'1:0': 5});
+  });
+}

@@ -1,0 +1,20 @@
+
+fragment ExtensionDto on ExtensionType {
+  apkName
+  hasUpdate
+  iconUrl
+  isInstalled
+  contentWarning
+  isObsolete
+  lang
+  name
+  pkgName
+  versionCodeLong
+  versionName
+  storeIndexUrl
+  extensionLib
+  extensionStore {
+    name
+    indexUrl
+  }
+}

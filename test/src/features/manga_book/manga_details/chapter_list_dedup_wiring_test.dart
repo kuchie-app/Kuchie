@@ -1,0 +1,92 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/manga_details/controller/manga_details_controller.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'chapter_test_helpers.dart';
+
+class _FixedChapterList extends MangaChapterList {
+  _FixedChapterList(this.chapters);
+  final List<ChapterDto> chapters;
+  @override
+  Future<List<ChapterDto>?> build({required int mangaId}) async => chapters;
+}
+
+class _FixedPreferredScanlators extends MangaPreferredScanlators {
+  _FixedPreferredScanlators(this.groups);
+  final List<String> groups;
+  @override
+  List<String> build({required int mangaId}) => groups;
+}
+
+class _FixedUnreadFilter extends MangaChapterFilterUnread {
+  _FixedUnreadFilter(this.value);
+  final bool? value;
+  @override
+  bool? build() => value;
+}
+
+/// Fixed manga id 1 fixture:
+/// number 1: A copy (id 1), B copy (id 2)
+/// number 2: B copy only (id 3)
+/// number 3: A copy read (id 4), B copy unread (id 5)
+/// sourceOrder ascends with id (0..4) so the default descending-by-source
+/// sort (DBKeys.chapterSortDirection.initial == false, i.e. dsc) resolves to
+/// highest sourceOrder first, unambiguously.
+final _chapters = [
+  ch(id: 1, number: 1, scanlator: 'A', sourceOrder: 0),
+  ch(id: 2, number: 1, scanlator: 'B', sourceOrder: 1),
+  ch(id: 3, number: 2, scanlator: 'B', sourceOrder: 2),
+  ch(id: 4, number: 3, scanlator: 'A', isRead: true, sourceOrder: 3),
+  ch(id: 5, number: 3, scanlator: 'B', sourceOrder: 4),
+];
+
+Future<ProviderContainer> _container({
+  List<String> preference = const [],
+  bool? unreadFilter,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final c = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      mangaChapterListProvider(
+        mangaId: 1,
+      ).overrideWith(() => _FixedChapterList(_chapters)),
+      mangaPreferredScanlatorsProvider(
+        mangaId: 1,
+      ).overrideWith(() => _FixedPreferredScanlators(preference)),
+      if (unreadFilter != null)
+        mangaChapterFilterUnreadProvider.overrideWith(
+          () => _FixedUnreadFilter(unreadFilter),
+        ),
+    ],
+  );
+  addTearDown(c.dispose);
+  await c.read(mangaChapterListProvider(mangaId: 1).future);
+  return c;
+}
+
+List<int> _ids(ProviderContainer c) => c
+    .read(mangaChapterListWithFilterProvider(mangaId: 1))
+    .value!
+    .map((e) => e.id)
+    .toList();
+
+void main() {
+  test(
+    'preferred scanlators filter rows without aggregating read state',
+    () async {
+      final c = await _container(preference: const ['B'], unreadFilter: true);
+      expect(_ids(c), [5, 3, 2]);
+    },
+  );
+}

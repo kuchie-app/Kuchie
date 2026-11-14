@@ -1,0 +1,77 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../utils/misc/toast/toast.dart';
+import '../../../widgets/popup_widgets/confirm_action.dart';
+import '../data/offline_download_providers.dart';
+import '../data/offline_repository.dart';
+
+class OfflineServerMismatchBanner extends ConsumerWidget {
+  const OfflineServerMismatchBanner({
+    super.key,
+    this.showAfterDismissal = false,
+  });
+
+  final bool showAfterDismissal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mismatch = ref.watch(offlineServerMismatchProvider).value;
+    if (mismatch == null || (mismatch.dismissed && !showAfterDismissal)) {
+      return const SizedBox.shrink();
+    }
+
+    return MaterialBanner(
+      content: Text(
+        mismatch.dismissed
+            ? context.l10n.offlineServerMismatchDisabled
+            : context.l10n.offlineServerMismatch,
+      ),
+      leading: const Icon(FluentIcons.server_24_regular),
+      actions: [
+        if (!mismatch.dismissed)
+          TextButton(
+            onPressed: () => dismissOfflineServerMismatch(ref, mismatch),
+            child: Text(context.l10n.offlineServerMismatchDismiss),
+          ),
+        TextButton(
+          onPressed: () => _confirmClear(context, ref),
+          child: Text(
+            mismatch.dismissed
+                ? context.l10n.offlineServerMismatchClearAction
+                : context.l10n.offlineServerMismatchClear,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final confirmed = await confirmAction(
+      context,
+      title: context.l10n.offlineServerMismatchConfirmTitle,
+      message: context.l10n.offlineServerMismatchConfirmBody,
+      action: context.l10n.offlineServerMismatchClearAction,
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+    try {
+      await clearOfflineCatalog(ref);
+      if (context.mounted) ref.invalidate(offlineServerMismatchProvider);
+    } catch (_) {
+      if (context.mounted) {
+        ref
+            .read(toastProvider)
+            ?.showError(context.l10n.offlineCatalogClearFailed);
+      }
+    }
+  }
+}

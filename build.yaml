@@ -1,0 +1,42 @@
+# riverpod_generator 4.x resolves provider signature types for real, so the
+# GraphQL types our DTOs alias must exist in its build phase. Without this,
+# build_runner phases riverpod_generator first (reverse-alphabetical tiebreak)
+# and every provider touching a Fragment$* type dies with InvalidTypeException.
+global_options:
+  graphql_codegen:graphql_codegen:
+    runs_before:
+      - riverpod_generator:riverpod_generator
+
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          explicit_to_json: true
+      graphql_codegen:
+        options:
+          addTypenameExcludedPaths:
+            - subscription
+          outputDirectory: __generated__
+          clients:
+            - graphql
+          scalars:
+            ISODateTime:
+              type: DateTime
+            JSON:
+              type: Map<String, dynamic>
+            Upload:
+              type: MultipartFile
+              fromJsonFunctionName: fileFromJson
+              toJsonFunctionName: fileToJson
+              import: package:kuchie/src/utils/misc/scalars.dart
+            LongString:
+              type: String
+              fromJsonFunctionName: longStringFromJson
+              toJsonFunctionName: longStringToJson
+              import: package:kuchie/src/utils/misc/scalars.dart
+            Cursor:
+              type: int
+              fromJsonFunctionName: cursorFromJson
+              toJsonFunctionName: cursorToJson
+              import: package:kuchie/src/utils/misc/scalars.dart

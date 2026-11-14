@@ -1,0 +1,86 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../utils/misc/toast/toast.dart';
+import '../../../widgets/popup_widgets/confirm_action.dart';
+import '../../auth/data/auth_credentials_store.dart';
+import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../data/account_catalogue.dart';
+import '../data/account_catalogue_providers.dart';
+import 'offline_settings_format.dart';
+
+class InactiveAccountCatalogueTiles extends ConsumerWidget {
+  const InactiveAccountCatalogueTiles({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final catalogues = ref.watch(inactiveAccountCataloguesProvider);
+    if (catalogues.isLoading) return const SizedBox.shrink();
+    if (catalogues.hasError) {
+      return ListTile(title: Text(context.l10n.accountCataloguesUnavailable));
+    }
+    final rows = catalogues.value ?? const <AccountCatalogue>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SettingsGroupHeading(label: context.l10n.accountInactiveCatalogues),
+        SettingsGroupCard(
+          children: [
+            for (final catalogue in rows)
+              ListTile(
+                title: Text(
+                  catalogue.isNonAccount
+                      ? context.l10n.accountCatalogueWithoutLogin
+                      : catalogue.username ??
+                            context.l10n.accountCatalogueOwner(catalogue.owner),
+                ),
+                subtitle: Text(
+                  '${catalogue.address ?? context.l10n.accountCatalogueUnknownServer} · ${formatBytes(catalogue.bytes)}',
+                ),
+                trailing: IconButton(
+                  tooltip: context.l10n.delete,
+                  icon: const Icon(FluentIcons.delete_24_regular),
+                  onPressed: () => _remove(context, ref, catalogue),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    AccountCatalogue catalogue,
+  ) async {
+    final auth = ref.read(authCredentialsStoreProvider.notifier);
+    final current = auth.captureSession();
+    final epoch = auth.sessionEpoch;
+    final actions = ref.read(accountCatalogueActionsProvider);
+    final toast = ref.read(toastProvider);
+    final failure = context.l10n.accountCatalogueRemoveFailed;
+    final confirmed = await confirmAction(
+      context,
+      title: context.l10n.accountCatalogueRemoveTitle,
+      message: context.l10n.accountCatalogueRemoveConfirm(
+        catalogue.isNonAccount
+            ? context.l10n.accountCatalogueWithoutLogin
+            : catalogue.username ??
+                  context.l10n.accountCatalogueOwner(catalogue.owner),
+        catalogue.address ?? context.l10n.accountCatalogueUnknownServer,
+      ),
+      action: context.l10n.delete,
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted || !current()) return;
+    try {
+      await actions.remove(catalogue, sessionEpoch: epoch);
+    } catch (_) {
+      if (context.mounted && current()) toast?.showError(failure);
+    }
+  }
+}

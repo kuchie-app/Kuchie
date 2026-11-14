@@ -1,0 +1,19 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/quick_open/presentation/unified_search/go_to_targets.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+
+void main() {
+  final l = lookupAppLocalizations(const Locale('en'));
+
+  test('matches a settings destination by label substring', () {
+    final hits = matchGoToTargets('read', l, includeHotkeys: true);
+    expect(hits.any((t) => t.label(l) == l.reader), isTrue);
+  });
+
+  test('hotkeys destination excluded when includeHotkeys is false', () {
+    final withHk = matchGoToTargets('key', l, includeHotkeys: true);
+    final without = matchGoToTargets('key', l, includeHotkeys: false);
+    expect(withHk.length, greaterThan(without.length));
+  });
+}

@@ -1,0 +1,447 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/db_keys.dart';
+import '../../../../../constants/enum.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../widgets/desktop/desktop_top_bar.dart';
+import '../../../../quick_open/presentation/unified_search/desktop_search_field.dart';
+import '../../../../tracking/data/tracker_repository.dart';
+import '../controller/category_library_options.dart';
+import '../controller/library_controller.dart';
+import 'desktop_library_panels.dart';
+import 'library_filter_content.dart';
+import 'library_manga_organizer.dart';
+
+class DesktopToolbarBox extends StatefulWidget {
+  const DesktopToolbarBox({
+    super.key,
+    this.width,
+    this.borderColor,
+    required this.child,
+  });
+
+  final double? width;
+
+  /// Overrides the border color, e.g. while a filter is active.
+  final Color? borderColor;
+  final Widget child;
+
+  @override
+  State<DesktopToolbarBox> createState() => _DesktopToolbarBoxState();
+}
+
+class _DesktopToolbarBoxState extends State<DesktopToolbarBox> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        width: widget.width,
+        height: 40,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color:
+                widget.borderColor ??
+                (_hovered
+                    ? scheme.onSurface.withValues(alpha: 0.18)
+                    : scheme.outlineVariant),
+          ),
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Keeps search mounted as library controls collapse at narrow widths.
+class DesktopLibraryToolbar extends HookConsumerWidget {
+  const DesktopLibraryToolbar({
+    super.key,
+    required this.onOpenOrganizer,
+    this.trailing = const [],
+  });
+
+  final VoidCallback onOpenOrganizer;
+
+  final List<Widget> trailing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final filterButtonKey = useMemoized(GlobalKey.new);
+    final displayButtonKey = useMemoized(GlobalKey.new);
+    final filterFocus = useMemoized(FocusNode.new);
+    final displayFocus = useMemoized(FocusNode.new);
+    useEffect(() {
+      return () {
+        filterFocus.dispose();
+        displayFocus.dispose();
+      };
+    }, [filterFocus, displayFocus]);
+    final activeFilters = watchLibraryFilterActiveCount(ref);
+    Widget filterIcon = const Icon(FluentIcons.filter_24_regular, size: 20);
+    if (activeFilters > 0) {
+      filterIcon = Badge.count(
+        count: activeFilters,
+        backgroundColor: scheme.primary,
+        textColor: scheme.onPrimary,
+        child: filterIcon,
+      );
+    }
+    return SizedBox(
+      height: 64,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = _toolbarIsCompact(
+            context,
+            constraints,
+            trailingCount: trailing.length,
+          );
+          final organizer =
+              constraints.hasBoundedWidth &&
+              constraints.maxWidth < libraryTopBarSlotMinWidth(trailing.length);
+          final trailingCapacity = organizer
+              ? ((constraints.maxWidth -
+                                kTopBarSearchMinWidth -
+                                2 * kDesktopToolbarSlotHPadding -
+                                kDesktopTopBarGap) /
+                            kDesktopToolbarIconButtonExtent)
+                        .floor() -
+                    1
+              : trailing.length;
+          final visibleTrailing = trailingCapacity >= trailing.length
+              ? trailing
+              : trailingCapacity <= 0
+              ? const <Widget>[]
+              : [...trailing.take(trailingCapacity - 1), trailing.last];
+          final searchField = DesktopSearchField(
+            query: ref.watch(libraryQueryProvider) ?? '',
+            onChanged: (val) =>
+                ref.read(libraryQueryProvider.notifier).update(val),
+            // Dropdown navigation clears the query; opening a series from the grid keeps it.
+            onNavigate: () =>
+                ref.read(libraryQueryProvider.notifier).update(''),
+            // Grid results already appear below; the dropdown only needs Go to and Search all sources.
+            showLibrarySection: false,
+            hintText: context.l10n.searchLibraryHint,
+          );
+          final filterBox = DesktopToolbarBox(
+            key: filterButtonKey,
+            borderColor: activeFilters > 0 ? scheme.primary : null,
+            child: InkWell(
+              focusNode: filterFocus,
+              onTap: () => showLibraryFilterPanel(
+                context: context,
+                buttonKey: filterButtonKey,
+                focusNode: filterFocus,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 6),
+                child: Row(
+                  spacing: 8,
+                  children: [
+                    filterIcon,
+                    if (!compact) Text(context.l10n.filter),
+                    const Icon(FluentIcons.caret_down_24_filled, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          );
+          final displayBox = DesktopToolbarBox(
+            key: displayButtonKey,
+            child: Tooltip(
+              message: context.l10n.display,
+              child: InkWell(
+                focusNode: displayFocus,
+                onTap: () => showLibraryDisplayPanel(
+                  context: context,
+                  buttonKey: displayButtonKey,
+                  focusNode: displayFocus,
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 10, right: 6),
+                  child: Row(
+                    spacing: 2,
+                    children: [
+                      Icon(FluentIcons.grid_24_regular, size: 20),
+                      Icon(FluentIcons.caret_down_24_filled, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          // Keep search in the same Expanded slot across modes to preserve focus, selection and dropdown.
+          return desktopToolbarRow(
+            search: searchField,
+            spacedActionCount: organizer ? 0 : 3,
+            actions: [
+              if (organizer)
+                LibraryOrganizerButton(onPressed: onOpenOrganizer)
+              else ...[
+                _DesktopSortControl(compact: compact),
+                if (compact)
+                  Tooltip(message: context.l10n.filter, child: filterBox)
+                else
+                  filterBox,
+                displayBox,
+              ],
+              for (final item in visibleTrailing)
+                IconTheme.merge(
+                  data: const IconThemeData(size: 20),
+                  child: item,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// Shared toolbar widths keep the compact breakpoint and layout calculations consistent.
+const _sortFullWidth = 230.0;
+const kToolbarFilterFullChrome = 12.0 + 6.0 + 20.0 + 8.0 + 8.0 + 20.0;
+// Same chrome as Filter with one gap and no label.
+const kToolbarFilterCompactWidth = 12.0 + 6.0 + 20.0 + 8.0 + 20.0;
+const kToolbarDisplayBoxWidth = 10.0 + 6.0 + 20.0 + 2.0 + 20.0;
+const _iconOnlyBoxWidth = 12.0 + 12.0 + 20.0;
+const _sortCompactWidth = 40.0 + 1.0 + 40.0;
+// Content-width boxes need 2 px for borders; the full Sort width already includes them.
+const kToolbarBoxBorderWidth = 2.0;
+
+double measureToolbarLabelWidth(BuildContext context, String value) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: value,
+      style: DefaultTextStyle.of(context).style,
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
+double _compactFixedWidth(int trailingCount) =>
+    2 * kDesktopToolbarSlotHPadding +
+    (3 + (trailingCount > 0 ? 1 : 0)) * kDesktopTopBarGap +
+    (_sortCompactWidth + kToolbarBoxBorderWidth) +
+    (kToolbarFilterCompactWidth + kToolbarBoxBorderWidth) +
+    (kToolbarDisplayBoxWidth + kToolbarBoxBorderWidth) +
+    trailingCount * kDesktopToolbarIconButtonExtent;
+
+/// Minimum compact toolbar width including a usable search field.
+double libraryTopBarSlotMinWidth(int trailingCount) =>
+    _compactFixedWidth(trailingCount) + kTopBarSearchMinWidth;
+
+// Compact controls first so the search retains its preferred width.
+double updatesTopBarSlotMinWidth() {
+  return 2 * kDesktopToolbarSlotHPadding +
+      5 * kDesktopTopBarGap +
+      2 * (_iconOnlyBoxWidth + kToolbarBoxBorderWidth) +
+      (kToolbarFilterCompactWidth + kToolbarBoxBorderWidth) +
+      (kToolbarDisplayBoxWidth + kToolbarBoxBorderWidth) +
+      2 * kDesktopToolbarIconButtonExtent +
+      kTopBarSearchMinWidth;
+}
+
+// Compact controls first so the search retains its preferred width.
+bool updatesToolbarIsCompact(
+  BuildContext context,
+  BoxConstraints constraints, {
+  required String updateLabel,
+  required String upcomingLabel,
+  required String filterLabel,
+}) {
+  if (!constraints.hasBoundedWidth) return false;
+  double textWidth(String value) => measureToolbarLabelWidth(context, value);
+
+  const labelledChrome = 12.0 + 12.0 + 20.0 + 8.0;
+  final neededBesidesSearch =
+      2 * kDesktopToolbarSlotHPadding +
+      5 * kDesktopTopBarGap +
+      (labelledChrome + textWidth(updateLabel) + kToolbarBoxBorderWidth) +
+      (labelledChrome + textWidth(upcomingLabel) + kToolbarBoxBorderWidth) +
+      (kToolbarFilterFullChrome +
+              textWidth(filterLabel) +
+              kToolbarBoxBorderWidth) +
+      (kToolbarDisplayBoxWidth + kToolbarBoxBorderWidth) +
+      2 * kDesktopToolbarIconButtonExtent;
+  return constraints.maxWidth - neededBesidesSearch <
+      kTopBarSearchPreferredWidth;
+}
+
+bool _toolbarIsCompact(
+  BuildContext context,
+  BoxConstraints constraints, {
+  required int trailingCount,
+}) {
+  if (!constraints.hasBoundedWidth) return false;
+  final labelWidth = measureToolbarLabelWidth(context, context.l10n.filter);
+  final gaps = (3 + (trailingCount > 0 ? 1 : 0)) * kDesktopTopBarGap;
+  final neededBesidesSearch =
+      2 * kDesktopToolbarSlotHPadding +
+      gaps +
+      _sortFullWidth +
+      kToolbarFilterFullChrome +
+      labelWidth +
+      kToolbarBoxBorderWidth +
+      kToolbarDisplayBoxWidth +
+      kToolbarBoxBorderWidth +
+      trailingCount * kDesktopToolbarIconButtonExtent;
+  return constraints.maxWidth - neededBesidesSearch <
+      kTopBarSearchPreferredWidth;
+}
+
+// Random re-rolls on selection and ignores direction; compact mode must preserve those controls.
+class _DesktopSortControl extends ConsumerWidget {
+  const _DesktopSortControl({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final current =
+        ref.watch(activeLibraryOptionsProvider).sort ??
+        DBKeys.mangaSort.initial;
+    final hasTrackers =
+        ref.watch(loggedInTrackersProvider).value?.isNotEmpty ?? false;
+    final sorts = [
+      for (final sort in librarySortDisplayOrder)
+        if ((sort != MangaSort.trackerScore || hasTrackers) &&
+            (!ref.watch(useCategoryLibraryOptionsProvider) ||
+                categorySortModes.containsKey(sort)))
+          sort,
+    ];
+    final ascending =
+        ref.watch(activeLibraryOptionsProvider).ascending.ifNull(true);
+    final isRandom = current == MangaSort.random;
+    final menuChildren = [
+      for (final sort in sorts)
+        MenuItemButton(
+          leadingIcon: sort == current
+              ? const Icon(FluentIcons.checkmark_24_regular, size: 18)
+              : null,
+          onPressed: () {
+            if (sort == MangaSort.random && sort == current) {
+              final seed = ref.read(librarySortRandomSeedProvider) ?? 0;
+              ref.read(librarySortRandomSeedProvider.notifier).update(seed + 1);
+            } else {
+              ref.read(activeLibraryOptionsProvider.notifier).sort(sort);
+            }
+          },
+          child: Text(sort.toLocale(context)),
+        ),
+    ];
+    final directionButton = SizedBox(
+      width: 40,
+      child: IconButton(
+        iconSize: 20,
+        color: scheme.onSurface,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(
+          ascending ? FluentIcons.arrow_sort_up_24_regular : FluentIcons.arrow_sort_down_24_regular,
+        ),
+        onPressed: isRandom
+            ? null
+            : () => ref
+                .read(activeLibraryOptionsProvider.notifier)
+                .ascending(!ascending),
+      ),
+    );
+    if (compact) {
+      return DesktopToolbarBox(
+        child: Row(
+          children: [
+            SizedBox(
+              width: 40,
+              child: MenuAnchor(
+                style: const MenuStyle(
+                  minimumSize: WidgetStatePropertyAll(Size(230, 0)),
+                ),
+                menuChildren: menuChildren,
+                builder: (context, menu, _) => Tooltip(
+                  message: current.toLocale(context),
+                  child: InkWell(
+                    onTap: () => menu.isOpen ? menu.close() : menu.open(),
+                    child: Center(
+                      child: Icon(
+                        FluentIcons.arrow_sort_24_regular,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Container(width: 1, height: 22, color: scheme.outlineVariant),
+            directionButton,
+          ],
+        ),
+      );
+    }
+    return DesktopToolbarBox(
+      width: 230,
+      child: Row(
+        children: [
+          Expanded(
+            child: MenuAnchor(
+              style: const MenuStyle(
+                minimumSize: WidgetStatePropertyAll(Size(230, 0)),
+              ),
+              menuChildren: menuChildren,
+              builder: (context, menu, _) => InkWell(
+                onTap: () => menu.isOpen ? menu.close() : menu.open(),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 6),
+                  child: Row(
+                    spacing: 8,
+                    children: [
+                      Icon(
+                        FluentIcons.arrow_sort_24_regular,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      Expanded(
+                        child: Text(
+                          current.toLocale(context),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(FluentIcons.caret_down_24_filled, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 22, color: scheme.outlineVariant),
+          directionButton,
+        ],
+      ),
+    );
+  }
+}

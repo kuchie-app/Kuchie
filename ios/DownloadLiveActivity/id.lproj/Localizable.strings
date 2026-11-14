@@ -1,0 +1,9 @@
+"Chapter downloads" = "Unduhan bab";
+"Server downloads" = "Unduhan server";
+"Downloading chapter" = "Mengunduh bab";
+"Chapters remaining: %lld" = "Sisa bab: %lld";
+"Current chapter progress" = "Progres bab saat ini";
+"Progress hasn’t updated" = "Progres belum diperbarui";
+"Progress unavailable" = "Progres belum tersedia";
+"Local collection downloads" = "Unduhan koleksi lokal";
+"%lld left" = "%lld bab";

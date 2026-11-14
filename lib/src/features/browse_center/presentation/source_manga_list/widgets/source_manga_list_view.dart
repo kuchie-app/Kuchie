@@ -1,0 +1,145 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shimmer/shimmer.dart';
+
+import '../../../../../constants/app_sizes.dart';
+import '../../../../../routes/router_config.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../utils/webui_meta/webui_settings.dart';
+import '../../../../../widgets/custom_circular_progress_indicator.dart';
+import '../../../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../../../widgets/emoticons.dart';
+import '../../../../../widgets/inline_retry_row.dart';
+import '../../../../../widgets/kuchie_character_motion.dart';
+import '../../../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
+import '../../../../manga_book/domain/manga/manga_model.dart';
+import '../../../domain/source/source_model.dart';
+import '../controller/source_manga_controller.dart';
+
+class SourceMangaListView extends ConsumerWidget {
+  const SourceMangaListView({
+    super.key,
+    required this.controller,
+    required this.selectedIds,
+    required this.selecting,
+    required this.onToggleSelection,
+    this.source,
+    this.topPadding = 0,
+  });
+  final PagingController<int, MangaDto> controller;
+  final SourceDto? source;
+  final Set<int> selectedIds;
+  final bool selecting;
+  final void Function(int mangaId) onToggleSelection;
+  final double topPadding;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final view = PagingListener(
+      controller: controller,
+      builder: (context, state, fetchNextPage) => PagedListView(
+        padding: topPadding > 0
+            ? EdgeInsets.only(
+                top: topPadding,
+                bottom: MediaQuery.paddingOf(context).bottom,
+              )
+            : null,
+        state: state.copyWith(
+          pages: state.pages
+              ?.map(
+                (page) => visibleSourceMangas(
+                  page,
+                  hideLibraryEntries: ref.watch(
+                    webUiBoolProvider('hideLibraryEntries'),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        fetchNextPage: fetchNextPage,
+        builderDelegate: PagedChildBuilderDelegate<MangaDto>(
+          firstPageProgressIndicatorBuilder: (context) =>
+              const CenterKuchieShimmerIndicator(),
+          newPageProgressIndicatorBuilder: (context) => Row(
+            children: [
+              // Matches the list tiles' inset that the desktop bleed clips.
+              if (isOnDesktopPage(context))
+                const SizedBox(width: kListTilePadding),
+              SizedBox(
+                height: 80,
+                width: 80,
+                child: ClipRRect(
+                  borderRadius: KBorderRadius.r8.radius,
+                  child: const KuchieShimmerIndicator(),
+                ),
+              ),
+              Padding(
+                padding: KEdgeInsets.h8.size,
+                child: context.reduceMotion
+                    ? Container(
+                        width: context.width * .3,
+                        decoration: BoxDecoration(
+                          borderRadius: KBorderRadius.r8.radius,
+                          color: context.colorScheme.surfaceContainerHighest,
+                        ),
+                        height: 12,
+                      )
+                    : Shimmer.fromColors(
+                        baseColor: context.colorScheme.surface,
+                        highlightColor: context.theme.colorScheme.primary,
+                        child: Container(
+                          width: context.width * .3,
+                          decoration: BoxDecoration(
+                            borderRadius: KBorderRadius.r8.radius,
+                            color: context.colorScheme.surfaceContainerHighest,
+                          ),
+                          height: 12,
+                        ),
+                      ),
+              ),
+              const Spacer(),
+            ],
+          ),
+          newPageErrorIndicatorBuilder: (context) => InlineRetryRow(
+            message: state.error.toString(),
+            onRetry: fetchNextPage,
+          ),
+          firstPageErrorIndicatorBuilder: (context) => Emoticons(
+            illustration: KuchieCharacterPhase.fetchFailed,
+            title: state.error.toString(),
+            button: TextButton(
+              onPressed: () => controller.refresh(),
+              child: Text(context.l10n.retry),
+            ),
+          ),
+          noItemsFoundIndicatorBuilder: (context) => Emoticons(
+            illustration: KuchieCharacterPhase.noResults,
+            title: context.l10n.noMangaFound,
+            button: TextButton(
+              onPressed: () => controller.refresh(),
+              child: Text(context.l10n.refresh),
+            ),
+          ),
+          itemBuilder: (context, item, index) => MangaCoverListTile(
+            manga: item,
+            selected: selectedIds.contains(item.id),
+            linkLocation: MangaRoute(mangaId: item.id).location,
+            onLongPress: () => onToggleSelection(item.id),
+            onPressed: () => selecting
+                ? onToggleSelection(item.id)
+                : MangaRoute(mangaId: item.id).push(context),
+          ),
+        ),
+      ),
+    );
+    return DesktopBoxBleed(start: kListTilePadding, child: view);
+  }
+}

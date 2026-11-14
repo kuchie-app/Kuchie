@@ -1,0 +1,341 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:math' show max;
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../constants/navigation_bar_data.dart';
+import '../../features/browse_center/presentation/extension/controller/extension_update_badge.dart';
+import '../../features/offline/data/offline_nav_status.dart';
+import '../../features/settings/presentation/incognito/incognito_mode.dart';
+import '../../routes/router_config.dart';
+import '../../utils/desktop/linux_button_layout.dart';
+import '../../utils/extensions/custom_extensions.dart';
+import '../../utils/motion/reduce_motion.dart';
+import '../../utils/platform/platform_runtime.dart';
+import '../../utils/theme/brand.dart';
+import '../compact_switch.dart';
+import '../desktop/desktop_brand.dart';
+import '../desktop/desktop_title_bar.dart';
+import 'nav_badges.dart';
+import 'nav_motion_icon.dart';
+import 'sidebar_expanded.dart';
+
+const double _sidebarExpandedMinWidth = 1000;
+
+bool sidebarCanExpand(BuildContext context) =>
+    MediaQuery.sizeOf(context).width >= _sidebarExpandedMinWidth;
+
+/// Below the expansion threshold, collapse without changing the saved preference.
+bool sidebarIsExpanded(BuildContext context, bool preference) =>
+    preference && sidebarCanExpand(context);
+
+/// Native macOS moves the brand row below its traffic lights; other platforms keep it in the top bar.
+class DesktopSidebar extends ConsumerWidget {
+  const DesktopSidebar({
+    super.key,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  static const double expandedWidth = 208;
+  static const double collapsedWidth = 60;
+
+  /// Wider on macOS to align with the traffic-lights inset.
+  static const double macCollapsedWidth = 80;
+
+  static const double _rowHeight = 40;
+  static const double _collapsedRowHeight = 44;
+  static const double _rowGap = 2;
+  static const double _collapsedRowGap = 6;
+
+  /// expanded is the effective state; isMacOS defaults to the test-overridable check.
+  static double widthFor({
+    required bool expanded,
+    bool? isMacOS,
+    double leadingWidth = 0,
+  }) {
+    if (expanded) return expandedWidth;
+    final base =
+        (isMacOS ?? isMacOSRuntime) ? macCollapsedWidth : collapsedWidth;
+    return max(base, leadingWidth);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadsPaused = ref.watch(downloadsPausedBadgeProvider);
+    final extensionUpdates =
+        ref.watch(extensionUpdateBadgeCountProvider).value ?? 0;
+    final showFoot = context.windowSizeClass >= WindowSizeClass.expanded;
+    final navList = showFoot
+        ? NavigationBarData.desktopNavList
+        : NavigationBarData.tabletNavList;
+
+    final preference = ref.watch(sidebarExpandedProvider).ifNull(true);
+    final expanded = sidebarIsExpanded(context, preference);
+    final isMacOS = isDesktopPlatform && isMacOSRuntime;
+    void expand() => ref.read(sidebarExpandedProvider.notifier).update(true);
+    void collapse() => ref.read(sidebarExpandedProvider.notifier).update(false);
+
+    final cs = context.colorScheme;
+    final navFill = BrandColors.of(context).navSelectedFill;
+    final selectedBg = navFill ?? cs.primary.withValues(alpha: 0.22);
+    final hoverBg = cs.onSurface.withValues(alpha: 0.05);
+
+    // Switch content at the animated width midpoint; keep Settings mapped to the hidden More branch.
+    final path = GoRouter.maybeOf(context)?.state.uri.path ?? '';
+    final onPhoneHistory = path == const HistoryRoute().location;
+    bool isSettingsPath(String p) =>
+        p.startsWith('${const MoreRoute().location}/') &&
+        p != const HistoryRoute().location;
+    final settingsSelected =
+        (selectedIndex >= navList.length || isSettingsPath(path)) &&
+        !onPhoneHistory;
+    final destSelected = selectedIndex < navList.length
+        ? selectedIndex
+        : (onPhoneHistory ? 2 : -1);
+    final incognito = ref.watch(incognitoModeProvider);
+    void toggleIncognito() => ref.read(incognitoModeProvider.notifier).toggle();
+
+    Widget shellRow({
+      required bool showExpanded,
+      required bool selected,
+      required String label,
+      required Widget icon,
+      Widget? trailing,
+      required VoidCallback onTap,
+      required double gapBelow,
+    }) {
+      final rowHeight = showExpanded ? _rowHeight : _collapsedRowHeight;
+      final rowBody = Container(
+        height: rowHeight,
+        decoration: BoxDecoration(
+          color: selected ? selectedBg : null,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: showExpanded
+            ? const EdgeInsets.symmetric(horizontal: 12)
+            : EdgeInsets.zero,
+        alignment: Alignment.center,
+        child: showExpanded
+            ? Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: ExcludeSemantics(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: selected
+                              ? (navFill != null
+                                    ? cs.onSurface
+                                    : cs.primary)
+                              : cs.onSurfaceVariant,
+                          fontWeight: selected && navFill != null
+                              ? FontWeight.w700
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  ?trailing,
+                ],
+              )
+            : icon,
+      );
+      final tappable = Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: hoverBg,
+          onTap: onTap,
+          child: rowBody,
+        ),
+      );
+      return Padding(
+        padding: EdgeInsets.only(bottom: gapBelow),
+        child: showExpanded
+            ? tappable
+            : Tooltip(message: label, child: tappable),
+      );
+    }
+
+    Widget row(int index, bool showExpanded) {
+      final data = navList[index];
+      final selected = index == destSelected;
+      final label = data.label(context);
+      final rowGap = showExpanded ? _rowGap : _collapsedRowGap;
+      return shellRow(
+        showExpanded: showExpanded,
+        selected: selected,
+        label: label,
+        icon: IconTheme(
+          data: IconThemeData(
+            color: selected
+                ? (navFill != null ? cs.onSurface : cs.primary)
+                : cs.onSurface,
+          ),
+          child: badgedNavIcon(
+            NavMotionIcon(data, selected: selected),
+            data,
+            downloadsPaused,
+            extensionUpdates,
+          ),
+        ),
+        onTap: () => onDestinationSelected(index),
+        gapBelow: index == navList.length - 1 ? 0 : rowGap,
+      );
+    }
+
+    Widget incognitoRow(bool showExpanded) {
+      final label = context.l10n.incognitoShort;
+      final rowGap = showExpanded ? _rowGap : _collapsedRowGap;
+      return shellRow(
+        showExpanded: showExpanded,
+        selected: false,
+        label: label,
+        icon: Icon(
+          incognito ? FluentIcons.incognito_24_filled : FluentIcons.incognito_24_regular,
+          color: cs.onSurface,
+        ),
+        trailing: CompactSwitch(
+          value: incognito,
+          onChanged: (_) => toggleIncognito(),
+        ),
+        onTap: toggleIncognito,
+        gapBelow: rowGap,
+      );
+    }
+
+    Widget settingsRow(bool showExpanded) {
+      final label = context.l10n.settings;
+      return shellRow(
+        showExpanded: showExpanded,
+        selected: settingsSelected,
+        label: label,
+        icon: Icon(
+          FluentIcons.settings_24_regular,
+          color: settingsSelected
+              ? (navFill != null ? cs.onSurface : cs.primary)
+              : cs.onSurface,
+        ),
+        onTap: () => const SettingsRoute().push(context),
+        gapBelow: 0,
+      );
+    }
+
+    // Scroll destinations separately so the footer remains visible in short windows.
+    return ValueListenableBuilder<LinuxButtonLayout>(
+      valueListenable: linuxButtonLayoutNotifier,
+      builder: (context, layout, _) {
+        final brandInSidebar = isMacOS || layout.leading.isNotEmpty;
+        final sidebarWidth = widthFor(
+          expanded: expanded,
+          isMacOS: isMacOS,
+          leadingWidth: linuxWindowButtonsWidth(layout.leading.length),
+        );
+        return LayoutBuilder(
+          builder: (context, constraints) => TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: sidebarWidth, end: sidebarWidth),
+            duration: context.reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            builder: (context, width, _) {
+              final showExpanded = width > (expandedWidth + collapsedWidth) / 2;
+              final maxHeight = constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : null;
+              final brandRows = [
+                if (brandInSidebar) ...[
+                  if (showExpanded)
+                    DesktopBrandRow(
+                      onCollapse: collapse,
+                      height: _rowHeight,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    )
+                  else
+                    SizedBox(
+                      height: _rowHeight,
+                      child: Center(
+                        child: sidebarCanExpand(context)
+                            ? DesktopBrandExpandButton(onExpand: expand)
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ];
+              final destinationRows = [
+                for (var i = 0; i < navList.length; i++) row(i, showExpanded),
+              ];
+              final footDivider = Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                child: Divider(height: 1, thickness: 1, color: cs.outlineVariant),
+              );
+              return SizedBox(
+                width: width,
+                height: maxHeight,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(right: BorderSide(color: cs.outlineVariant)),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: maxHeight == null
+                      ? SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ...brandRows,
+                              ...destinationRows,
+                              if (showFoot) ...[
+                                footDivider,
+                                incognitoRow(showExpanded),
+                                settingsRow(showExpanded),
+                              ],
+                            ],
+                          ),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ...brandRows,
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: destinationRows,
+                                ),
+                              ),
+                            ),
+                            if (showFoot) ...[
+                              footDivider,
+                              incognitoRow(showExpanded),
+                              settingsRow(showExpanded),
+                            ],
+                          ],
+                        ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}

@@ -1,0 +1,388 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/migration/data/bulk_migration_runner.dart';
+import 'package:kuchie/src/features/migration/data/migration_journal.dart';
+import 'package:kuchie/src/features/migration/data/migration_repository.dart';
+import 'package:kuchie/src/features/migration/domain/bulk_migration_types.dart';
+import 'package:kuchie/src/features/migration/domain/chapter_matcher.dart';
+import 'package:kuchie/src/features/migration/domain/concurrency.dart';
+import 'package:kuchie/src/features/migration/domain/migration_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Controllable fake — records copy/remove calls and can be told to fail.
+class FakeMigrationRepository implements MigrationRepository {
+  final List<int> copyCalls = [];
+  final List<int> removeCalls = [];
+
+  /// Records the overwrite flag each copy was called with, keyed by fromMangaId.
+  final Map<int, bool> copyOverwriteFlags = {};
+
+  /// fromMangaId → number of times to fail copy before succeeding.
+  final Map<int, int> copyFailuresRemaining;
+  final Set<int> removeShouldFail;
+  final bool sourceInLibrary;
+
+  /// fromMangaId → preflight result to return.
+  final Map<int, MigrationMergePreflight> preflights;
+
+  FakeMigrationRepository({
+    Map<int, int>? copyFailuresRemaining,
+    Set<int>? removeShouldFail,
+    Map<int, MigrationMergePreflight>? preflights,
+    this.sourceInLibrary = true,
+  }) : copyFailuresRemaining = copyFailuresRemaining ?? {},
+       removeShouldFail = removeShouldFail ?? {},
+       preflights = preflights ?? {};
+
+  @override
+  Future<MigrationMergePreflight> preflightMerge(
+    int fromMangaId,
+    int toMangaId,
+  ) async =>
+      preflights[fromMangaId] ??
+      const MigrationMergePreflight(targetInLibrary: false);
+
+  @override
+  Future<MigrationCopyResult> copyMangaData(
+    int fromMangaId,
+    int toMangaId,
+    MigrationOption options, [
+    BuildContext? context,
+  ]) async {
+    copyCalls.add(fromMangaId);
+    copyOverwriteFlags[fromMangaId] = options.overwriteExistingTracking;
+    final remaining = copyFailuresRemaining[fromMangaId] ?? 0;
+    if (remaining > 0) {
+      copyFailuresRemaining[fromMangaId] = remaining - 1;
+      return MigrationCopyResult(
+        success: false,
+        sourceInLibrary: sourceInLibrary,
+        warnings: const ['simulated copy failure'],
+      );
+    }
+    return MigrationCopyResult(
+      success: true,
+      sourceInLibrary: sourceInLibrary,
+      migratedChapters: 3,
+      copiedSourceRecordIds: const [700],
+    );
+  }
+
+  @override
+  Future<({bool success, List<String> warnings})> removeSourceManga(
+    int fromMangaId, {
+    List<int> copiedSourceRecordIds = const [],
+  }) async {
+    removeCalls.add(fromMangaId);
+    if (removeShouldFail.contains(fromMangaId)) {
+      return (success: false, warnings: const ['simulated remove failure']);
+    }
+    return (success: true, warnings: const <String>[]);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName} not stubbed');
+
+  @override
+  Future<void> cancelMigration() async {}
+}
+
+BulkMigrationEntry entry(int from, {int? to, String? fromSourceId}) {
+  final e = BulkMigrationEntry(
+    fromMangaId: from,
+    fromTitle: 'M$from',
+    fromSourceId: fromSourceId,
+  );
+  if (to != null) {
+    e.toMangaId = to;
+    e.toTitle = 'T$to';
+    e.confidence = 1.0;
+    e.phase = BulkEntryPhase.ready;
+  }
+  return e;
+}
+
+BulkMigrationRunner makeRunner({
+  required FakeMigrationRepository repo,
+  required MigrationJournal journal,
+  required List<BulkMigrationEntry> entries,
+  MigrationOption options = const MigrationOption(),
+  DirtyGate? dirtyGate,
+  bool Function()? isSessionCurrent,
+  Future<void> Function(int, int, MigrationOption)? migrateLocalState,
+  bool Function()? isReauthNeeded,
+  Future<void> Function(CancelToken)? waitAuthReady,
+  BulkMatcher? matcher,
+  Future<void> Function(int)? onSourceRemoved,
+  Future<List<ChapterState>?> Function(int)? loadTargetChapters,
+  Future<List<ChapterState>?> Function(int)? loadSourceChapters,
+}) => BulkMigrationRunner(
+  repo: repo,
+  journal: journal,
+  isSessionCurrent: isSessionCurrent,
+  migrateLocalState: migrateLocalState,
+  options: options,
+  entries: entries,
+  matcher:
+      matcher ??
+      (e, t) async => MatchOutcome(toMangaId: e.toMangaId, confidence: 1.0),
+  loadTargetChapters: loadTargetChapters,
+  loadSourceChapters: loadSourceChapters,
+  dirtyGate: dirtyGate ?? (id, t) async => true,
+  isReauthNeeded: isReauthNeeded ?? () => false,
+  waitAuthReady: waitAuthReady ?? (t) async {},
+  onSourceRemoved: onSourceRemoved,
+);
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late MigrationJournal journal;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    journal = MigrationJournal(await SharedPreferences.getInstance());
+  });
+
+  test(
+    'account journals survive restart without adopting another account or legacy data',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      const entry = MigrationJournalEntry(
+        fromMangaId: 1,
+        toMangaId: 2,
+        state: MigrationPairState.copying,
+        options: MigrationOption(),
+      );
+      await journal.put(entry);
+      final legacy = prefs.getString(MigrationJournal.prefsKey);
+      final first = MigrationJournal(prefs, accountId: 'account-a');
+      final second = MigrationJournal(prefs, accountId: 'account-b');
+      expect(first.entries(), isEmpty);
+      expect(second.entries(), isEmpty);
+      await first.put(entry);
+      await second.put(entry.copyWith(state: MigrationPairState.copied));
+      expect(
+        MigrationJournal(prefs, accountId: 'account-a').entryFor(1)!.state,
+        MigrationPairState.copying,
+      );
+      expect(
+        MigrationJournal(prefs, accountId: 'account-b').entryFor(1)!.state,
+        MigrationPairState.copied,
+      );
+      expect(prefs.getString(MigrationJournal.prefsKey), legacy);
+    },
+  );
+
+  group('commit — Migrate', () {
+    test('copies then removes, marks done, clears journal', () async {
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100)],
+      );
+      await runner.commit(deleteSource: true);
+      expect(runner.entries.single.phase, BulkEntryPhase.done);
+      expect(repo.copyCalls, [1]);
+      expect(repo.removeCalls, [1]);
+      expect(journal.entries(), isEmpty);
+    });
+
+    test('copy failure keeps the source and does NOT remove', () async {
+      final repo = FakeMigrationRepository(copyFailuresRemaining: {1: 1});
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100)],
+      );
+      await runner.commit(deleteSource: true);
+      expect(runner.entries.single.phase, BulkEntryPhase.failed);
+      expect(repo.removeCalls, isEmpty);
+      expect(journal.entryFor(1)!.state, MigrationPairState.failed);
+    });
+
+    test('two concurrent commitOne calls on one entry produce one copy', () async {
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100)],
+      );
+      await Future.wait([
+        runner.commitOne(1, deleteSource: false),
+        runner.commitOne(1, deleteSource: false),
+      ]);
+      expect(repo.copyCalls, [1]);
+      expect(runner.entries.single.phase, BulkEntryPhase.done);
+    });
+
+    test('concurrent Copy and Migrate rows keep their own modes', () async {
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100), entry(2, to: 200)],
+      );
+      await Future.wait([
+        runner.commitOne(1, deleteSource: false),
+        runner.commitOne(2, deleteSource: true),
+      ]);
+      expect(runner.entries[0].phase, BulkEntryPhase.done);
+      expect(runner.entries[1].phase, BulkEntryPhase.done);
+      expect(repo.copyCalls, unorderedEquals([1, 2]));
+      expect(
+        repo.removeCalls,
+        contains(2),
+        reason: 'the Migrate row original is removed',
+      );
+      expect(
+        repo.removeCalls,
+        isNot(contains(1)),
+        reason: 'the Copy row original is kept',
+      );
+    });
+
+    test(
+      'commitOne approves a needsReview match while bulk commit leaves it',
+      () async {
+        final repo = FakeMigrationRepository();
+        final runner = makeRunner(
+          repo: repo,
+          journal: journal,
+          entries: [entry(1, to: 100)..phase = BulkEntryPhase.needsReview],
+        );
+        await runner.commit(deleteSource: false);
+        expect(repo.copyCalls, isEmpty);
+        expect(runner.entries.single.phase, BulkEntryPhase.needsReview);
+        await runner.commitOne(1, deleteSource: false);
+        expect(repo.copyCalls, [1]);
+        expect(runner.entries.single.phase, BulkEntryPhase.done);
+      },
+    );
+
+  });
+
+  group('self-target refusal', () {
+    test('self-targets are refused and never committed', () async {
+      Future<void> check({required bool deleteSource}) async {
+        final repo = FakeMigrationRepository();
+        final runner = makeRunner(
+          repo: repo,
+          journal: journal,
+          entries: [
+            entry(1, fromSourceId: 's1'),
+            entry(2, fromSourceId: 's1'),
+          ],
+        );
+        runner.overrideTarget(1, 1, 'M1', toSourceId: 's1');
+        runner.overrideTarget(2, 200, 'T200', toSourceId: 's1');
+        await runner.commit(deleteSource: deleteSource);
+        expect(repo.copyCalls, isEmpty);
+        expect(repo.removeCalls, isEmpty);
+        for (final e in runner.entries) {
+          expect(e.phase, BulkEntryPhase.failed);
+          expect(e.blocksMigrate, isTrue);
+          expect(e.blockKind, MigrationBlockKind.selfTarget);
+          expect(e.message, isNull);
+        }
+      }
+
+      await check(deleteSource: true);
+      await check(deleteSource: false);
+    });
+  });
+
+  group('retryOne', () {
+    test('retry re-inspects a transient source chapter-load failure', () async {
+      var sourceCalls = 0;
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100)],
+        loadTargetChapters: (_) async => const [
+          ChapterState(
+            id: 10,
+            chapterNumber: 1,
+            name: 'c1',
+            isRead: false,
+            isBookmarked: false,
+            lastPageRead: 0,
+          ),
+        ],
+        loadSourceChapters: (_) async {
+          if (sourceCalls++ == 0) throw Exception('flaky network');
+          return const <ChapterState>[];
+        },
+      );
+      await runner.commit(deleteSource: true);
+      expect(runner.entries.single.phase, BulkEntryPhase.failed);
+      expect(runner.entries.single.blocksMigrate, isTrue);
+      await runner.retryOne(1);
+      expect(runner.entries.single.phase, BulkEntryPhase.done);
+      expect(repo.copyCalls, [1]);
+      expect(repo.removeCalls, [1]);
+    });
+  });
+
+  group('dirty-state gate', () {
+    test('blocks removal when the source is dirty', () async {
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(
+        repo: repo,
+        journal: journal,
+        entries: [entry(1, to: 100)],
+        dirtyGate: (id, t) async => false,
+      );
+      await runner.commit(deleteSource: true);
+      expect(runner.entries.single.phase, BulkEntryPhase.dirtyBlocked);
+      expect(repo.copyCalls, isEmpty);
+      expect(repo.removeCalls, isEmpty);
+    });
+  });
+
+  group('recovery (simulated mid-batch kill)', () {
+    test('copied → resume revalidates with a fresh copy, then removes', () async {
+      // Journal copy may predate newer reads; recovery recopies before removing.
+      await journal.put(
+        const MigrationJournalEntry(
+          fromMangaId: 1,
+          toMangaId: 100,
+          state: MigrationPairState.copied,
+          options: MigrationOption(deleteSource: true),
+          copiedSourceRecordIds: [700],
+        ),
+      );
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(repo: repo, journal: journal, entries: []);
+      await runner.recover();
+      expect(repo.copyCalls, [1], reason: 'removal needs a fresh copy');
+      expect(repo.removeCalls, [1]);
+      expect(journal.entries(), isEmpty);
+    });
+
+    test('copying → resume re-runs copy (idempotent) then removes', () async {
+      await journal.put(
+        const MigrationJournalEntry(
+          fromMangaId: 1,
+          toMangaId: 100,
+          state: MigrationPairState.copying,
+          options: MigrationOption(deleteSource: true),
+        ),
+      );
+      final repo = FakeMigrationRepository();
+      final runner = makeRunner(repo: repo, journal: journal, entries: []);
+      await runner.recover();
+      expect(repo.copyCalls, [1], reason: 'copy not proven — redo it');
+      expect(repo.removeCalls, [1]);
+      expect(journal.entries(), isEmpty);
+    });
+  });
+}

@@ -1,0 +1,130 @@
+// A server switch must clear stored credentials so A's secrets never reach B.
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
+import 'package:kuchie/src/features/auth/data/secure_credentials_provider.dart';
+import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
+import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _InMemorySecureStorage implements FlutterSecureStorage {
+  final _store = <String, String>{};
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    iOptions,
+    aOptions,
+    lOptions,
+    webOptions,
+    mOptions,
+    wOptions,
+  }) async {
+    value == null ? _store.remove(key) : _store[key] = value;
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    iOptions,
+    aOptions,
+    lOptions,
+    webOptions,
+    mOptions,
+    wOptions,
+  }) async => _store[key];
+
+  @override
+  Future<void> delete({
+    required String key,
+    iOptions,
+    aOptions,
+    lOptions,
+    webOptions,
+    mOptions,
+    wOptions,
+  }) async {
+    _store.remove(key);
+  }
+
+  @override
+  noSuchMethod(Invocation i) =>
+      throw UnimplementedError('${i.memberName} not stubbed');
+}
+
+Future<ProviderContainer> _container() async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final c = ProviderContainer(
+    overrides: [
+      secureStorageProvider.overrideWithValue(_InMemorySecureStorage()),
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
+  );
+  addTearDown(c.dispose);
+  await c.read(authCredentialsStoreProvider.future);
+  return c;
+}
+
+void main() {
+  test(
+    'a host or port switch clears credentials; same-host edits keep them',
+    () async {
+      final c = await _container();
+      // Keep providers alive across updates (real watchers would in the app).
+      c.listen(serverUrlProvider, (_, _) {}, fireImmediately: true);
+      c.listen(credentialsProvider, (_, _) {}, fireImmediately: true);
+      c.listen(serverPortProvider, (_, _) {}, fireImmediately: true);
+      final store = c.read(authCredentialsStoreProvider.notifier);
+      final serverUrl = c.read(serverUrlProvider.notifier);
+
+      // Establish host A, then seed credentials against it.
+      await serverUrl.update('http://192.168.1.10:4567');
+      await store.saveSimpleLoginCookie('JSESSIONID=abc');
+      await c.read(credentialsProvider.notifier).set('Basic abc123');
+
+      // Same host (trailing slash / path change) — credentials survive.
+      await serverUrl.update('http://192.168.1.10:4567/manga');
+      await Future<void>.delayed(Duration.zero);
+      var state = await c.read(authCredentialsStoreProvider.future);
+      expect(state.simpleLoginCookie, 'JSESSIONID=abc');
+      expect(await c.read(credentialsProvider.future), 'Basic abc123');
+
+      // Different host — every credential cleared, including the Basic header.
+      await serverUrl.update('http://10.0.0.5:4567');
+      await Future<void>.delayed(Duration.zero);
+      state = await c.read(authCredentialsStoreProvider.future);
+      expect(state.simpleLoginCookie, isNull);
+      expect(await c.read(credentialsProvider.future), isNull);
+
+      // Changing the server port also clears them.
+      final port = c.read(serverPortProvider.notifier);
+      await port.update(4567);
+      await store.saveSimpleLoginCookie('JSESSIONID=pw');
+      await port.update(4568);
+      await Future<void>.delayed(Duration.zero);
+      state = await c.read(authCredentialsStoreProvider.future);
+      expect(state.simpleLoginCookie, isNull);
+    },
+  );
+
+  test('a delayed token write with a stale epoch is discarded', () async {
+    final c = await _container();
+    final store = c.read(authCredentialsStoreProvider.notifier);
+
+    final epochBefore = store.serverEpoch;
+    await store.clearAllForServerSwitch(); // simulates a server switch
+    // A refresh/worker that started before the switch tries to write back.
+    await store.updateUiLoginAccessToken(
+      'tokenFromOldServer',
+      forEpoch: epochBefore,
+    );
+
+    final state = await c.read(authCredentialsStoreProvider.future);
+    expect(state.uiAccessToken, isNull);
+  });
+}

@@ -1,0 +1,48 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:material_ui/material_ui.dart';
+
+import '../utils/extensions/custom_extensions.dart';
+import 'popup_widgets/app_dialog.dart';
+
+const int kBulkDownloadConfirmThreshold = 20;
+
+/// Returns true only on confirmation; summary names the targets and toDevice selects device wording.
+Future<bool> confirmBulkDownload(
+  BuildContext context, {
+  required String summary,
+  required bool toDevice,
+  String? downloadDescription,
+}) async {
+  return await showAppDialog<bool>(
+        context: context,
+        builder: (ctx) => AppDialogPanel(
+          title: toDevice
+              ? 'Keep $summary on this device?'
+              : 'Download $summary to the server?',
+          content: Text(
+            downloadDescription ??
+                (toDevice
+                    ? 'Every chapter of $summary will download to this device and '
+                          'stay in sync as you read. This can use a lot of storage.'
+                    : 'Every chapter of $summary will be queued for download on '
+                          'the server.'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(ctx.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(ctx.l10n.download),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}

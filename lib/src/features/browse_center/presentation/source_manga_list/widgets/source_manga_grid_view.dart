@@ -1,0 +1,163 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/app_sizes.dart';
+import '../../../../../constants/db_keys.dart';
+import '../../../../../global_providers/global_providers.dart';
+import '../../../../../routes/router_config.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/app_utils.dart';
+import '../../../../../utils/webui_meta/webui_settings.dart';
+import '../../../../../widgets/custom_circular_progress_indicator.dart';
+import '../../../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../../../widgets/emoticons.dart';
+import '../../../../../widgets/inline_retry_row.dart';
+import '../../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../../widgets/kuchie_character_motion.dart';
+import '../../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import '../../../../manga_book/domain/manga/manga_model.dart';
+import '../../../../settings/presentation/appearance/widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
+import '../../../domain/source/source_model.dart';
+import '../controller/source_manga_controller.dart';
+import 'desktop_source_cover_tile.dart';
+
+class SourceMangaGridView extends ConsumerWidget {
+  const SourceMangaGridView({
+    super.key,
+    required this.controller,
+    required this.sourceId,
+    required this.sourceType,
+    required this.selectedIds,
+    required this.selecting,
+    required this.onToggleSelection,
+    required this.onAddToLibrary,
+    this.addEnabled = true,
+    this.source,
+    this.topPadding = 0,
+  });
+  final PagingController<int, MangaDto> controller;
+  final SourceDto? source;
+  final String sourceId;
+  final SourceType sourceType;
+  final Set<int> selectedIds;
+  final bool selecting;
+  final void Function(int mangaId) onToggleSelection;
+  final void Function(MangaDto manga) onAddToLibrary;
+  final bool addEnabled;
+  final double topPadding;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final glassGrid =
+        supportsAppleGlass(context) &&
+        MediaQuery.orientationOf(context) == Orientation.portrait;
+    final gridWidth = ref.watch(gridMinWidthProvider);
+    final useTwoColumns =
+        glassGrid &&
+        !ref
+            .watch(sharedPreferencesProvider)
+            .containsKey(DBKeys.gridMangaCoverMinWidth.name);
+    final view = PagingListener(
+      controller: controller,
+      builder: (context, state, fetchNextPage) => PagedGridView(
+        state: state.copyWith(
+          pages: state.pages
+              ?.map(
+                (page) => visibleSourceMangas(
+                  page,
+                  hideLibraryEntries: ref.watch(
+                    webUiBoolProvider('hideLibraryEntries'),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        fetchNextPage: fetchNextPage,
+        showNewPageErrorIndicatorAsGridChild: false,
+        builderDelegate: PagedChildBuilderDelegate<MangaDto>(
+          firstPageProgressIndicatorBuilder: (context) =>
+              const CenterKuchieShimmerIndicator(),
+          newPageProgressIndicatorBuilder: (context) =>
+              const CenterKuchieShimmerIndicator(),
+          newPageErrorIndicatorBuilder: (context) => InlineRetryRow(
+            message: state.error.toString(),
+            onRetry: fetchNextPage,
+          ),
+          firstPageErrorIndicatorBuilder: (context) => Emoticons(
+            illustration: KuchieCharacterPhase.fetchFailed,
+            title: state.error.toString(),
+            button: TextButton(
+              onPressed: () => controller.refresh(),
+              child: Text(context.l10n.retry),
+            ),
+          ),
+          noItemsFoundIndicatorBuilder: (context) => Emoticons(
+            illustration: KuchieCharacterPhase.noResults,
+            title: context.l10n.noMangaFound,
+            button: TextButton(
+              onPressed: () => controller.refresh(),
+              child: Text(context.l10n.refresh),
+            ),
+          ),
+          itemBuilder: (context, item, index) {
+            final tile = MangaCoverGridTile(
+              manga: item,
+              borderRadius: glassGrid
+                  ? const BorderRadius.all(Radius.circular(18))
+                  : null,
+              selected: selectedIds.contains(item.id),
+              showSelectedCheck: !context.usesDesktopShell,
+              showDarkOverlay: item.user.inLibrary.ifNull(),
+              linkLocation: MangaRoute(mangaId: item.id).location,
+              onLongPress: () => onToggleSelection(item.id),
+              onPressed: () =>
+                  selecting ||
+                      (context.usesDesktopShell &&
+                          AppUtils.isMultiSelectPressed())
+                  ? onToggleSelection(item.id)
+                  : MangaRoute(mangaId: item.id).push(context),
+            );
+            if (!context.usesDesktopShell) {
+              return tile;
+            }
+            return DesktopSourceCoverTile(
+              manga: item,
+              selecting: selecting,
+              selected: selectedIds.contains(item.id),
+              onToggleSelection: () => onToggleSelection(item.id),
+              onAddToLibrary: onAddToLibrary,
+              addEnabled: addEnabled,
+              child: tile,
+            );
+          },
+        ),
+        padding: glassGrid || topPadding > 0
+            ? EdgeInsets.fromLTRB(
+                glassGrid ? 8 : 0,
+                topPadding,
+                glassGrid ? 8 : 0,
+                MediaQuery.paddingOf(context).bottom,
+              )
+            : null,
+        gridDelegate: useTwoColumns
+            ? const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 4,
+                mainAxisSpacing: 4,
+                childAspectRatio: .74,
+              )
+            : mangaCoverGridDelegate(gridWidth),
+      ),
+    );
+    return glassGrid
+        ? view
+        : DesktopBoxBleed(start: kMangaCoverCardInset / 2, child: view);
+  }
+}

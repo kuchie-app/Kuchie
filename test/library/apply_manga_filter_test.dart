@@ -1,0 +1,143 @@
+// Tests for the lewd and category filter paths in applyLibraryFilterSort().
+// Uses the real Fragment$MangaDto constructors (no mocking needed — they are
+// plain data classes with no side-effects or platform dependencies).
+
+// ignore_for_file: prefer_const_constructors
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_controller.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+
+// ─────────────────────────── helpers ────────────────────────────
+
+Fragment$MangaDto$source _source({
+  required Enum$ContentWarning contentWarning,
+}) => Fragment$MangaDto$source(
+  displayName: 'Test Source',
+  iconUrl: '',
+  id: '1',
+  contentWarning: contentWarning,
+  lang: 'en',
+  name: 'Test Source',
+  $extension: Fragment$MangaDto$source$extension(isObsolete: false),
+);
+
+Fragment$MangaDto$categories _cats(List<int> ids) =>
+    Fragment$MangaDto$categories(
+      nodes: ids
+          .map((id) => Fragment$MangaDto$categories$nodes(id: id))
+          .toList(),
+    );
+
+Fragment$MangaDto _manga({
+  required int id,
+  Fragment$MangaDto$source? source,
+  List<int> categoryIds = const [],
+  int unreadCount = 0,
+  int downloadCount = 0,
+  int bookmarkCount = 0,
+  List<String> genre = const [],
+}) => Fragment$MangaDto(
+  id: id,
+  title: 'Manga $id',
+  chapters: Fragment$MangaDto$chapters(totalCount: 0),
+  genre: genre,
+  initialized: true,
+  meta: const [],
+  source: source,
+  sourceId: '1',
+  status: Enum$MangaStatus.ONGOING,
+  categories: _cats(categoryIds),
+  trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
+  updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+  url: 'https://example.com/manga/$id',
+  user: Fragment$MangaDto$user(
+    bookmarkCount: bookmarkCount,
+    downloadCount: downloadCount,
+    inLibrary: true,
+    inLibraryAt: '0',
+    unreadCount: unreadCount,
+  ),
+);
+
+/// Calls applyLibraryFilterSort with all defaults off/null and returns ids.
+List<int> _filter(
+  List<Fragment$MangaDto> input, {
+  bool? lewd,
+  bool filterCategories = false,
+  Set<String> include = const {},
+  Set<String> exclude = const {},
+  bool filterTags = false,
+  Set<String> tagsInclude = const {},
+  Set<String> tagsExclude = const {},
+}) => applyLibraryFilterSort(
+  input,
+  query: null,
+  mangaFilterUnread: null,
+  mangaFilterDownloaded: null,
+  mangaFilterCompleted: null,
+  mangaFilterStarted: null,
+  mangaFilterBookmarked: null,
+  mangaFilterOffline: null,
+  offlineMangaIds: const {},
+  mangaFilterLewd: lewd,
+  mangaFilterMinRating: 0,
+  filterCategories: filterCategories,
+  filterCategoriesInclude: include,
+  filterCategoriesExclude: exclude,
+  filterTags: filterTags,
+  filterTagsInclude: tagsInclude,
+  filterTagsExclude: tagsExclude,
+  sortedBy: MangaSort.alphabetical,
+  sortedDirection: true,
+).map((m) => m.id).toList();
+
+// ────────────────────────── tests ───────────────────────────────
+
+void main() {
+  final nsfw = _manga(
+    id: 1,
+    source: _source(contentWarning: Enum$ContentWarning.NSFW),
+  );
+  final sfw = _manga(
+    id: 2,
+    source: _source(contentWarning: Enum$ContentWarning.SAFE),
+  );
+  final noSource = _manga(id: 3); // source == null → treated as non-nsfw
+
+  group('Lewd filter (mangaFilterLewd)', () {
+    test('true → only NSFW sources pass', () {
+      final ids = _filter([nsfw, sfw, noSource], lewd: true);
+      expect(ids, [1]);
+    });
+  });
+
+  group('Category include/exclude filter', () {
+    final inCat2 = _manga(id: 10, categoryIds: [2]);
+    final inCat3 = _manga(id: 11, categoryIds: [3]);
+    final inCat23 = _manga(id: 12, categoryIds: [2, 3]);
+    final noCat = _manga(id: 13);
+
+    test('include {2} keeps cat 2 and exclude {3} drops cat 3', () {
+      final includeIds = _filter(
+        [inCat2, inCat3, inCat23, noCat],
+        filterCategories: true,
+        include: {'2'},
+      );
+      expect(includeIds, containsAll([10, 12]));
+      expect(includeIds, isNot(contains(11)));
+      expect(includeIds, isNot(contains(13)));
+
+      final excludeIds = _filter(
+        [inCat2, inCat3, inCat23, noCat],
+        filterCategories: true,
+        exclude: {'3'},
+      );
+      expect(excludeIds, containsAll([10, 13]));
+      expect(excludeIds, isNot(contains(11)));
+      expect(excludeIds, isNot(contains(12)));
+    });
+  });
+}

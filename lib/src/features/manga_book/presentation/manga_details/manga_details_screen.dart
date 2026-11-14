@@ -1,0 +1,757 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:math';
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../../../constants/app_sizes.dart';
+import '../../../../routes/router_config.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/launch_url_in_web.dart';
+import '../../../../utils/misc/toast/toast.dart';
+import '../../../../utils/motion/reduce_motion.dart';
+import '../../../../utils/platform/platform_runtime.dart';
+import '../../../../utils/theme/brand.dart';
+import '../../../../widgets/app_bottom_sheet.dart';
+import '../../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../../widgets/desktop/desktop_top_bar.dart';
+import '../../../../widgets/emoticons.dart';
+import '../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../widgets/ios/apple_glass_popover.dart';
+import '../../../../widgets/ios/apple_glass_toolbar.dart';
+import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
+import '../../../library/presentation/category/controller/edit_category_controller.dart';
+import '../../../library/presentation/library/controller/library_controller.dart';
+import '../../../library/presentation/library/controller/library_manga_list.dart';
+import '../../../migration/presentation/screens/migration_window.dart';
+import '../../../offline/data/server_reachability.dart';
+import '../../../offline/presentation/server_unreachable_banner.dart';
+import '../../../settings/presentation/appearance/widgets/manga_thumbnail_backdrop/manga_thumbnail_backdrop_tile.dart';
+import '../../../settings/presentation/appearance/widgets/show_recommendations/show_recommendations_tile.dart';
+import '../../domain/chapter/chapter_model.dart';
+import '../../domain/manga/manga_model.dart';
+import '../../widgets/chapter_actions/multi_chapters_actions_bottom_app_bar.dart';
+import 'controller/manga_details_controller.dart';
+import 'manga_notes_screen.dart';
+import 'server_web_url.dart';
+import 'widgets/big_screen_manga_details.dart';
+import 'widgets/chapter_context_menu.dart';
+import 'widgets/chapter_download_presets_button.dart';
+import 'widgets/edit_manga_category_dialog.dart';
+import 'widgets/manga_chapter_organizer.dart';
+import 'widgets/manga_description.dart';
+import 'widgets/manga_details_app_bar.dart';
+import 'widgets/manga_notes_dialog.dart';
+import 'widgets/series_header.dart';
+import 'widgets/series_info_column.dart';
+import 'widgets/small_screen_manga_details.dart';
+
+class MangaDetailsScreen extends HookConsumerWidget {
+  const MangaDetailsScreen({super.key, required this.mangaId, this.categoryId});
+  final int mangaId;
+  final int? categoryId;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mangaProvider = mangaWithIdProvider(mangaId: mangaId);
+    final chapterListProvider = mangaChapterListProvider(mangaId: mangaId);
+    final chapterListFilteredProvider = mangaChapterListWithFilterProvider(
+      mangaId: mangaId,
+    );
+    final chapterListEntriesProvider = mangaChapterListEntriesProvider(
+      mangaId: mangaId,
+    );
+
+    final manga = ref.watch(mangaProvider);
+    final filteredChapterList = ref.watch(chapterListFilteredProvider);
+    final chapterListEntries = ref.watch(chapterListEntriesProvider);
+    final firstUnreadChapter = ref.watch(
+      firstUnreadInFilteredChapterListProvider(mangaId: mangaId),
+    );
+
+    final infoExpansion = useMemoized(SeriesInfoExpansion.new, [mangaId]);
+    useEffect(() => infoExpansion.dispose, [infoExpansion]);
+
+    final selectedChapters = useState<Map<int, ChapterDto>>({});
+    final selecting = selectedChapters.value.isNotEmpty;
+    final offline = ref.watch(serverUnreachableProvider);
+    final twoColumn = context.windowSizeClass >= WindowSizeClass.expanded;
+    final compactGlass = !twoColumn && supportsAppleGlass(context);
+    final showResumeFab =
+        !twoColumn && !compactGlass && firstUnreadChapter != null && !selecting;
+    void openNextChapter() {
+      final chapter = firstUnreadChapter;
+      if (chapter == null) return;
+      ReaderRoute(
+        mangaId: chapter.mangaId,
+        chapterId: chapter.id,
+        showReaderLayoutAnimation: true,
+      ).push(context);
+    }
+
+    // Focus the page scope during selection so Esc clears selection before global Back.
+    final pageScope = useMemoized(FocusScopeNode.new);
+    useEffect(() => pageScope.dispose, [pageScope]);
+    final wasSelecting = usePrevious(selecting);
+    useEffect(() {
+      if (selecting && wasSelecting == false) pageScope.requestFocus();
+      return null;
+    }, [selecting]);
+
+    // Only the app bar listens to scroll changes, avoiding chapter-list rebuilds on scroll.
+    final scrollPx = useMemoized(() => ValueNotifier<double>(0.0));
+    useEffect(() => scrollPx.dispose, const []);
+
+    // Capture the container so deferred invalidations survive screen disposal.
+    final providerContainer = ProviderScope.containerOf(context, listen: false);
+
+    final mangaRefresh = useCallback(([bool onlineFetch = false]) async {
+      await ref.read(mangaProvider.notifier).refresh();
+      // Screen may be disposed during the refresh → don't invalidate a dead ref.
+      if (!context.mounted) return;
+      // Defer invalidation past the frame; an await may resume during build.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => providerContainer.invalidate(categoryControllerProvider),
+      );
+    }, [mangaProvider, providerContainer]);
+
+    final chapterListRefresh = useCallback(
+      ([bool onlineFetch = false]) async =>
+          await ref.read(chapterListProvider.notifier).refresh(onlineFetch),
+      [chapterListProvider],
+    );
+
+    final refresh = useCallback(([onlineFetch = false]) async {
+      // Bulk callbacks may arrive after the screen has been disposed.
+      if (!context.mounted) return;
+      if (onlineFetch) {
+        ref
+            .read(toastProvider)
+            ?.show(context.l10n.updating, withMicrotask: true);
+      }
+      await mangaRefresh(onlineFetch);
+      // mangaRefresh can return after disposal without throwing; recheck before chapterListRefresh.
+      if (!context.mounted) return;
+      await chapterListRefresh(onlineFetch);
+      if (onlineFetch) {
+        // Await the refetch result; invalidation alone cannot confirm success.
+        final result = await AsyncValue.guard(
+          () => ref.read(mangaProvider.future),
+        );
+        if (!context.mounted) return;
+        if (result.hasError) {
+          ref
+              .read(toastProvider)
+              ?.showError(context.l10n.errorSomethingWentWrong);
+        } else {
+          ref
+              .read(toastProvider)
+              ?.show(context.l10n.updateCompleted, withMicrotask: true);
+        }
+      }
+    }, [context, mangaRefresh, chapterListRefresh]);
+
+    useEffect(() {
+      // Effect bodies run during build; invalidating a provider there throws.
+      if (filteredChapterList.isNotLoading && manga.isNotLoading) {
+        Future.microtask(() {
+          if (context.mounted) refresh();
+        });
+      }
+      return;
+    }, []);
+
+    void openEditCategories() => Future.microtask(() {
+      if (!context.mounted) return null;
+      return showDialog(
+        context: context,
+        builder: (context) => EditMangaCategoryDialog(mangaId: mangaId),
+        animationStyle: context.motionStyle,
+      );
+    });
+
+    Future<void> startSeriesMigration(
+      BuildContext context,
+      int mangaId,
+      dynamic manga,
+    ) async {
+      if (manga == null) return;
+      await startMigration(context, mangaIds: [mangaId]);
+      providerContainer.invalidate(mangaWithIdProvider(mangaId: mangaId));
+      providerContainer.invalidate(mangaChapterListProvider(mangaId: mangaId));
+    }
+
+    void openInBrowser(String url) =>
+        launchUrlInWeb(context, url, ref.read(toastProvider));
+
+    Future<void> shareSeries(BuildContext context, MangaDto manga) async {
+      final url = manga.realUrl;
+      if (url == null) return;
+      if (kIsWeb || isDesktopPlatform) {
+        await Clipboard.setData(ClipboardData(text: url));
+        if (context.mounted) {
+          ref.read(toastProvider)?.show(context.l10n.copiedToClipboard);
+        }
+        return;
+      }
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), title: manga.title),
+      );
+    }
+
+    void openOnServer() {
+      final url = serverMangaWebUrl(ref, mangaId);
+      if (url != null) openInBrowser(url);
+    }
+
+    void openMangaNotes(BuildContext context, MangaDto manga) {
+      final dialog = MangaNotesDialog(
+        mangaId: mangaId,
+        seriesTitle: manga.title,
+        initialNotes: manga.webUiNotes ?? '',
+        existingMetas: {for (final m in manga.meta) m.key: m.value},
+      );
+      if (twoColumn) {
+        showDialog(
+          context: context,
+          builder: (_) => dialog,
+          animationStyle: context.motionStyle,
+        );
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MangaNotesScreen(
+              mangaId: mangaId,
+              seriesTitle: manga.title,
+              initialNotes: manga.webUiNotes ?? '',
+              existingMetas: {for (final m in manga.meta) m.key: m.value},
+            ),
+          ),
+        );
+      }
+    }
+
+    // Popping the detail shell can dispose this screen without a route pop; run exit bookkeeping once.
+    final latestManga = useRef(manga);
+    latestManga.value = manga;
+    final libraryChecked = useRef(false);
+    void refreshLibraryAfterExit() {
+      if (libraryChecked.value || categoryId == null) return;
+      libraryChecked.value = true;
+      final id = categoryId!;
+      final current = latestManga.value;
+      // Every action re-fetches the series; mid-refetch, assume it changed.
+      final fresh = current.isLoading ? null : current.value;
+      // Defer off the pop's build phase (Riverpod-3 modify-during-build).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!providerContainer.read(libraryMangaListProvider.exists)) return;
+        final listed = providerContainer
+            .read(libraryMangaListProvider)
+            .value
+            ?.where((m) => m.id == mangaId)
+            .firstOrNull;
+        if (!libraryEntryOutdated(listed, fresh)) return;
+        providerContainer.invalidate(libraryMangaListProvider);
+        providerContainer.invalidate(categoryMangaListProvider(id));
+      });
+    }
+
+    useEffect(() => refreshLibraryAfterExit, const []);
+
+    final topBar = showsMergedTopBar(context);
+    final page = PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) refreshLibraryAfterExit();
+      },
+      child: manga.showUiWhenData(
+        context,
+        (data) {
+          // Medium windows suppress the page AppBar, so the shell slot must carry its controls.
+          final inLibrary = data?.user.inLibrary.ifNull() ?? false;
+          final coverBehindBar =
+              compactGlass &&
+              !offline &&
+              data != null &&
+              data.displayCoverUrl.isNotBlank &&
+              resolveMangaThumbnailBackdrop(
+                override: ref.watch(mangaThumbnailBackdropProvider),
+                twoColumn: twoColumn,
+              );
+          void openChapterFilters() => showAppBottomSheet<void>(
+            context: context,
+            builder: (_) =>
+                MangaChapterOrganizer(mangaId: mangaId, inSheet: true),
+          );
+          final selectionActions = [
+            IconButton(
+              onPressed: () {
+                final chapterList = [...?filteredChapterList.value];
+                selectedChapters.value = ({
+                  for (ChapterDto i in chapterList) i.id: i,
+                });
+              },
+              icon: const Icon(FluentIcons.select_all_on_24_regular),
+            ),
+            IconButton(
+              onPressed: () {
+                final chapterList = [...?filteredChapterList.value];
+                selectedChapters.value = ({
+                  for (ChapterDto i in chapterList)
+                    if (!selectedChapters.value.containsKey(i.id)) i.id: i,
+                });
+              },
+              icon: const Icon(FluentIcons.arrow_swap_24_regular),
+            ),
+            MultiSelectPopupButton(
+              filteredChapterList: filteredChapterList,
+              selectedChapters: selectedChapters,
+            ),
+          ];
+          final pageActions = [
+            if (twoColumn && inLibrary && data != null)
+              IconButton(
+                tooltip: context.l10n.notes,
+                icon: const Icon(FluentIcons.note_edit_24_regular),
+                onPressed: () => openMangaNotes(context, data),
+              ),
+            if (twoColumn && inLibrary)
+              IconButton(
+                tooltip: context.l10n.migrate,
+                icon: const Icon(FluentIcons.arrow_swap_24_regular),
+                onPressed: () => startSeriesMigration(context, mangaId, data),
+              ),
+            if (inLibrary)
+              AppleGlassToolbarButton(
+                id: 'manga-edit-category',
+                symbol: 'tag',
+                label: context.l10n.editCategory,
+                fallbackIcon: FluentIcons.tag_24_regular,
+                onPressed: openEditCategories,
+              ),
+            if (twoColumn && data?.realUrl != null)
+              IconButton(
+                tooltip: context.l10n.share,
+                icon: const Icon(FluentIcons.share_24_regular),
+                onPressed: () => shareSeries(context, data!),
+              ),
+            if (!twoColumn && !compactGlass)
+              AppleGlassToolbarButton(
+                id: 'manga-chapter-filters',
+                symbol: 'line.3.horizontal.decrease',
+                label: context.l10n.filter,
+                fallbackIcon: FluentIcons.filter_24_regular,
+                onPressed: openChapterFilters,
+              ),
+            if (compactGlass && data != null && !data.isLocalSource)
+              ChapterDownloadPresetsButton(
+                glassToolbar: true,
+                chapterList: ref.watch(
+                  mangaChapterListForBulkActionsProvider(mangaId: mangaId),
+                ),
+                refresh: chapterListRefresh,
+              ),
+            if (!twoColumn)
+              AppleGlassToolbarButton(
+                id: 'manga-overflow',
+                symbol: 'ellipsis',
+                label: context.l10n.more,
+                fallbackIcon: FluentIcons.more_vertical_24_regular,
+                onPressed: null,
+                menu: [
+                  if (ref.watch(showRecommendationsProvider).ifNull(true) &&
+                      ref.watch(recommendsInOverflowProvider).ifNull(false))
+                    AppleGlassToolbarMenuItem(
+                      id: 'recommendations',
+                      title: context.l10n.seeRecommendations,
+                      symbol: 'lightbulb',
+                      fallbackIcon: FluentIcons.lightbulb_24_regular,
+                      onSelected: () => RecommendsRoute(
+                        mangaId: mangaId,
+                        mangaTitle: data?.title,
+                      ).push(context),
+                    ),
+                  if (inLibrary && data != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'notes',
+                      title: context.l10n.notes,
+                      symbol: 'square.and.pencil',
+                      fallbackIcon: FluentIcons.note_edit_24_regular,
+                      onSelected: () => openMangaNotes(context, data),
+                    ),
+                  if (inLibrary)
+                    AppleGlassToolbarMenuItem(
+                      id: 'migrate',
+                      title: context.l10n.migrate,
+                      symbol: 'arrow.left.arrow.right',
+                      fallbackIcon: FluentIcons.arrow_swap_24_regular,
+                      onSelected: () =>
+                          startSeriesMigration(context, mangaId, data),
+                    ),
+                  if (data?.realUrl != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'share',
+                      title: context.l10n.share,
+                      symbol: 'square.and.arrow.up',
+                      fallbackIcon: FluentIcons.share_24_regular,
+                      onSelected: () => shareSeries(context, data!),
+                    ),
+                  if (data != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'web-view',
+                      title: context.l10n.webView,
+                      symbol: 'globe',
+                      fallbackIcon: FluentIcons.globe_24_regular,
+                      onSelected: () =>
+                          MangaDescription.openWebView(context, ref, data),
+                    ),
+                  AppleGlassToolbarMenuItem(
+                    id: 'refresh',
+                    title: context.l10n.refresh,
+                    symbol: 'arrow.clockwise',
+                    fallbackIcon: FluentIcons.arrow_clockwise_24_regular,
+                    onSelected: () => refresh(true),
+                  ),
+                  if (data?.realUrl != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'open-source',
+                      title: context.l10n.openSourceInBrowser,
+                      symbol: 'safari',
+                      fallbackIcon: FluentIcons.open_24_regular,
+                      onSelected: () => openInBrowser(data!.realUrl!),
+                    ),
+                  AppleGlassToolbarMenuItem(
+                    id: 'open-server',
+                    title: context.l10n.openOnServer,
+                    symbol: 'server.rack',
+                    fallbackIcon: FluentIcons.server_24_regular,
+                    onSelected: openOnServer,
+                  ),
+                ],
+              ),
+          ];
+          final scaffold = FocusScope(
+            node: pageScope,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.escape &&
+                  selectedChapters.value.isNotEmpty) {
+                selectedChapters.value = {};
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              extendBodyBehindAppBar:
+                  !twoColumn &&
+                  !selecting &&
+                  !offline &&
+                  (!compactGlass || coverBehindBar),
+              appBar: topBar
+                  ? null
+                  : selectedChapters.value.isNotEmpty && !twoColumn
+                  ? AppBar(
+                      leading: AppleGlassToolbarButton(
+                        id: 'manga-close-chapter-selection',
+                        symbol: 'xmark',
+                        label: context.l10n.close,
+                        fallbackIcon: FluentIcons.dismiss_24_regular,
+                        onPressed: () => selectedChapters.value = ({}),
+                      ),
+                      title: Text(
+                        context.l10n.numSelected(selectedChapters.value.length),
+                      ),
+                      actions: selectionActions,
+                    )
+                  : MangaDetailsAppBar(
+                      title: twoColumn
+                          ? SeriesAppBarTitle(
+                              title: data?.title ?? context.l10n.manga,
+                            )
+                          : Text(data?.title ?? context.l10n.manga),
+                      scrollOffset: scrollPx,
+                      coverBehindBar: coverBehindBar,
+                      twoColumn: twoColumn,
+                      actions: pageActions,
+                    ),
+              endDrawerEnableOpenDragGesture: false,
+              floatingActionButton: showResumeFab
+                  ? BrandFab(
+                      label: Text(
+                        data?.user.lastReadChapter?.hasReadingProgress == true
+                            ? context.l10n.resume
+                            : context.l10n.start,
+                      ),
+                      icon: const Icon(FluentIcons.play_24_regular),
+                      onPressed: openNextChapter,
+                    )
+                  : null,
+              // Keep the banner above content so it cannot cover the hero image.
+              body: Column(
+                children: [
+                  ServerUnreachableBanner(onRetry: refresh),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        NotificationListener<ScrollNotification>(
+                          onNotification: (n) {
+                            if (n.metrics.axis == Axis.vertical) {
+                              scrollPx.value = n.metrics.pixels;
+                            }
+                            return false;
+                          },
+                          child: data != null
+                              ? twoColumn
+                                    ? BigScreenMangaDetails(
+                                        expansion: infoExpansion,
+                                        chapterList: chapterListEntries,
+                                        manga: data,
+                                        mangaId: mangaId,
+                                        onRefresh: refresh,
+                                        onDescriptionRefresh: mangaRefresh,
+                                        onMigrate: () => startSeriesMigration(
+                                          context,
+                                          mangaId,
+                                          data,
+                                        ),
+                                        onListRefresh: chapterListRefresh,
+                                        selectedChapters: selectedChapters,
+                                      )
+                                    : SmallScreenMangaDetails(
+                                        showResumeFab: showResumeFab,
+                                        onOpenChapterFilters: compactGlass
+                                            ? openChapterFilters
+                                            : null,
+                                        continueReading:
+                                            compactGlass &&
+                                                !selecting &&
+                                                firstUnreadChapter != null
+                                            ? (
+                                                label:
+                                                    data
+                                                            .user
+                                                            .lastReadChapter
+                                                            ?.hasReadingProgress ==
+                                                        true
+                                                    ? context.l10n.resume
+                                                    : context.l10n.start,
+                                                chapter:
+                                                    firstUnreadChapter.name,
+                                                open: openNextChapter,
+                                              )
+                                            : null,
+                                        chapterList: chapterListEntries,
+                                        manga: data,
+                                        mangaId: mangaId,
+                                        onRefresh: refresh,
+                                        onDescriptionRefresh: mangaRefresh,
+                                        onMigrate: () => startSeriesMigration(
+                                          context,
+                                          mangaId,
+                                          data,
+                                        ),
+                                        onListRefresh: chapterListRefresh,
+                                        selectedChapters: selectedChapters,
+                                      )
+                              : Emoticons(
+                                  title: context.l10n.noMangaFound,
+                                  button: TextButton(
+                                    onPressed: refresh,
+                                    child: Text(context.l10n.refresh),
+                                  ),
+                                ),
+                        ),
+                        if (selectedChapters.value.isNotEmpty && !twoColumn)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: MultiChaptersActionsBottomAppBar(
+                              afterOptionSelected: chapterListRefresh,
+                              selectedChapters: selectedChapters,
+                              chapterList: filteredChapterList.value,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          if (topBar && !twoColumn && selectedChapters.value.isNotEmpty) {
+            return TopBarSlot(
+              slotKey: 'selection',
+              content: DesktopTitleSlot(
+                leading: IconButton(
+                  onPressed: () => selectedChapters.value = ({}),
+                  icon: const Icon(FluentIcons.dismiss_24_regular),
+                ),
+                title: Text(
+                  context.l10n.numSelected(selectedChapters.value.length),
+                ),
+                actions: selectionActions,
+              ),
+              minWidth: titleTopBarSlotMinWidth(selectionActions.length),
+              child: scaffold,
+            );
+          }
+          return titleTopBarSlot(
+            topBar: topBar,
+            leading: detailNavigationBackButton(context),
+            title: twoColumn
+                ? SeriesAppBarTitle(title: data?.title ?? context.l10n.manga)
+                : Text(data?.title ?? context.l10n.manga),
+            actions: pageActions,
+            child: scaffold,
+          );
+        },
+        refresh: refresh,
+        wrapper: (body) {
+          final topBar = showsMergedTopBar(context);
+          final title = Text(context.l10n.manga);
+          final scaffold = Scaffold(
+            appBar: topBar ? null : AppBar(title: title),
+            body: body,
+          );
+          return titleTopBarSlot(
+            topBar: topBar,
+            leading: detailNavigationBackButton(context),
+            title: title,
+            child: scaffold,
+          );
+        },
+      ),
+    );
+    return DesktopPageLayoutScope(
+      layout: DesktopPageLayout.fullBleed,
+      child: page,
+    );
+  }
+}
+
+class MultiSelectPopupButton extends StatelessWidget {
+  const MultiSelectPopupButton({
+    super.key,
+    required this.filteredChapterList,
+    required this.selectedChapters,
+  });
+
+  final AsyncValue<List<ChapterDto>?> filteredChapterList;
+  final ValueNotifier<Map<int, ChapterDto>> selectedChapters;
+
+  @override
+  Widget build(BuildContext context) {
+    List<PopupMenuEntry<void>> items(BuildContext context) => [
+      PopupMenuItem<void>(
+        onTap: () {
+          List<ChapterDto> chapterList = [...?filteredChapterList.value];
+          final lastId = selectedChapters.value.keys.lastOrNull;
+          final lastIndex = chapterList.lastIndexWhere(
+            (chapter) => chapter.id == lastId,
+          );
+          if (lastIndex < 0) return;
+          final maxIndex = min(chapterList.length, lastIndex + 11);
+          selectedChapters.value = ({
+            ...selectedChapters.value,
+            for (int i = lastIndex + 1; i < maxIndex; i++)
+              chapterList[i].id: chapterList[i],
+          });
+        },
+        child: Text(context.l10n.selectNext10),
+      ),
+      PopupMenuItem<void>(
+        onTap: () {
+          final chapterList = [...?filteredChapterList.value];
+
+          selectedChapters.value = ({
+            for (ChapterDto i in chapterList)
+              if (!i.user.isRead.ifNull()) i.id: i,
+          });
+        },
+        child: ChapterMenuRow(
+          icon: FluentIcons.multiselect_ltr_24_regular,
+          label: context.l10n.selectUnread,
+        ),
+      ),
+      PopupMenuItem<void>(
+        onTap: () {
+          final chapterList = [...?filteredChapterList.value];
+          final selectedChapterIds = selectedChapters.value.keys.toList(
+            growable: false,
+          );
+          final firstSelectedIndex = chapterList.indexWhere(
+            (chapter) => chapter.id == selectedChapterIds.firstOrNull,
+          );
+          final lastSelectedIndex = chapterList.indexWhere(
+            (chapter) => chapter.id == selectedChapterIds.lastOrNull,
+          );
+          final firstIndex = min(firstSelectedIndex, lastSelectedIndex);
+          final lastIndex = max(firstSelectedIndex, lastSelectedIndex);
+          if (firstIndex < 0) return;
+
+          selectedChapters.value = ({
+            for (int i = firstIndex; i <= lastIndex; i++)
+              chapterList[i].id: chapterList[i],
+          });
+        },
+        child: Text(context.l10n.selectInBetween),
+      ),
+      PopupMenuItem<void>(
+        onTap: () {
+          final chapterList = [...?filteredChapterList.value];
+          final selectedIds = selectedChapters.value.keys.toSet();
+          final anchorIndex = chapterList.indexWhere(
+            (c) => selectedIds.contains(c.id),
+          );
+          if (anchorIndex < 0) return;
+          selectedChapters.value = {
+            ...selectedChapters.value,
+            for (int i = anchorIndex + 1; i < chapterList.length; i++)
+              chapterList[i].id: chapterList[i],
+          };
+        },
+        child: Text(context.l10n.selectBelow),
+      ),
+    ];
+    final shape = RoundedRectangleBorder(
+      borderRadius: KBorderRadius.r16.radius,
+    );
+    if (supportsAppleGlass(context)) {
+      return Builder(
+        builder: (context) => AppleGlassToolbarButton(
+          id: 'chapter-selection-options',
+          label: context.l10n.more,
+          symbol: 'ellipsis',
+          fallbackIcon: FluentIcons.more_vertical_24_regular,
+          onPressed: () {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box == null || !box.hasSize) return;
+            showAppleGlassMenu<void>(
+              context: context,
+              position: menuAnchorForRect(
+                context,
+                box.localToGlobal(Offset.zero) & box.size,
+              ),
+              items: items(context),
+            );
+          },
+        ),
+      );
+    }
+    return PopupMenuButton<void>(
+      shape: shape,
+      icon: const Icon(FluentIcons.more_vertical_24_regular),
+      itemBuilder: items,
+      popUpAnimationStyle: context.motionStyle,
+    );
+  }
+}

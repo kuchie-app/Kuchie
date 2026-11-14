@@ -1,0 +1,42 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/constants/app_theme.dart';
+import 'package:kuchie/src/utils/theme/app_color_scheme.dart';
+import 'package:kuchie/src/utils/theme/theme_tokens.dart';
+import 'package:material_ui/material_ui.dart';
+
+void main() {
+  ColorScheme darkScheme(AppTheme theme) =>
+      schemeFromTokens(tokensFor(theme, Brightness.dark), Brightness.dark);
+
+  test('Monochrome dark: onPrimary is dark against its light-grey accent, and '
+      'every dark theme contrasts', () {
+    final scheme = darkScheme(AppTheme.mono);
+    // The accent is a near-white grey, so white text was illegible (#105).
+    expect(
+      scheme.primary.computeLuminance(),
+      greaterThan(0.5),
+      reason: 'the Monochrome accent should be light',
+    );
+    expect(scheme.onPrimary, const Color(0xFF0A0A12));
+
+    for (final theme in AppTheme.values) {
+      if (theme == AppTheme.custom) continue; // custom is ColorScheme.fromSeed
+      final dark = darkScheme(theme);
+      final contrast =
+          (dark.primary.computeLuminance() -
+                  dark.onPrimary.computeLuminance())
+              .abs();
+      expect(
+        contrast,
+        greaterThan(0.3),
+        reason: '$theme: primary/onPrimary too close ($contrast)',
+      );
+    }
+  });
+}

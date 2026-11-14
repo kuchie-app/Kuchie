@@ -1,0 +1,188 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/toast/toast.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../widgets/app_bottom_sheet.dart';
+import '../../../../../widgets/download_presets_menu.dart';
+import '../../../../../widgets/ios/apple_glass_popup_button.dart';
+import '../../../../../widgets/ios/apple_glass_toolbar.dart';
+import '../../../../account/data/account_providers.dart';
+import '../../../data/downloads/downloads_repository.dart';
+import '../../../domain/chapter/chapter_download_presets.dart';
+import '../../../domain/chapter/chapter_model.dart';
+import 'manga_action_button.dart';
+
+class ChapterDownloadPresetsButton extends HookConsumerWidget {
+  const ChapterDownloadPresetsButton({
+    super.key,
+    required this.chapterList,
+    required this.refresh,
+    this.actionRow = false,
+    this.glassToolbar = false,
+  });
+
+  /// Chapter list for preset computation: filtered to preferred scanlators
+  /// when a scanlator preference is active, otherwise the full raw list.
+  final AsyncValue<List<ChapterDto>?> chapterList;
+  final bool actionRow;
+  final bool glassToolbar;
+
+  final Future<void> Function(bool) refresh;
+
+  Future<void> _handlePreset(
+    BuildContext context,
+    WidgetRef ref,
+    DownloadPreset preset,
+  ) async {
+    final chapters = chapterList.value ?? const [];
+    final candidates = [
+      for (final c in chapters)
+        ChapterDownloadCandidate(
+          id: c.id,
+          chapterNumber: c.chapterNumber,
+          isRead: c.user.isRead,
+          isDownloaded: c.user.isDownloaded,
+        ),
+    ];
+
+    final ids = chaptersToQueueForPreset(candidates, preset);
+
+    if (ids.isEmpty) {
+      ref.read(toastProvider)?.show(context.l10n.nothingToDownload);
+      return;
+    }
+
+    final result = await AsyncValue.guard(
+      () => ref
+          .read(downloadsRepositoryProvider)
+          .addChaptersBatchToDownloadQueue(ids),
+    );
+    if (context.mounted) {
+      result.showToastOnError(ref.read(toastProvider));
+      if (!result.hasError) ref.read(toastProvider)?.show(context.l10n.queued);
+    }
+    // Enqueuing a download doesn't change the source's chapter list — refresh
+    // from the server's stored chapters (updated download state), no re-scrape.
+    if (context.mounted) await refresh(false);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canDownload = ref
+        .watch(settledAccountAccessProvider)
+        .allows(Enum$UserPermission.DOWNLOAD_CHAPTERS);
+    final menuKey = useMemoized(
+      () => GlobalKey<PopupMenuButtonState<DownloadPreset>>(),
+    );
+    if (glassToolbar) {
+      return AppleGlassToolbarButton(
+        id: 'manga-server-downloads',
+        symbol: 'arrow.down.circle',
+        label: canDownload
+            ? context.l10n.downloadToServer
+            : context.l10n.accountPermissionDenied,
+        fallbackIcon: FluentIcons.cloud_arrow_down_24_regular,
+        onPressed: !canDownload
+            ? null
+            : () async {
+                final preset = await showAppBottomSheet<DownloadPreset>(
+                  context: context,
+                  builder: (context) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AppSheetHeader(title: context.l10n.downloadToServer),
+                      Flexible(
+                        child: ListView(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.only(bottom: 8),
+                          children: [
+                            for (final preset in DownloadPreset.values) ...[
+                              if (preset == DownloadPreset.unread)
+                                const Divider(
+                                  indent: 20,
+                                  endIndent: 20,
+                                  height: 16,
+                                ),
+                              ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                leading: Icon(_presetIcon(preset), size: 22),
+                                title: Text(
+                                  downloadPresetLabel(context, preset),
+                                ),
+                                onTap: () => Navigator.pop(context, preset),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (preset != null && context.mounted) {
+                  await _handlePreset(context, ref, preset);
+                }
+              },
+      );
+    }
+    if (actionRow) {
+      final hasServerDownloads = (chapterList.value ?? const []).any(
+        (c) => c.user.isDownloaded,
+      );
+      return AppleGlassPopupButton<DownloadPreset>(
+        key: menuKey,
+        enabled: canDownload,
+        tooltip: canDownload
+            ? context.l10n.downloadToServer
+            : context.l10n.accountPermissionDenied,
+        onSelected: (preset) => _handlePreset(context, ref, preset),
+        itemBuilder: (context) => [
+          for (final preset in DownloadPreset.values)
+            PopupMenuItem(
+              value: preset,
+              child: Text(downloadPresetLabel(context, preset)),
+            ),
+        ],
+        popUpAnimationStyle: context.motionStyle,
+        child: MangaActionButton(
+          active: hasServerDownloads,
+          icon: Icon(
+            hasServerDownloads
+                ? FluentIcons.cloud_checkmark_24_filled
+                : FluentIcons.cloud_arrow_down_24_regular,
+          ),
+          label: context.l10n.server,
+          onPressed: canDownload
+              ? () => menuKey.currentState?.showButtonMenu()
+              : null,
+        ),
+      );
+    }
+    return DownloadPresetsMenu(
+      enabled: canDownload,
+      onSelected: (preset) => _handlePreset(context, ref, preset),
+    );
+  }
+}
+
+IconData _presetIcon(DownloadPreset preset) => switch (preset) {
+  DownloadPreset.nextChapter ||
+  DownloadPreset.next5 ||
+  DownloadPreset.next10 ||
+  DownloadPreset.next25 => FluentIcons.arrow_download_24_regular,
+  DownloadPreset.unread => FluentIcons.book_open_24_regular,
+  DownloadPreset.all => FluentIcons.library_24_regular,
+};

@@ -1,0 +1,56 @@
+query SourceList {
+  sources {
+    nodes {
+      ...SourceDto
+    }
+  }
+}
+
+query SourceFilterById($id: LongString!) {
+    source(id: $id) {
+        filters {
+            ...FilterDto
+        }
+    }
+}
+
+query SourceById($id: LongString!) {
+  source(id: $id) {
+    ...SourceDto
+  }
+}
+
+# Source results never show "continue reading", so callers pass
+# $withFirstUnread: false to skip the first unread chapter (see MangaDto).
+mutation FetchSourceManga($input: FetchSourceMangaInput!, $withFirstUnread: Boolean!, $withLibraryFields: Boolean!) {
+  fetchSourceManga(input: $input) {
+    ...SourceMangaPage
+  }
+}
+
+query SourcePreferenceById($id: LongString!) {
+    source(id: $id) {
+        preferences {
+            ...SourcePreference
+        }
+    }
+}
+
+mutation UpdateSourcePreference($input: UpdateSourcePreferenceInput!) {
+    updateSourcePreference(input: $input) {
+        __typename
+        preferences {
+            ...SourcePreference
+        }
+    }
+}
+
+mutation SetSourceMeta($input: SetSourceMetaInput!) {
+    setSourceMeta(input: $input) {
+        meta {
+            key
+            sourceId
+            value
+        }
+    }
+}

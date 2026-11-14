@@ -1,0 +1,53 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../utils/extensions/custom_extensions.dart';
+import 'settings_search_entry.dart';
+
+class SettingsSearchResultRow extends StatelessWidget {
+  const SettingsSearchResultRow({
+    super.key,
+    required this.entry,
+    required this.query,
+    required this.onTap,
+  });
+
+  final SettingsSearchEntry entry;
+  final String query;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final cs = context.colorScheme;
+    return ListTile(
+      leading: Icon(FluentIcons.options_24_regular, color: cs.onSurfaceVariant),
+      title: Text.rich(
+        TextSpan(
+          children: settingsTitleSpans(
+            title: entry.title(l),
+            query: query,
+            match: TextStyle(color: cs.primary, fontWeight: FontWeight.w600),
+          ),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        entry.breadcrumb(l),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: context.textTheme.bodySmall?.copyWith(
+          color: cs.onSurfaceVariant,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+}

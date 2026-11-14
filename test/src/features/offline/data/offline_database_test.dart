@@ -1,0 +1,191 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:async';
+
+import 'package:drift/drift.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/offline/data/offline_database.dart';
+
+import '../../../../helpers/offline_test_db.dart';
+
+void main() {
+  late OfflineDatabase db;
+
+  setUp(() => db = testOfflineDatabase());
+  tearDown(() => db.close());
+
+  test(
+    'the download activity counts only queued and downloading chapters',
+    () async {
+      for (final state in OfflineDeviceState.values) {
+        await db
+            .into(db.offlineChapters)
+            .insert(
+              OfflineChaptersCompanion.insert(
+                id: Value(state.index + 1),
+                mangaId: 1,
+                name: state.name,
+                chapterIndex: state.index,
+                updatedAt: DateTime.utc(2026),
+                deviceState: Value(state),
+              ),
+            );
+      }
+      final counts = StreamIterator(db.watchPendingDownloadCount());
+      addTearDown(counts.cancel);
+      expect(await counts.moveNext(), isTrue);
+      expect(counts.current, 2);
+
+      await db.setChapterDeviceState(
+        OfflineDeviceState.downloading.index + 1,
+        OfflineDeviceState.downloaded,
+      );
+      expect(await counts.moveNext(), isTrue);
+      expect(counts.current, 1);
+    },
+  );
+
+  test('schema version and defaults round-trip', () async {
+    expect(db.schemaVersion, 21);
+    await db.upsertCategory(1, 'Reading', 0, isHidden: false);
+    expect((await db.allOfflineCategories()).single.webUiMetaJson, null);
+    expect((await db.allOfflineCategories()).single.pendingWebUiMetaJson, null);
+    const meta = '{"webUI_sortBy":"unreadChapters","webUI_migration":"10"}';
+    await db.upsertCategory(
+      1,
+      'Reading',
+      0,
+      isHidden: false,
+      webUiMetaJson: meta,
+    );
+    expect((await db.allOfflineCategories()).single.webUiMetaJson, meta);
+    await db.mergePendingCategoryMeta(1, {'webUI_sortBy': 'lastRead'});
+    expect(
+      (await db.allOfflineCategories()).single.pendingWebUiMetaJson,
+      '{"webUI_sortBy":"lastRead"}',
+    );
+
+    await db
+        .into(db.offlineMangas)
+        .insert(
+          OfflineMangasCompanion.insert(
+            id: const Value(117),
+            title: 'Solo Leveling',
+            updatedAt: DateTime.utc(2026),
+          ),
+        );
+    await db
+        .into(db.offlineChapters)
+        .insert(
+          OfflineChaptersCompanion.insert(
+            id: const Value(2000),
+            mangaId: 552,
+            name: 'Chapter 79',
+            chapterIndex: 79,
+            updatedAt: DateTime.utc(2026),
+          ),
+        );
+
+    final rows = await db.select(db.offlineMangas).get();
+    expect(rows.single.title, 'Solo Leveling');
+    expect(rows.single.keepRule, OfflineKeepRule.off);
+    expect(rows.single.keepUnreadCount, 3);
+
+    var c = await (db.select(
+      db.offlineChapters,
+    )..where((t) => t.id.equals(2000))).getSingle();
+    expect(c.deviceState, OfflineDeviceState.none);
+    expect(c.pinned, false);
+    expect(c.downloadedAt, null);
+
+    await (db.update(
+      db.offlineChapters,
+    )..where((t) => t.id.equals(2000))).write(
+      const OfflineChaptersCompanion(
+        deviceState: Value(OfflineDeviceState.downloaded),
+      ),
+    );
+    await db.setKeepRule(117, OfflineKeepRule.nUnread, 5);
+    await db.setChapterPinned(2000, true);
+    await db.setChapterDeviceState(
+      2000,
+      OfflineDeviceState.downloaded,
+      bytes: 100,
+      downloadedAt: DateTime(2026, 2, 2),
+    );
+
+    final m = await (db.select(
+      db.offlineMangas,
+    )..where((t) => t.id.equals(117))).getSingle();
+    expect(m.keepRule, OfflineKeepRule.nUnread);
+    expect(m.keepUnreadCount, 5);
+    c = await (db.select(
+      db.offlineChapters,
+    )..where((t) => t.id.equals(2000))).getSingle();
+    expect(c.deviceState, OfflineDeviceState.downloaded);
+    expect(c.pinned, true);
+    expect(c.downloadedAt, DateTime(2026, 2, 2));
+  });
+
+  test('clearAll removes the complete offline catalog', () async {
+    await db
+        .into(db.offlineMangas)
+        .insert(
+          OfflineMangasCompanion.insert(
+            id: const Value(117),
+            title: 'Solo Leveling',
+            updatedAt: DateTime.utc(2026),
+          ),
+        );
+    await db
+        .into(db.offlineChapters)
+        .insert(
+          OfflineChaptersCompanion.insert(
+            id: const Value(2000),
+            mangaId: 117,
+            name: 'Chapter 79',
+            chapterIndex: 79,
+            updatedAt: DateTime.utc(2026),
+          ),
+        );
+    await db
+        .into(db.offlineCategories)
+        .insert(
+          const OfflineCategoriesCompanion(
+            id: Value(1),
+            name: Value('Reading'),
+            sortOrder: Value(0),
+          ),
+        );
+    await db
+        .into(db.offlineMangaCategories)
+        .insert(
+          const OfflineMangaCategoriesCompanion(
+            mangaId: Value(117),
+            categoryId: Value(1),
+          ),
+        );
+    await db
+        .into(db.offlinePages)
+        .insert(
+          OfflinePagesCompanion.insert(
+            chapterId: 2000,
+            pageIndex: 0,
+            relativePath: '117/2000/000.jpg',
+          ),
+        );
+
+    expect(await db.hasCatalogData(), isTrue);
+    await db.clearAll();
+
+    expect(await db.hasCatalogData(), isFalse);
+    expect(await db.select(db.offlineChapters).get(), isEmpty);
+    expect(await db.select(db.offlineCategories).get(), isEmpty);
+    expect(await db.select(db.offlineMangaCategories).get(), isEmpty);
+    expect(await db.select(db.offlinePages).get(), isEmpty);
+  });
+}

@@ -1,0 +1,203 @@
+// Copyright (c) 2023 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/app_constants.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../widgets/compact_switch.dart';
+import '../../../../../widgets/popup_widgets/multi_select_popup.dart';
+import '../../../../../widgets/popup_widgets/radio_list_popup.dart';
+import '../../../../../widgets/popup_widgets/text_field_popup.dart';
+import '../../../domain/source_preference/source_preference.dart';
+
+class SourcePreferenceToWidget extends StatelessWidget {
+  const SourcePreferenceToWidget({
+    super.key,
+    required this.sourcePreference,
+    required this.onChanged,
+    this.enabled = true,
+    this.index,
+  });
+
+  final SourcePreference sourcePreference;
+  final bool enabled;
+  final ValueChanged<SourcePreferenceChange> onChanged;
+
+  /// Fallback tile key when the server provides no preference key.
+  final int? index;
+
+  Key? _keyFor(String? key) => key != null
+      ? Key(key)
+      : index != null
+      ? ValueKey('Source-preference-$index')
+      : null;
+
+  String _titleFor(String? title, String? key) => title ?? key ?? "";
+
+  @override
+  Widget build(BuildContext context) {
+    SourcePreference? prop = sourcePreference;
+    return switch (prop) {
+      CheckBoxPreference(
+        key: String? key,
+        checkBoxTitle: String? title,
+        summary: String? summary,
+        checkBoxDefaultValue: bool defaultValue,
+        checkBoxValue: bool? currentValue,
+      ) =>
+        CheckboxListTile(
+          key: _keyFor(key),
+          title: Text(_titleFor(title, key)),
+          subtitle: summary.isNotBlank ? Text(summary!) : null,
+          value: currentValue.ifNull(defaultValue.ifNull()),
+          onChanged: enabled
+              ? (value) => onChanged(
+                  SourcePreferenceChange(
+                    checkBoxState: value,
+                    position: kPositionPlaceholder,
+                  ),
+                )
+              : null,
+          controlAffinity: ListTileControlAffinity.trailing,
+        ),
+      SwitchPreferenceCompat(
+        key: String? key,
+        switchTitle: String? title,
+        summary: String? summary,
+        switchDefaultValue: bool defaultValue,
+        switchValue: bool? currentValue,
+      ) =>
+        CompactSwitchListTile(
+          key: _keyFor(key),
+          title: Text(_titleFor(title, key)),
+          subtitle: summary.isNotBlank ? Text(summary!) : null,
+          value: currentValue.ifNull(defaultValue.ifNull()),
+          onChanged: enabled
+              ? (value) => onChanged(
+                  SourcePreferenceChange(
+                    switchState: value,
+                    position: kPositionPlaceholder,
+                  ),
+                )
+              : null,
+          controlAffinity: ListTileControlAffinity.trailing,
+        ),
+      ListPreference(
+        key: String? key,
+        listTitle: String? title,
+        listDefaultValue: String? defaultValue,
+        listValue: String? currentValue,
+        entries: List<String> entries,
+        entryValues: List<String> entryValues,
+      ) =>
+        ListTile(
+          key: _keyFor(key),
+          title: Text(_titleFor(title, key)),
+          subtitle: currentValue.isNotBlank ? Text(currentValue!) : null,
+          onTap: enabled
+              ? () => showDialog(
+                  context: context,
+                  builder: (context) => RadioListPopup<String>(
+                    title: _titleFor(title, key),
+                    optionList: entryValues.toList(),
+                    value: currentValue ?? defaultValue ?? "",
+                    onChange: (value) {
+                      onChanged(
+                        SourcePreferenceChange(
+                          listState: value,
+                          position: kPositionPlaceholder,
+                        ),
+                      );
+                      Navigator.pop(context);
+                    },
+                    getOptionTitle: (entry) =>
+                        entries[entryValues.indexOf(entry)],
+                  ),
+                  animationStyle: context.motionStyle,
+                )
+              : null,
+        ),
+      MultiSelectListPreference(
+        key: String? key,
+        multiSelectTitle: String? title,
+        summary: String? summary,
+        multiSelectDefaultValue: List<String>? defaultValue,
+        multiSelectValue: List<String>? currentValue,
+        entries: List<String> entries,
+        entryValues: List<String> entryValues,
+      ) =>
+        ListTile(
+          key: _keyFor(key),
+          title: Text(_titleFor(title, key)),
+          subtitle: summary.isNotBlank ? Text(summary!) : null,
+          onTap: enabled
+              ? () => showDialog(
+                  context: context,
+                  builder: (context) => MultiSelectPopup<String>(
+                    title: _titleFor(title, key),
+                    optionList: entryValues.toList(),
+                    values:
+                        currentValue?.toList() ?? defaultValue?.toList() ?? [],
+                    onChange: (value) {
+                      onChanged(
+                        SourcePreferenceChange(
+                          multiSelectState: value,
+                          position: kPositionPlaceholder,
+                        ),
+                      );
+                      Navigator.pop(context);
+                    },
+                    getOptionTitle: (entry) =>
+                        entries[entryValues.indexOf(entry)],
+                  ),
+                  animationStyle: context.motionStyle,
+                )
+              : null,
+        ),
+      EditTextPreference(
+        key: String? key,
+        editTextTitle: String? title,
+        summary: String? summary,
+        EditTextDefaultValue: String? defaultValue,
+        editTextValue: String? currentValue,
+        dialogTitle: String? dialogTitle,
+        dialogMessage: String? dialogMessage,
+      ) =>
+        ListTile(
+          key: _keyFor(key),
+          title: Text(_titleFor(title, key)),
+          subtitle: summary.isNotBlank ? Text(summary!) : null,
+          onTap: enabled
+              ? () => showDialog(
+                  context: context,
+                  builder: (context) => TextFieldPopup(
+                    title: dialogTitle ?? _titleFor(title, key),
+                    subtitle: dialogMessage ?? summary ?? "",
+                    onChange: (value) async {
+                      onChanged(
+                        SourcePreferenceChange(
+                          editTextState: value,
+                          position: kPositionPlaceholder,
+                        ),
+                      );
+                      Navigator.pop(context);
+                    },
+                    initialValue: currentValue ?? defaultValue,
+                  ),
+                  animationStyle: context.motionStyle,
+                )
+              : null,
+        ),
+      SourcePreference() => ListTile(
+        key: _keyFor(null),
+        enabled: false,
+        title: Text(context.l10n.unsupportedPreference),
+      ),
+    };
+  }
+}

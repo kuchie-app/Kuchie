@@ -1,0 +1,86 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:drift/drift.dart' hide isNotNull, isNull;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/offline/data/offline_database.dart';
+import 'package:kuchie/src/features/offline/data/offline_sync.dart';
+
+import '../../../../helpers/offline_test_db.dart';
+
+ChapterDto serverChapter(int id) => Fragment$ChapterDto(
+  id: id,
+  mangaId: 1,
+  name: 'c$id',
+  chapterNumber: id.toDouble(),
+  sourceOrder: id,
+  pageCount: 30,
+  fetchedAt: '0',
+  uploadDate: '0',
+  url: '',
+  meta: const <Fragment$ChapterDto$meta>[],
+  user: Fragment$ChapterDto$user(
+    isRead: false,
+    isBookmarked: false,
+    isDownloaded: true,
+    lastPageRead: 0,
+    lastReadAt: '0',
+  ),
+);
+
+void main() {
+  late OfflineDatabase db;
+  setUp(() => db = testOfflineDatabase());
+  tearDown(() => db.close());
+
+  Future<void> downloaded(int id) => db
+      .into(db.offlineChapters)
+      .insert(
+        OfflineChaptersCompanion.insert(
+          id: Value(id),
+          mangaId: 1,
+          name: 'c$id',
+          chapterIndex: id,
+          updatedAt: DateTime(2026),
+          deviceState: const Value(OfflineDeviceState.downloaded),
+        ),
+      );
+
+  test(
+    'syncChapters orphans server-deleted chapters but never on an empty list',
+    () async {
+      await downloaded(1);
+      await downloaded(2);
+      final sync = OfflineSync(db);
+
+      // A failed/empty fetch must not orphan anything.
+      await sync.syncChapters(const []);
+      expect(
+        (await db.chapterById(1))!.deviceState,
+        OfflineDeviceState.downloaded,
+      );
+      expect(
+        (await db.chapterById(2))!.deviceState,
+        OfflineDeviceState.downloaded,
+      );
+
+      // The server now lists only chapter 1 — chapter 2 was deleted server-side.
+      await sync.syncChapters([serverChapter(1)]);
+      // Still on the server → kept.
+      expect(
+        (await db.chapterById(1))!.deviceState,
+        OfflineDeviceState.downloaded,
+      );
+      // Gone from the server → orphaned so the next reconcile evicts it.
+      expect(
+        (await db.chapterById(2))!.deviceState,
+        OfflineDeviceState.orphaned,
+      );
+    },
+  );
+}

@@ -1,0 +1,194 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../features/auth/data/auth_credentials_store.dart';
+import '../../features/manga_book/data/updates/updates_repository.dart';
+import '../../features/manga_book/domain/update_status/update_status_model.dart';
+import '../../features/notifications/controller/notifications_controller.dart';
+import '../../features/notifications/data/local_notification_service.dart';
+import '../../features/notifications/data/notification_state_store.dart';
+import '../../features/settings/presentation/library/widgets/show_update_progress_banner/show_update_progress_banner.dart';
+import '../../global_providers/global_providers.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../utils/extensions/custom_extensions.dart';
+import '../../utils/motion/reduce_motion.dart';
+import 'update_banner_state.dart';
+
+/// Both running edges are debounced 1000 ms, hiding runs shorter than that window.
+class UpdateProgressBanner extends HookConsumerWidget {
+  const UpdateProgressBanner({super.key});
+
+  static const _debounce = Duration(milliseconds: 1000);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showPref =
+        ref.watch(showUpdateProgressBannerProvider).ifNull(true);
+
+    final runSocket = ref.watch(updateRunningSocketProvider);
+    final runFallback = ref.watch(
+      updateProgressSummaryProvider.select(
+        (progress) => progress.whenData((value) => value?.isRunning),
+      ),
+    );
+    // After a socket error, use a fresh one-shot read rather than its frozen frame.
+    final effectiveRun = runSocket.hasError ? runFallback : runSocket;
+
+    final l10n = context.l10n;
+    ref.listen(updateRunningSocketProvider, (previous, next) {
+      if (next.hasError && !(previous?.hasError ?? false)) {
+        ref.invalidate(updateProgressSummaryProvider);
+      }
+      final running = next.value;
+      if (running != null) {
+        ref.read(updateOptimisticProvider.notifier).onRealRunning(running);
+      }
+      if ((previous?.value ?? false) && running == false) {
+        _notifyUpdateErrors(ref, l10n);
+      }
+    });
+    // Refresh fallback state on resume; backgrounded snapshots may be stale.
+    useOnAppLifecycleStateChange((previous, current) {
+      if (current == AppLifecycleState.resumed) {
+        ref.invalidate(updateProgressSummaryProvider);
+      }
+    });
+
+    final rawRunning = effectiveRun.value ?? false;
+
+    final debouncedRunning = useState(false);
+    final timer = useRef<Timer?>(null);
+    useEffect(() {
+      timer.value?.cancel();
+      // Cancel the local timer: a newer effect may already have replaced timer.value.
+      final t = Timer(_debounce, () {
+        debouncedRunning.value = rawRunning;
+      });
+      timer.value = t;
+      return t.cancel;
+    }, [rawRunning]);
+
+    // Fold visibility preference in here so hiding mid-update still restores shell insets.
+    final armed = ref.watch(updateOptimisticProvider);
+    final visible = showPref && (debouncedRunning.value || armed);
+
+    // Publish visibility after the frame; provider writes during build are disallowed.
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ref.read(updateBannerVisibleProvider.notifier).set(visible);
+      });
+      return null;
+    }, [visible]);
+
+    // Counts are unavailable until the real run starts; the optimistic phase is indeterminate.
+    UpdateProgressDto? status;
+    if (visible && debouncedRunning.value) {
+      final socket = ref.watch(updateProgressSocketProvider);
+      final fallback = ref.watch(updateProgressSummaryProvider);
+      status = (socket.value?.total.isGreaterThan(0)).ifNull()
+          ? socket.value
+          : fallback.value;
+    }
+
+    // Phone insets come from FlutterView; tablet SafeArea already reserves the status bar.
+    final topInset = context.windowSizeClass >= WindowSizeClass.medium
+        ? 0.0
+        : View.of(context).viewPadding.top / View.of(context).devicePixelRatio;
+
+    final scheme = context.theme.colorScheme;
+    final banner = !visible
+        ? const SizedBox.shrink()
+        : Material(
+            color: scheme.secondary,
+            child: Padding(
+              padding:
+                  EdgeInsets.only(top: topInset) +
+                  const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.onSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _label(context, status),
+                    style: TextStyle(color: scheme.onSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          );
+    if (context.reduceMotion) return banner;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      alignment: Alignment.topCenter,
+      child: banner,
+    );
+  }
+
+  String _label(BuildContext context, UpdateProgressDto? status) {
+    final total = status?.total ?? 0;
+    if (total <= 0) return context.l10n.updatingLibrary;
+    final checked = status?.updateChecked ?? 0;
+    final percent = (checked / total * 100).floor().clamp(0, 100);
+    return context.l10n.updatingLibraryProgress(percent, checked, total);
+  }
+}
+
+/// Best-effort Android notification of failures in a foreground-observed server update.
+Future<void> _notifyUpdateErrors(WidgetRef ref, AppLocalizations l10n) async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    final session = ref
+        .read(authCredentialsStoreProvider.notifier)
+        .captureSession();
+    final config = NotificationStateStore(
+      ref.read(sharedPreferencesProvider),
+    ).readConfig();
+    if (config == null) return;
+    final payload = NotificationPayload.updateErrors(
+      requiresSession: true,
+      identityEpoch: config.identityEpoch,
+      catalogServerId: config.catalogServerId,
+      sessionFingerprint: config.sessionFingerprint,
+    );
+    bool current() =>
+        ref.context.mounted &&
+        session() &&
+        ref.read(notificationsControllerProvider).acceptsNotification(payload);
+    if (!current()) return;
+    final failed =
+        await ref.read(updatesRepositoryProvider).failedUpdateCount() ?? 0;
+    if (!current()) return;
+    if (failed == 0) return;
+    final service = LocalNotificationService();
+    await service.init();
+    if (!current()) return;
+    await service.showLibraryUpdateError(
+      l10n.notificationLibraryErrorTitle,
+      l10n.notificationLibraryErrorBody(failed),
+      identityEpoch: config.identityEpoch,
+      catalogServerId: config.catalogServerId,
+      sessionFingerprint: config.sessionFingerprint,
+    );
+  } catch (_) {
+  }
+}

@@ -1,0 +1,81 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/offline/data/offline_database.dart';
+
+import '../../../../helpers/offline_test_db.dart';
+
+void main() {
+  late OfflineDatabase db;
+  setUp(() => db = testOfflineDatabase());
+  tearDown(() => db.close());
+
+  Future<void> seed(int id, {int lastPageRead = 0, bool isRead = false}) =>
+      db.upsertChapterMetadata(
+        id: id,
+        mangaId: 1,
+        name: 'c$id',
+        chapterIndex: id,
+        isRead: isRead,
+        lastPageRead: lastPageRead,
+        isBookmarked: false,
+        serverIsDownloaded: true,
+        pageCount: 30,
+        updatedAt: DateTime(2026),
+      );
+
+  test(
+    'setChapterProgress records progress + marks dirty; clear clears it',
+    () async {
+      await seed(5);
+      await db.setChapterProgress(5, lastPageRead: 20, isRead: false);
+      final c = await db.chapterById(5);
+      expect(c!.lastPageRead, 20);
+      expect(c.progressDirty, true);
+      expect((await db.dirtyProgressChapters()).map((e) => e.id), [5]);
+      await db.clearProgressDirty(5);
+      expect(await db.dirtyProgressChapters(), isEmpty);
+      expect((await db.chapterById(5))!.lastPageRead, 20); // value kept
+    },
+  );
+
+  test(
+    'partial write dirties position only; completion dirties both',
+    () async {
+      await seed(5);
+      await db.setChapterProgress(5, lastPageRead: 4, isRead: null);
+      var c = (await db.chapterById(5))!;
+      expect(c.progressDirty, isTrue);
+      expect(c.readStateDirty, isFalse);
+      await db.setChapterProgress(5, lastPageRead: 0, isRead: true);
+      c = (await db.chapterById(5))!;
+      expect(c.readStateDirty, isTrue);
+      expect(c.isRead, isTrue);
+    },
+  );
+
+  test('bookmark and read-state changes stay independent of progress', () async {
+    await seed(9);
+    await db.setChapterBookmark(9, true);
+    var c = (await db.chapterById(9))!;
+    expect(c.bookmarkDirty, true);
+    expect(c.progressDirty, false); // independent of read-progress dirtiness
+    expect((await db.dirtyChapters()).map((e) => e.id), [9]);
+    await db.clearBookmarkDirty(9);
+    expect(await db.dirtyChapters(), isEmpty);
+
+    await seed(5);
+    await db.setChapterProgress(5, lastPageRead: 4, isRead: null);
+    await db.clearProgressDirtyIfUnchanged(5, lastPageRead: 4);
+    await db.setChapterReadState(5, true);
+    c = (await db.chapterById(5))!;
+    expect(c.isRead, isTrue);
+    expect(c.readStateDirty, isTrue);
+    expect(c.progressDirty, isFalse);
+    expect(c.lastPageRead, 4);
+  });
+}

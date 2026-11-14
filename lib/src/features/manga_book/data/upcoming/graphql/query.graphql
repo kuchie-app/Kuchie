@@ -1,0 +1,21 @@
+query GetLibraryMangas($withFirstUnread: Boolean!, $withLibraryFields: Boolean!) {
+  mangas(condition: { inLibrary: true }) {
+    nodes {
+      ...MangaDto
+    }
+  }
+}
+
+# Every chapter date for one series, so Upcoming predicts from the same
+# history as the series page; still lighter than full chapter objects.
+query RecentChapterDates($mangaId: Int!) {
+  chapters(
+    condition: { mangaId: $mangaId }
+    order: [{ by: SOURCE_ORDER, byType: DESC }]
+  ) {
+    nodes {
+      uploadDate
+      fetchedAt
+    }
+  }
+}

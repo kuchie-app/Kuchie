@@ -1,0 +1,194 @@
+part of '../router_config.dart';
+
+class MangaRoute extends DetailShellRouteData with $MangaRoute {
+  const MangaRoute({required this.mangaId, this.categoryId});
+  final int mangaId;
+  final int? categoryId;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      MangaDetailsScreen(mangaId: mangaId, categoryId: categoryId);
+}
+
+class RecommendsRoute extends DetailShellRouteData with $RecommendsRoute {
+  const RecommendsRoute({required this.mangaId, this.mangaTitle});
+  final int mangaId;
+  final String? mangaTitle;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      RecommendsScreen(mangaId: mangaId, mangaTitle: mangaTitle);
+}
+
+class RecommendsBrowseRoute extends DetailShellRouteData
+    with $RecommendsBrowseRoute {
+  const RecommendsBrowseRoute({
+    required this.mangaId,
+    required this.providerName,
+  });
+  final int mangaId;
+  final String providerName;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      RecommendsBrowseScreen(mangaId: mangaId, providerName: providerName);
+}
+
+class LibraryUpdateErrorsRoute extends DetailShellRouteData
+    with $LibraryUpdateErrorsRoute {
+  const LibraryUpdateErrorsRoute();
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      const LibraryUpdateErrorsScreen();
+}
+
+class ReaderRoute extends GoRouteData with $ReaderRoute {
+  const ReaderRoute({
+    required this.mangaId,
+    required this.chapterId,
+    this.transVertical,
+    this.toPrev,
+    this.readerScanlatorGroup,
+    this.showReaderLayoutAnimation = false,
+    this.openAtEnd = false,
+  });
+  final int mangaId;
+  final int chapterId;
+  final bool? transVertical;
+  final bool? toPrev;
+  final String? readerScanlatorGroup;
+  final bool showReaderLayoutAnimation;
+  final bool openAtEnd;
+
+  static final $parentNavigatorKey = _quickOpenNavigatorKey;
+
+  @override
+  Page<void> buildPage(context, state) {
+    return CustomTransitionPage(
+      key: state.pageKey,
+      child: ReaderScreen(
+        mangaId: mangaId,
+        chapterId: chapterId,
+        readerScanlatorGroup: readerScanlatorGroup,
+        showReaderLayoutAnimation: showReaderLayoutAnimation,
+        openAtEnd: openAtEnd,
+      ),
+      transitionsBuilder: transitionsBuilder,
+    );
+  }
+
+  @visibleForTesting
+  Widget transitionsBuilder(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (context.reduceMotion) {
+      return ReducedRouteTransition(animation: animation, child: child);
+    }
+
+    Offset offset = Offset.zero;
+    offset += Offset(
+      transVertical.ifNull() ? 0 : 1,
+      transVertical.ifNull() ? 1 : 0,
+    );
+    if (toPrev.ifNull()) {
+      offset *= -1;
+    }
+
+    return _ReaderRouteTransition(
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: offset,
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _ReaderRouteTransition extends ConsumerWidget {
+  const _ReaderRouteTransition({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final background =
+        ref.watch(readerBackgroundColorKeyProvider) ??
+        DBKeys.readerBackgroundColor.initial as ReaderBackgroundColor;
+    return ColoredBox(
+      color: background.color(context),
+      child: ClipRect(child: child),
+    );
+  }
+}
+
+class GlobalSearchRoute extends DetailShellRouteData with $GlobalSearchRoute {
+  const GlobalSearchRoute({this.query, this.fromSuggestion = false});
+  final String? query;
+  final bool fromSuggestion;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => GlobalSearchScreen(
+    key: ValueKey(query),
+    initialQuery: query,
+    fromSuggestion: fromSuggestion,
+  );
+}
+
+class GlobalSearchSourceRoute extends DetailShellRouteData
+    with $GlobalSearchSourceRoute {
+  const GlobalSearchSourceRoute({required this.sourceId, this.query});
+  final String sourceId;
+  final String? query;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      SourceMangaListScreen(
+        key: ValueKey('$sourceId-${SourceType.SEARCH}'),
+        sourceId: sourceId,
+        sourceType: SourceType.SEARCH,
+        initialQuery: query,
+      );
+}
+
+@TypedGoRoute<UpcomingRoute>(path: Routes.upcoming)
+class UpcomingRoute extends GoRouteData with $UpcomingRoute {
+  const UpcomingRoute();
+
+  static final $parentNavigatorKey = rootNavigatorKey;
+
+  Widget get _screen => const UpcomingScreen();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      DetailNavigationShellScreen(child: _screen);
+
+  @override
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      context.usesDesktopShell
+      ? CustomTransitionPage<void>(
+          key: state.pageKey,
+          opaque: false,
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              child,
+          child: _screen,
+        )
+      : detailNavigationPage(context, state, _screen);
+}
+
+@TypedGoRoute<OnboardingRoute>(path: Routes.onboarding)
+class OnboardingRoute extends GoRouteData with $OnboardingRoute {
+  const OnboardingRoute();
+
+  static final $parentNavigatorKey = rootNavigatorKey;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      const OnboardingScreen();
+}

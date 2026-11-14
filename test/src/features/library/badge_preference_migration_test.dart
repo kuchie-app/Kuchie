@@ -1,0 +1,82 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/library/data/badge_preference_migration.dart';
+import 'package:kuchie/src/features/settings/data/grid_cover_preference_migration.dart';
+import 'package:kuchie/src/features/settings/data/reader_animation_preference_migration.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+Future<SharedPreferences> _migrated(Map<String, Object> initial) async {
+  SharedPreferences.setMockInitialValues(initial);
+  final prefs = await SharedPreferences.getInstance();
+  await migrateBadgePreferences(prefs);
+  return prefs;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('saved cover size carries over once to the minimum width', () async {
+    SharedPreferences.setMockInitialValues({'gridMangaCoverWidth': 192.0});
+    final prefs = await SharedPreferences.getInstance();
+    await migrateGridCoverPreference(prefs);
+    expect(prefs.getDouble('gridMangaCoverMinWidth'), 128.0);
+    expect(prefs.containsKey('gridMangaCoverWidth'), isFalse);
+
+    SharedPreferences.setMockInitialValues({'gridMangaCoverWidth': 300.0});
+    final phonePrefs = await SharedPreferences.getInstance();
+    await migrateGridCoverPreference(phonePrefs, windowWidth: 390);
+    final width = phonePrefs.getDouble('gridMangaCoverMinWidth')!;
+    expect(width, closeTo(154.8, 0.001));
+    expect(((390 + 2) / (width + 2)).floor(), 2);
+    expect(phonePrefs.containsKey('gridMangaCoverWidth'), isFalse);
+
+    await prefs.setDouble('gridMangaCoverMinWidth', 150.0);
+    await migrateGridCoverPreference(prefs);
+    expect(prefs.getDouble('gridMangaCoverMinWidth'), 150.0);
+  });
+
+  test('scroll animation off carries into Animate page transitions once',
+      () async {
+    SharedPreferences.setMockInitialValues({'scrollAnimation': false});
+    var prefs = await SharedPreferences.getInstance();
+    await migrateReaderAnimationPreference(prefs);
+    expect(prefs.getBool('animatePageTransitions'), isFalse);
+    expect(prefs.containsKey('scrollAnimation'), isFalse);
+
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    prefs = await SharedPreferences.getInstance();
+    await migrateReaderAnimationPreference(prefs);
+    expect(prefs.getBool('animatePageTransitions'), isNull);
+
+    await prefs.setBool('animatePageTransitions', true);
+    await migrateReaderAnimationPreference(prefs);
+    expect(prefs.getBool('animatePageTransitions'), isTrue);
+  });
+
+  group('unreadBadge → unreadBadgeMode', () {
+    test('off stays off, as Hidden', () async {
+      final prefs = await _migrated({'unreadBadge': false});
+      expect(prefs.getInt('unreadBadgeMode'), UnreadBadgeMode.hidden.index);
+    });
+
+  });
+
+  test('a later deliberate change survives the next launch', () async {
+    final prefs = await _migrated({'unreadBadge': false, 'localBadge': true});
+    expect(prefs.getInt('unreadBadgeMode'), UnreadBadgeMode.hidden.index);
+
+    // The user turns both back the other way, then relaunches.
+    await prefs.setInt('unreadBadgeMode', UnreadBadgeMode.count.index);
+    await prefs.setBool('sourceBadge', false);
+    await migrateBadgePreferences(prefs);
+
+    expect(prefs.getInt('unreadBadgeMode'), UnreadBadgeMode.count.index);
+    expect(prefs.getBool('sourceBadge'), isFalse);
+  });
+}

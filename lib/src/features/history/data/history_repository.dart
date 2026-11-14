@@ -1,0 +1,146 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:graphql/client.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../../global_providers/global_providers.dart';
+import '../../../graphql/__generated__/schema.graphql.dart';
+import '../../../utils/extensions/custom_extensions.dart';
+import '../domain/history_item.dart';
+import 'graphql/__generated__/query.graphql.dart';
+
+part 'history_repository.g.dart';
+
+class HistoryRepository {
+  const HistoryRepository(this.client);
+  final GraphQLClient client;
+
+  /// Newest read chapter per manga from one bounded window; live per-manga dedup cannot paginate safely.
+  Future<List<HistoryItemDto>> getReadingHistory({
+    int maxChapters = 2000,
+    String? searchQuery,
+    DateTime? fromDate,
+    DateTime? toDate,
+    bool? inLibrary,
+  }) async {
+    // Filter membership server-side so discarded rows do not consume the bounded history window.
+    final filter = Input$ChapterFilterInput(
+      inLibrary: inLibrary == null
+          ? null
+          : Input$BooleanFilterInput(equalTo: inLibrary),
+      lastReadAt: Input$LongFilterInput(
+        isNull: false,
+        greaterThan:
+            "0", // Ensure lastReadAt is actually set to a real timestamp
+      ),
+      or: [
+        Input$ChapterFilterInput(
+          isRead: Input$BooleanFilterInput(equalTo: true),
+        ),
+        Input$ChapterFilterInput(
+          lastPageRead: Input$IntFilterInput(greaterThan: 0),
+        ),
+      ],
+      and: [
+        if (fromDate != null)
+          Input$ChapterFilterInput(
+            lastReadAt: Input$LongFilterInput(
+              greaterThanOrEqualTo: fromDate.millisecondsSinceEpoch.toString(),
+            ),
+          ),
+        if (toDate != null)
+          Input$ChapterFilterInput(
+            lastReadAt: Input$LongFilterInput(
+              lessThanOrEqualTo: toDate.millisecondsSinceEpoch.toString(),
+            ),
+          ),
+        if (searchQuery.isNotBlank)
+          Input$ChapterFilterInput(
+            or: [
+              Input$ChapterFilterInput(
+                name: Input$StringFilterInput(includesInsensitive: searchQuery),
+              ),
+              // Chapter filters cannot search manga titles; title matching happens in the UI.
+            ],
+          ),
+      ],
+    );
+
+    final order = [
+      Input$ChapterOrderInput(
+        by: Enum$ChapterOrderBy.LAST_READ_AT,
+        byType: Enum$SortOrder.DESC,
+      ),
+      Input$ChapterOrderInput(
+        by: Enum$ChapterOrderBy.SOURCE_ORDER,
+        byType: Enum$SortOrder.DESC,
+      ),
+    ];
+
+    final chapters = await client
+        .query$GetReadingHistory(
+          Options$Query$GetReadingHistory(
+            variables: Variables$Query$GetReadingHistory(
+              first: maxChapters,
+              offset: 0,
+              filter: filter,
+              order: order,
+            ),
+          ),
+        )
+        .getData((data) => data.chapters);
+
+    final seen = <int>{};
+    final items = <HistoryItemDto>[];
+    for (final chapter in chapters?.nodes ?? const <HistoryItemDto>[]) {
+      if (!chapter.user.isRead && chapter.user.lastPageRead <= 0) continue;
+      // The first chapter per manga wins because server order is newest-first.
+      if (seen.add(chapter.mangaId)) items.add(chapter);
+    }
+    return items;
+  }
+
+  Future<List<HistoryItemDto>?> getMangaReadingHistory({
+    required int mangaId,
+    int limit = 20,
+  }) async {
+    final filter = Input$ChapterFilterInput(
+      mangaId: Input$IntFilterInput(equalTo: mangaId),
+      lastReadAt: Input$LongFilterInput(isNull: false),
+    );
+
+    final order = [
+      Input$ChapterOrderInput(
+        by: Enum$ChapterOrderBy.LAST_READ_AT,
+        byType: Enum$SortOrder.DESC,
+      ),
+    ];
+
+    return client
+        .query$GetReadingHistory(
+          Options$Query$GetReadingHistory(
+            variables: Variables$Query$GetReadingHistory(
+              first: limit,
+              filter: filter,
+              order: order,
+            ),
+          ),
+        )
+        .getData((data) => data.chapters.nodes);
+  }
+
+  Future<void> clearAllHistory() async {
+    throw UnimplementedError(
+      'Clearing all history requires server-side support. '
+      'Please use individual chapter removal instead.',
+    );
+  }
+}
+
+@riverpod
+HistoryRepository historyRepository(Ref ref) =>
+    HistoryRepository(ref.watch(graphQlClientProvider));

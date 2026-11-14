@@ -1,0 +1,40 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../widgets/custom_circular_progress_indicator.dart';
+import '../data/offline_repository.dart';
+import '../data/server_reachability.dart';
+
+class OfflineViewLoading extends ConsumerWidget {
+  const OfflineViewLoading({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasCatalog =
+        ref.watch(offlineCatalogAvailableProvider).value ?? false;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Expanded(child: CenterKuchieShimmerIndicator()),
+        if (hasCatalog)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: TextButton.icon(
+              icon: const Icon(FluentIcons.cloud_off_24_regular),
+              label: Text(context.l10n.viewOffline),
+              onPressed: () =>
+                  ref.read(viewOfflineNowProvider.notifier).set(true),
+            ),
+          ),
+      ],
+    );
+  }
+}

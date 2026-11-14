@@ -1,0 +1,666 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+// Mount tests: pump each migration screen and assert it builds without throwing.
+// These exist because a mount-time crash (containerOf called inside a useEffect)
+// shipped past a full suite of fake-based unit tests that never mounted a screen.
+
+import 'dart:async';
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/app_sizes.dart';
+import 'package:kuchie/src/constants/db_keys.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/account/domain/account_binding.dart';
+import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
+import 'package:kuchie/src/features/browse_center/data/source_repository/source_repository.dart';
+import 'package:kuchie/src/features/browse_center/domain/manga_page/manga_page.dart';
+import 'package:kuchie/src/features/browse_center/domain/source/source_model.dart';
+import 'package:kuchie/src/features/browse_center/presentation/source/controller/source_controller.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_manga_list.dart';
+import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
+import 'package:kuchie/src/features/migration/controller/migration_controller.dart';
+import 'package:kuchie/src/features/migration/data/migration_repository.dart';
+import 'package:kuchie/src/features/migration/domain/migration_models.dart';
+import 'package:kuchie/src/features/migration/presentation/screens/migration_bulk_run_screen.dart';
+import 'package:kuchie/src/features/migration/presentation/screens/migration_global_search_screen.dart';
+import 'package:kuchie/src/features/migration/presentation/screens/migration_source_picker_screen.dart';
+import 'package:kuchie/src/features/offline/data/background/catchup_work_spec.dart';
+import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:kuchie/src/widgets/ios/apple_glass_capability.dart';
+import 'package:kuchie/src/widgets/server_image.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../manga_book/reader/reader_test_fixtures.dart';
+
+class _DeadSourceChapters extends MangaBookRepository {
+  _DeadSourceChapters(super.client, {required this.storedFails});
+  final bool storedFails;
+  final storedCalls = <int>[];
+  @override
+  Future<List<ChapterDto>?> getChapterList(int mangaId) async {
+    throw StateError('Missing source 2528986671771677900');
+  }
+
+  @override
+  Future<List<ChapterDto>?> getStoredChapterList(int mangaId) async {
+    storedCalls.add(mangaId);
+    if (storedFails && mangaId == 1) {
+      throw StateError('Stored chapters unavailable');
+    }
+    return [testChapter()];
+  }
+}
+
+class _MigrationSession extends AuthCredentialsStore {
+  @override
+  Future<AuthCredentialsState> build() async => const AuthCredentialsState(
+    accountBinding: AccountBinding(
+      address: 'http://server',
+      username: 'a',
+      userId: 1,
+      catalogId: 'a',
+    ),
+  );
+}
+
+class _HangingSource extends Fake implements SourceRepository {
+  final pending = Completer<MangaPage?>();
+  int calls = 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #fetchSourceManga) {
+      calls++;
+      return pending.future;
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
+
+class _HangingMigration extends Fake implements MigrationRepository {
+  final pending = Completer<List<MangaDto>?>();
+  int calls = 0;
+
+  @override
+  Future<List<MangaDto>?> searchMangaInSource(
+    String sourceId,
+    String query, [
+    BuildContext? context,
+  ]) {
+    calls++;
+    return pending.future;
+  }
+}
+
+class _MismatchedChapters extends MangaBookRepository {
+  _MismatchedChapters(super.client);
+  @override
+  Future<List<ChapterDto>?> getChapterList(int mangaId) async {
+    if (mangaId == 2) {
+      return [
+        testChapter(id: 21, name: 'Chapter 1'),
+        testChapter(
+          id: 22,
+          name: 'Chapter 2',
+        ).copyWith(chapterNumber: 2.0),
+        testChapter(
+          id: 23,
+          name: 'Chapter 3',
+        ).copyWith(chapterNumber: 3.0),
+      ];
+    }
+    throw StateError('Missing source $mangaId');
+  }
+
+  @override
+  Future<List<ChapterDto>?> getStoredChapterList(int mangaId) async {
+    if (mangaId == 1) {
+      final read = testChapter(id: 50, name: 'Chapter 5');
+      return [
+        read.copyWith(
+          chapterNumber: 5.0,
+          user: read.user.copyWith(isRead: true),
+        ),
+      ];
+    }
+    return [testChapter()];
+  }
+}
+
+class _FailingCopyMigration extends _MatchingMigration {
+  @override
+  Future<MigrationCopyResult> copyMangaData(
+    int fromMangaId,
+    int toMangaId,
+    MigrationOption options, [
+    BuildContext? context,
+  ]) async {
+    return const MigrationCopyResult(
+      success: false,
+      sourceInLibrary: true,
+      warnings: ['simulated copy failure'],
+    );
+  }
+}
+
+class _MatchingMigration extends Fake implements MigrationRepository {
+  @override
+  Future<List<MangaDto>?> searchMangaInSource(
+    String sourceId,
+    String query, [
+    BuildContext? context,
+  ]) async {
+    return [
+      Fragment$MangaDto(
+        id: 2,
+        title: 'Test Manga',
+        chapters: Fragment$MangaDto$chapters(totalCount: 0),
+        genre: const [],
+        initialized: true,
+        meta: const [],
+        sourceId: sourceId,
+        status: Enum$MangaStatus.ONGOING,
+        categories: Fragment$MangaDto$categories(nodes: const []),
+        trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
+        updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+        url: '/manga/2',
+        user: Fragment$MangaDto$user(
+          bookmarkCount: 0,
+          downloadCount: 0,
+          inLibrary: false,
+          inLibraryAt: '0',
+          unreadCount: 0,
+        ),
+      ),
+    ];
+  }
+}
+
+final _source = SourceDto.fromJson({
+  'displayName': 'Hanging source',
+  'iconUrl': '',
+  'id': 'target',
+  'isConfigurable': false,
+  'contentWarning': 'SAFE',
+  'lang': 'en',
+  'name': 'Hanging source',
+  'supportsLatest': true,
+  '__typename': 'SourceType',
+  'meta': [],
+  'extension': {
+    'pkgName': 'pkg',
+    'repo': 'repo',
+    'isObsolete': false,
+    '__typename': 'ExtensionType',
+  },
+});
+
+Future<ProviderContainer> _runContainer({
+  _HangingSource? source,
+  MigrationRepository? migration,
+  Completer<List<SourceDto>?>? sourceList,
+  MangaBookRepository Function(GraphQLClient)? chapters,
+}) async {
+  SharedPreferences.setMockInitialValues({
+    CatchupStateStore.identityAuthorizedKey: true,
+    DBKeys.serverRequestTimeout.name: 1000,
+  });
+  final prefs = await SharedPreferences.getInstance();
+  final client = GraphQLClient(
+    link: HttpLink('http://localhost:0'),
+    cache: GraphQLCache(),
+  );
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      graphQlClientProvider.overrideWithValue(client),
+      authCredentialsStoreProvider.overrideWith(_MigrationSession.new),
+      authTypeKeyProvider.overrideWithValue(AuthType.uiLogin),
+      mangaBookRepositoryProvider.overrideWith(
+        (ref) =>
+            chapters?.call(client) ??
+            _DeadSourceChapters(client, storedFails: false),
+      ),
+      libraryMangaListProvider.overrideWith((ref) async => [testManga()]),
+      if (sourceList == null)
+        searchableSourcesProvider.overrideWithValue(AsyncValue.data([_source])),
+      if (sourceList != null)
+        sourceListProvider.overrideWith((ref) => sourceList.future),
+      if (source != null)
+        sourceRepositoryProvider.overrideWith((ref) => source),
+      if (migration != null)
+        migrationRepositoryProvider.overrideWith((ref) => migration),
+    ],
+  );
+  await container.read(authCredentialsStoreProvider.future);
+  return container;
+}
+
+Widget _app(ProviderContainer container, Widget screen) =>
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: screen,
+      ),
+    );
+
+const _runScreen = MigrationBulkRunScreen(
+  data: MigrationBulkRunData(
+    mangaIds: [1],
+    targetSourceIds: ['target'],
+    options: MigrationOption(),
+  ),
+);
+
+void main() {
+  testWidgets('iOS migration keeps title selection available during search', (
+    tester,
+  ) async {
+    const toolbarType = 'kuchie/apple_liquid_glass/toolbar';
+    const searchType = 'kuchie/apple_glass/search';
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final channels = <String, MethodChannel>{};
+    final actionChannels = <String, MethodChannel>{};
+    final container = ProviderContainer(
+      overrides: [
+        libraryMangaListProvider.overrideWithValue(
+          AsyncData([
+            testManga(),
+            testManga().copyWith(id: 2, title: 'Second'),
+          ]),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    tester.view
+      ..physicalSize = const Size(390, 844)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
+      call,
+    ) async {
+      if (call.method != 'create') return null;
+      final args = call.arguments as Map;
+      final type = args['viewType'] as String;
+      final channel = MethodChannel('$type/${args['id']}');
+      channels[type] = channel;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (type == toolbarType && call.method == 'update') {
+          final actions = (call.arguments as Map)['actions'] as List;
+          for (final action in actions.cast<Map>()) {
+            actionChannels[action['id'] as String] = channel;
+          }
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        SystemChannels.platform_views,
+        null,
+      ),
+    );
+    Future<void> send(MethodChannel channel, MethodCall call) async {
+      await messenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(call),
+        (_) {},
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Future<void> press(String id) =>
+        send(actionChannels[id]!, MethodCall('press', id));
+
+    await tester.pumpWidget(
+      _app(
+        container,
+        const AppleGlassScope(
+          available: true,
+          child: MigrationSourceMangaScreen(
+            data: MigrationSourceMangaData(sourceId: '1', sourceName: 'Source'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Source'), findsOneWidget);
+    expect(find.byTooltip('Select all'), findsNothing);
+    await press('migration-select-all-titles');
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.text('Migrate 2 series'), findsOneWidget);
+    await press('migration-search-titles');
+    await send(
+      channels[searchType]!,
+      const MethodCall('input', {'text': 'Second'}),
+    );
+    expect(find.text('Test Manga'), findsNothing);
+    expect(find.text('Second'), findsOneWidget);
+    expect(find.text('2 selected'), findsOneWidget);
+    await press('migration-invert-titles');
+    expect(find.text('Source'), findsOneWidget);
+    await press('migration-select-all-titles');
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.text('Migrate 1 series'), findsOneWidget);
+    await press('migration-clear-title-selection');
+    expect(find.text('Source'), findsOneWidget);
+    expect(find.text('Second'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: const TargetPlatformVariant({TargetPlatform.iOS}));
+
+  testWidgets('desktop migration covers keep the normal search card width', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1400, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final migration = _HangingMigration();
+    final container = await _runContainer(migration: migration);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container, _runScreen));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byType(ServerImage), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(ServerImage)).width,
+      lessThanOrEqualTo(kShortSearchCoverWidth),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('hanging migration searches time out into actionable failures', (
+    tester,
+  ) async {
+    final source = _HangingSource();
+    final migration = _HangingMigration();
+    final container = await _runContainer(source: source, migration: migration);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _app(container, MigrationGlobalSearchScreen(sourceManga: testManga())),
+    );
+    await tester.pump();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(MigrationGlobalSearchScreen)),
+    )!;
+    expect(source.calls, 1);
+    expect(find.text(l10n.retry), findsNothing);
+    await tester.pump(const Duration(milliseconds: 999));
+    expect(find.text(l10n.retry), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(
+      find.text(l10n.couldntReachSource(_source.displayName)),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.retry), findsOneWidget);
+    expect(
+      container
+          .read(
+            migrationSourceQuickSearchMangaListProvider(
+              _source.id,
+              query: testManga().title,
+            ),
+          )
+          .hasError,
+      isTrue,
+    );
+    await tester.tap(find.text(l10n.retry));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(source.calls, 2);
+    source.pending.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.noResultFound), findsOneWidget);
+
+    await tester.pumpWidget(_app(container, _runScreen));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(migration.calls, 1);
+    expect(find.text(l10n.migrationListNoMatch), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text(l10n.migrationListNoMatch), findsOneWidget);
+    await tester.tap(find.byIcon(FluentIcons.more_vertical_24_regular));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.migrationSearchManually), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('non-login migration waits for server identity and retries', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({
+      CatchupStateStore.identityAuthorizedKey: true,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final client = GraphQLClient(
+      link: HttpLink('http://localhost:0'),
+      cache: GraphQLCache(),
+    );
+    final chapters = _DeadSourceChapters(client, storedFails: false);
+    final firstResolution = Completer<String>();
+    final retryResolution = Completer<String>();
+    var attempts = 0;
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        graphQlClientProvider.overrideWithValue(client),
+        authCredentialsStoreProvider.overrideWith(_MigrationSession.new),
+        authTypeKeyProvider.overrideWithValue(AuthType.none),
+        serverInstanceIdProvider.overrideWith((ref) {
+          attempts++;
+          return attempts == 1
+              ? firstResolution.future
+              : retryResolution.future;
+        }),
+        mangaBookRepositoryProvider.overrideWith((ref) => chapters),
+        libraryMangaListProvider.overrideWith((ref) async => [testManga()]),
+        searchableSourcesProvider.overrideWithValue(
+          const AsyncValue.data(<SourceDto>[]),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authCredentialsStoreProvider.future);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: MigrationBulkRunScreen(
+            data: MigrationBulkRunData(
+              mangaIds: [1],
+              targetSourceIds: [],
+              options: MigrationOption(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(MigrationBulkRunScreen)),
+    )!;
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text(l10n.migrationIdentityUnavailable), findsNothing);
+    expect(chapters.storedCalls, isEmpty);
+
+    firstResolution.completeError(StateError('Identity unavailable'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(l10n.migrationIdentityUnavailable), findsOneWidget);
+    expect(find.text(l10n.retry), findsOneWidget);
+    expect(chapters.storedCalls, isEmpty);
+
+    await tester.tap(find.text(l10n.retry));
+    await tester.pump();
+    expect(attempts, 2);
+    retryResolution.complete('server-id');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(l10n.migrationIdentityUnavailable), findsNothing);
+    expect(chapters.storedCalls, [1]);
+    expect(find.text(l10n.migrationListNoMatch), findsOneWidget);
+
+    container.invalidate(libraryMangaListProvider);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(chapters.storedCalls, [1]);
+    expect(find.text(l10n.migrationListNoMatch), findsOneWidget);
+  });
+
+  testWidgets('migration results name the matched source once its list loads', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1400, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final sources = Completer<List<SourceDto>?>();
+    final container = await _runContainer(
+      migration: _MatchingMigration(),
+      sourceList: sources,
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container, _runScreen));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('target'), findsNothing);
+    sources.complete([_source]);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Hanging source'), findsOneWidget);
+    expect(find.text('target'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a failed entry shows its message and a Retry action', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final container = await _runContainer(migration: _FailingCopyMigration());
+    addTearDown(container.dispose);
+    var finished = false;
+    await tester.pumpWidget(
+      _app(
+        container,
+        MigrationBulkRunBody(
+          data: const MigrationBulkRunData(
+            mangaIds: [1],
+            targetSourceIds: ['target'],
+            options: MigrationOption(),
+          ),
+          onFinished: () => finished = true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(MigrationBulkRunBody)),
+    )!;
+    expect(find.text('simulated copy failure'), findsNothing);
+    await tester.tap(find.byTooltip(l10n.migrationActionCopy));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text(l10n.migrationActionCopy),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(finished, isTrue);
+    expect(find.text('simulated copy failure'), findsNothing);
+    expect(find.text(l10n.migrationFailureCopyFailed), findsOneWidget);
+    expect(find.text(l10n.migrationFailedCount(1)), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byIcon(FluentIcons.more_vertical_24_regular));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.retry), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a target with no matching read chapters blocks Migrate', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1400, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final container = await _runContainer(
+      migration: _MatchingMigration(),
+      chapters: _MismatchedChapters.new,
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _app(
+        container,
+        MigrationBulkRunBody(
+          data: const MigrationBulkRunData(
+            mangaIds: [1],
+            targetSourceIds: ['target'],
+            options: MigrationOption(),
+          ),
+          onBack: () {},
+          windowed: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(MigrationBulkRunBody)),
+    )!;
+    expect(
+      find.text(l10n.migrationBlockedUnmatched(1, 'Hanging source')),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(TextButton, l10n.migrationMigrateNow),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, l10n.migrationCopyNow),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+}

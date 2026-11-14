@@ -1,0 +1,86 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/account/presentation/account_session_host.dart';
+import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
+import 'package:material_ui/material_ui.dart';
+
+class _Auth extends AuthCredentialsStore {
+  @override
+  Future<AuthCredentialsState> build() async =>
+      const AuthCredentialsState(uiAccessToken: 'A');
+
+  void publish(String token, {int epoch = 0, bool changing = false}) {
+    state = AsyncData(
+      AuthCredentialsState(
+        uiAccessToken: token,
+        sessionEpoch: epoch,
+        sessionChanging: changing,
+      ),
+    );
+  }
+}
+
+final _accountData = FutureProvider<String>((ref) async => 'A library');
+
+class _View extends ConsumerWidget {
+  const _View(this.changing);
+  final bool changing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
+    home: Offstage(
+      offstage: changing,
+      child: Text(ref.watch(_accountData).value ?? 'Loading library'),
+    ),
+  );
+}
+
+void main() {
+  testWidgets('account switch hides A and B starts without previous data', (
+    tester,
+  ) async {
+    final a = ProviderContainer(
+      overrides: [authCredentialsStoreProvider.overrideWith(_Auth.new)],
+    );
+    final bData = Completer<String>();
+    final b = ProviderContainer(
+      overrides: [
+        authCredentialsStoreProvider.overrideWith(_Auth.new),
+        _accountData.overrideWith((ref) => bData.future),
+      ],
+    );
+    await a.read(authCredentialsStoreProvider.future);
+    await b.read(authCredentialsStoreProvider.future);
+    var restarts = 0;
+    await tester.pumpWidget(
+      AccountSessionHost(
+        initialContainer: a,
+        restart: (old) async {
+          restarts++;
+          return b;
+        },
+        builder: _View.new,
+        loading: const SizedBox(),
+        errorBuilder: (error) => Text('$error'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('A library'), findsOneWidget);
+    final auth = a.read(authCredentialsStoreProvider.notifier) as _Auth;
+    auth.publish('A', epoch: 1, changing: true);
+    await tester.pump();
+    expect(find.text('A library'), findsNothing);
+    expect(restarts, 0);
+    auth.publish('B', epoch: 2);
+    await tester.pumpAndSettle();
+    expect(restarts, 1);
+    expect(find.text('A library'), findsNothing);
+    expect(find.text('Loading library'), findsOneWidget);
+    bData.complete('B library');
+    await tester.pumpAndSettle();
+    expect(find.text('B library'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}

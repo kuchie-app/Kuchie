@@ -1,0 +1,6 @@
+fragment SourceMangaPage on FetchSourceMangaPayload {
+  hasNextPage
+  mangas {
+    ...MangaDto
+  }
+}

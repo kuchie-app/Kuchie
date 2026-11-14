@@ -1,0 +1,138 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gql/ast.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/account/data/account_bootstrap.dart';
+import 'package:kuchie/src/features/account/data/account_session_startup.dart';
+import 'package:kuchie/src/features/account/data/account_session_storage.dart';
+import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
+import 'package:kuchie/src/features/offline/data/offline_repository.dart';
+import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
+import 'package:kuchie/src/features/offline/data/server_reachability.dart';
+import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _Endpoint extends ServerEndpointResolver {
+  @override
+  String? build() => 'http://server';
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('offline upgrade verifies the stored account on reconnect', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'auth.ui.accessToken': 'stored-access',
+      'auth.ui.refreshToken': 'stored-refresh',
+    });
+    SharedPreferences.setMockInitialValues({});
+    var offline = true;
+    final requests = <String>[];
+    final opened = Completer<String?>();
+    final client = GraphQLClient(
+      cache: GraphQLCache(),
+      link: Link.function((request, [forward]) async* {
+        final operation = request.operation.document.definitions
+            .whereType<OperationDefinitionNode>()
+            .single
+            .name!
+            .value;
+        requests.add(operation);
+        if (offline) throw const SocketException('offline');
+        yield Response(
+          response: {},
+          data: {
+            '__typename': 'Query',
+            if (operation == 'OfflineServerIdentity')
+              'metas': {
+                '__typename': 'MetaTypeConnection',
+                'nodes': [
+                  {
+                    '__typename': 'GlobalMetaType',
+                    'key': 'tsumiru_server_instance_id',
+                    'value': 'reader-catalogue',
+                  },
+                ],
+              }
+            else
+              'user': {
+                '__typename': 'UserType',
+                'id': 2,
+                'username': 'reader',
+                'roles': ['USER'],
+                'permissions': <String>[],
+              },
+          },
+        );
+      }),
+    );
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(
+          await SharedPreferences.getInstance(),
+        ),
+        authTypeKeyProvider.overrideWithValue(AuthType.uiLogin),
+        serverEndpointResolverProvider.overrideWith(_Endpoint.new),
+        currentServerAddressProvider.overrideWithValue('http://server'),
+        unauthenticatedGraphQlClientProvider.overrideWithValue(client),
+        graphQlClientProvider.overrideWithValue(client),
+        offlineActiveProvider.overrideWithValue(false),
+        accountStorageOpenerProvider.overrideWithValue(({
+          accountId,
+          legacyInstanceId,
+          ownedRoot,
+          accountOwner,
+          recovery,
+        }) async {
+          opened.complete(accountId);
+          return null;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authCredentialsStoreProvider.future);
+    await expectLater(restoreAccountSession(container), throwsA(anything));
+    final startup = AccountSessionStartup(container);
+    addTearDown(startup.dispose);
+    await startup.start();
+    expect(
+      container.read(authCredentialsStoreProvider).requireValue.accountBinding,
+      isNull,
+    );
+    expect(requests, ['AccountCapability']);
+    container.read(serverUnreachableProvider.notifier).set(true);
+    offline = false;
+    requests.clear();
+    container.read(serverUnreachableProvider.notifier).set(false);
+    expect(
+      await opened.future.timeout(const Duration(seconds: 1)),
+      'reader-catalogue',
+    );
+    expect(
+      container
+          .read(authCredentialsStoreProvider)
+          .requireValue
+          .accountBinding
+          ?.userId,
+      2,
+    );
+    expect(requests, [
+      'AccountCapability',
+      'CurrentAccount',
+      'OfflineServerIdentity',
+    ]);
+  });
+}

@@ -1,0 +1,826 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../routes/navigation.dart';
+import '../../../../routes/router_config.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../widgets/cover_row_section.dart';
+import '../../../../widgets/hover_tap_target.dart';
+import '../../../../widgets/ios/apple_glass_search.dart';
+import '../../../../widgets/ios/apple_glass_toolbar.dart';
+import '../../../../widgets/search_field.dart';
+import '../../../../widgets/server_image.dart';
+import '../../../browse_center/domain/source/source_model.dart';
+import '../../../browse_center/presentation/source/controller/source_controller.dart';
+import '../../../history/domain/history_group.dart';
+import '../../../history/domain/history_item.dart';
+import '../../../history/presentation/history_controller.dart';
+import '../../../library/domain/library_search_query.dart';
+import '../../../library/presentation/library/controller/library_controller.dart';
+import '../../../library/presentation/library/controller/library_manga_list.dart';
+import '../../../manga_book/domain/manga/manga_model.dart';
+import '../../../settings/presentation/library/widgets/persistent_search_bar/persistent_search_bar.dart';
+import '../../../settings/search/settings_search_registry.dart';
+import 'search_tips.dart';
+import 'unified_search_autocomplete.dart';
+import 'unified_search_facets.dart';
+import 'unified_search_providers.dart';
+import 'unified_search_results.dart';
+
+/// Library, History, and Sources offer a page filter row; plain origins search the app.
+enum PhoneSearchOrigin { library, history, sources, plain }
+
+String? _activeFilter(WidgetRef ref, PhoneSearchOrigin origin) {
+  final text = switch (origin) {
+    PhoneSearchOrigin.library => ref.watch(libraryQueryProvider),
+    PhoneSearchOrigin.history => ref.watch(historySearchQueryProvider),
+    PhoneSearchOrigin.sources => ref.watch(sourceSearchQueryProvider),
+    PhoneSearchOrigin.plain => null,
+  };
+  return text.isNotBlank ? text : null;
+}
+
+void _clearFilter(WidgetRef ref, PhoneSearchOrigin origin) {
+  switch (origin) {
+    case PhoneSearchOrigin.library:
+      ref.read(libraryQueryProvider.notifier).update('');
+    case PhoneSearchOrigin.history:
+      ref.read(historySearchQueryProvider.notifier).clearQuery();
+    case PhoneSearchOrigin.sources:
+      ref.read(sourceSearchQueryProvider.notifier).update(null);
+    case PhoneSearchOrigin.plain:
+      break;
+  }
+}
+
+void _applyFilter(WidgetRef ref, PhoneSearchOrigin origin, String query) {
+  switch (origin) {
+    case PhoneSearchOrigin.library:
+      ref.read(libraryQueryProvider.notifier).update(query);
+    case PhoneSearchOrigin.history:
+      ref.read(historySearchQueryProvider.notifier).updateQuery(query);
+    case PhoneSearchOrigin.sources:
+      ref.read(sourceSearchQueryProvider.notifier).update(query);
+    case PhoneSearchOrigin.plain:
+      break;
+  }
+}
+
+/// Opens search without changing the page filter until its result row is applied.
+class PhoneSearchEntry extends HookConsumerWidget {
+  const PhoneSearchEntry({super.key, required this.origin, this.box = false});
+
+  final PhoneSearchOrigin origin;
+  final bool box;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final portal = useMemoized(OverlayPortalController.new);
+    void open() {
+      if (!portal.isShowing) portal.show();
+    }
+
+    void close() {
+      if (portal.isShowing) portal.hide();
+    }
+
+    // Watch in both styles so auto-disposed page filters survive while this entry is mounted.
+    final activeFilter = _activeFilter(ref, origin);
+
+    return OverlayPortal(
+      controller: portal,
+      overlayChildBuilder: (_) =>
+          PhoneSearchOverlay(origin: origin, onClose: close),
+      child: box
+          ? _PhoneSearchBox(origin: origin, onOpen: open)
+          : AppleGlassToolbarButton(
+              id: 'search',
+              symbol: 'magnifyingglass',
+              label: context.l10n.search,
+              color: activeFilter != null ? context.colorScheme.primary : null,
+              fallbackIcon: FluentIcons.search_24_regular,
+              onPressed: open,
+            ),
+    );
+  }
+}
+
+class _PhoneSearchBox extends ConsumerWidget {
+  const _PhoneSearchBox({required this.origin, required this.onOpen});
+
+  final PhoneSearchOrigin origin;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.colorScheme;
+    final active = _activeFilter(ref, origin);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: AppleGlassSearch(
+        native: (context) => Row(
+          children: [
+            Expanded(
+              child: AppleGlassSearchControl.entry(
+                placeholder: context.l10n.unifiedSearchHint,
+                label: context.l10n.search,
+                displayText: active ?? '',
+                onOpen: onOpen,
+              ),
+            ),
+            if (active != null)
+              AppleGlassToolbarButton(
+                id: 'clear-page-search',
+                symbol: 'xmark',
+                label: context.l10n.reset,
+                fallbackIcon: FluentIcons.dismiss_24_regular,
+                onPressed: () => _clearFilter(ref, origin),
+              ),
+          ],
+        ),
+        fallback: (context) => HoverTapTarget(
+          cursor: SystemMouseCursors.text,
+          builder: (context, hovered) => GestureDetector(
+            onTap: onOpen,
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: hovered
+                      ? cs.onSurface.withValues(alpha: 0.18)
+                      : cs.outlineVariant,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(FluentIcons.search_24_regular, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      active ?? context.l10n.unifiedSearchHint,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: active == null
+                          ? context.textTheme.bodyMedium?.copyWith(
+                              color: context.theme.hintColor,
+                            )
+                          : context.textTheme.bodyMedium,
+                    ),
+                  ),
+                  if (active != null)
+                    IconButton(
+                      tooltip: context.l10n.reset,
+                      iconSize: 20,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
+                      ),
+                      icon: const Icon(FluentIcons.dismiss_24_regular),
+                      onPressed: () => _clearFilter(ref, origin),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Phone search box below the title, optionally above an existing tab bar.
+class PhoneSearchBoxBottom extends StatelessWidget
+    implements PreferredSizeWidget {
+  const PhoneSearchBoxBottom({super.key, required this.origin, this.below});
+
+  final PhoneSearchOrigin origin;
+  final PreferredSizeWidget? below;
+
+  static const double boxHeight = 60;
+
+  @override
+  Size get preferredSize =>
+      Size.fromHeight(boxHeight + (below?.preferredSize.height ?? 0));
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      PhoneSearchEntry(origin: origin, box: true),
+      ?below,
+    ],
+  );
+}
+
+class PhoneSearchClearFilter extends ConsumerWidget {
+  const PhoneSearchClearFilter({super.key, required this.origin});
+
+  final PhoneSearchOrigin origin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(libraryPersistentSearchBarProvider).ifNull()) {
+      return const SizedBox.shrink();
+    }
+    if (_activeFilter(ref, origin) == null) return const SizedBox.shrink();
+    return AppleGlassToolbarButton(
+      id: 'reset-search',
+      symbol: 'xmark',
+      label: context.l10n.reset,
+      fallbackIcon: FluentIcons.dismiss_24_regular,
+      onPressed: () => _clearFilter(ref, origin),
+    );
+  }
+}
+
+/// Uses a local query; only applying the page row changes the underlying page filter.
+class PhoneSearchOverlay extends HookConsumerWidget {
+  const PhoneSearchOverlay({
+    super.key,
+    required this.origin,
+    required this.onClose,
+  });
+
+  final PhoneSearchOrigin origin;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.l10n;
+    final cs = context.colorScheme;
+    final controller = useMemoized(DslSearchController.new);
+    useEffect(() => controller.dispose, [controller]);
+    useListenable(controller);
+    final focusNode = useFocusNode();
+    final query = controller.text;
+
+    void applyPage() {
+      final q = controller.text;
+      if (q.trim().isEmpty || origin == PhoneSearchOrigin.plain) return;
+      _applyFilter(ref, origin, q);
+      onClose();
+    }
+
+    void leave(VoidCallback navigate) {
+      controller.clear();
+      navigate();
+      onClose();
+    }
+
+    void closeAndClear() {
+      controller.clear();
+      onClose();
+    }
+
+    void submit() {
+      final q = controller.text;
+      if (q.trim().isEmpty) return;
+      if (origin != PhoneSearchOrigin.plain &&
+          _hasPageMatches(ref, origin, q)) {
+        applyPage();
+        return;
+      }
+      submitUnifiedQuery(
+        context,
+        ref,
+        q,
+        includeLibrary: true,
+        close: closeAndClear,
+      );
+    }
+
+    void applySuggestionAndStay(SearchSuggestion s) {
+      final caretRaw = controller.selection.baseOffset;
+      final caret = caretRaw < 0 ? controller.text.length : caretRaw;
+      final edit = applySuggestion(
+        controller.text,
+        activeTokenAt(controller.text, caret),
+        s,
+      );
+      controller.value = TextEditingValue(
+        text: edit.text,
+        selection: TextSelection.collapsed(offset: edit.caret),
+      );
+      focusNode.requestFocus();
+    }
+
+    final caretRaw = controller.selection.baseOffset;
+    final caret = caretRaw < 0 ? query.length : caretRaw;
+
+    // Read focus during build; tapping tips moves focus before onPressed runs.
+    final fieldFocused = focusNode.hasFocus;
+
+    final hint = origin == PhoneSearchOrigin.library
+        ? l.searchLibraryHint
+        : l.unifiedSearchHint;
+    final hasQuery = query.trim().isNotEmpty;
+
+    Future<void> openTips() async {
+      if (fieldFocused) focusNode.unfocus();
+      await showSearchTips(context);
+      if (fieldFocused && context.mounted) focusNode.requestFocus();
+    }
+
+    Widget searchRow(Widget input, {required bool native}) => Row(
+      children: [
+        AppleGlassToolbarButton(
+          id: 'search-back',
+          symbol: 'chevron.backward',
+          label: l.back,
+          fallbackIcon: FluentIcons.arrow_left_24_regular,
+          onPressed: onClose,
+        ),
+        Expanded(child: input),
+        AppleGlassToolbarButton(
+          id: 'search-tips',
+          symbol: 'questionmark.circle',
+          label: l.searchTips,
+          fallbackIcon: FluentIcons.question_circle_24_regular,
+          onPressed: openTips,
+        ),
+        if (!native && query.isNotEmpty)
+          IconButton(
+            tooltip: l.close,
+            icon: const Icon(FluentIcons.dismiss_24_regular),
+            onPressed: controller.clear,
+          ),
+      ],
+    );
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onClose();
+      },
+      // Keep the same input mounted when results appear, preserving first responder.
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Material(
+          color: cs.surface,
+          child: SafeArea(
+            bottom: hasQuery,
+            child: Column(
+              mainAxisSize: hasQuery ? MainAxisSize.max : MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: AppleGlassSearch(
+                    native: (context) => searchRow(
+                      AppleGlassSearchControl.field(
+                        controller: controller,
+                        focusNode: focusNode,
+                        autofocus: true,
+                        keepFocusOnSubmit: true,
+                        label: l.search,
+                        placeholder: hint,
+                        onSubmitted: (_) => submit(),
+                      ),
+                      native: true,
+                    ),
+                    fallback: (context) => searchRow(
+                      TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        autofocus: true,
+                        textInputAction: TextInputAction.search,
+                        style: context.textTheme.bodyLarge,
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          hintText: hint,
+                        ),
+                        onSubmitted: (_) => submit(),
+                      ),
+                      native: false,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                if (hasQuery)
+                  Expanded(
+                    child: _PhoneSearchResults(
+                      query: query,
+                      caret: caret,
+                      origin: origin,
+                      onApplyPage: applyPage,
+                      onLeave: leave,
+                      onApplySuggestion: applySuggestionAndStay,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+List<HistoryItemDto> _historyMatches(List<HistoryGroup> groups, String query) =>
+    [for (final g in groups) ...g.filterByQuery(query).items];
+
+// Unresolved operators and tracker-service filters stay applicable without expensive overlay data.
+bool _libraryPageHasMatches(List<MangaDto> library, String q) {
+  final query = q.trim();
+  if (query.isEmpty) return false;
+  if (LibrarySearchQuery.parse(query).isEmpty) return true;
+  if (LibrarySearchQuery.plainText(query).trim().isEmpty) return true;
+  if (_namesTrackerService(query)) return true;
+  return library.any((m) => m.query(query));
+}
+
+bool _namesTrackerService(String q) {
+  for (final m in RegExp(
+    r'(?:^|[\s,{])-?tracked:([^|\s,}]+)',
+    caseSensitive: false,
+  ).allMatches(q)) {
+    switch (m.group(1)!.toLowerCase()) {
+      case 'true' || 'yes' || '1' || 'false' || 'no' || '0':
+        break;
+      default:
+        return true;
+    }
+  }
+  return false;
+}
+
+List<SourceDto> _sourcePageMatches(List<SourceDto> searchable, String query) =>
+    searchable.where((s) => s.name.query(query)).toList();
+
+bool _hasPageMatches(WidgetRef ref, PhoneSearchOrigin origin, String q) {
+  if (q.trim().isEmpty) return false;
+  return switch (origin) {
+    PhoneSearchOrigin.library => _libraryPageHasMatches(
+      ref.read(libraryMangaListProvider).value ?? const [],
+      q,
+    ),
+    PhoneSearchOrigin.history => _historyMatches(
+      ref.read(historyGroupedByDateProvider),
+      q,
+    ).isNotEmpty,
+    PhoneSearchOrigin.sources => _sourcePageMatches(
+      ref.read(searchableSourcesProvider).value ?? const [],
+      q,
+    ).isNotEmpty,
+    PhoneSearchOrigin.plain => false,
+  };
+}
+
+String _historySubtitle(HistoryItemDto item) {
+  final readAt = item.readAt;
+  final time = readAt != null ? DateFormat.Hm().format(readAt) : '';
+  return time.isEmpty ? item.name : '${item.name} · $time';
+}
+
+class _PhoneSearchResults extends ConsumerWidget {
+  const _PhoneSearchResults({
+    required this.query,
+    required this.caret,
+    required this.origin,
+    required this.onApplyPage,
+    required this.onLeave,
+    required this.onApplySuggestion,
+  });
+
+  final String query;
+  final int caret;
+  final PhoneSearchOrigin origin;
+  final VoidCallback onApplyPage;
+  final void Function(VoidCallback navigate) onLeave;
+  final ValueChanged<SearchSuggestion> onApplySuggestion;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.l10n;
+    // Pin server-backed dependencies while open so typing does not refetch them.
+    pinSettingsSearchProviders(ref);
+    final cs = context.colorScheme;
+    final hasQuery = query.trim().isNotEmpty;
+    if (!hasQuery) return const SizedBox.shrink();
+    final libraryHits = ref.watch(unifiedLibraryResultsForProvider(query));
+    final libraryTotal = ref.watch(unifiedLibraryResultCountForProvider(query));
+    final historyMatches = origin == PhoneSearchOrigin.history
+        ? _historyMatches(ref.watch(historyGroupedByDateProvider), query)
+        : const <HistoryItemDto>[];
+    final sourceMatches = origin == PhoneSearchOrigin.sources
+        ? _sourcePageMatches(
+            ref.watch(searchableSourcesProvider).value ?? const [],
+            query,
+          )
+        : const <SourceDto>[];
+    final libraryPageMatches = origin == PhoneSearchOrigin.library
+        ? _libraryPageHasMatches(
+            ref.watch(libraryMangaListProvider).value ?? const [],
+            query,
+          )
+        : false;
+    final goToHits = matchingGoToTargets(ref, query, l);
+    final settingsHits = matchSettingsEntries(
+      entries: allSettingsSearchEntries,
+      l: l,
+      query: query,
+      isVisible: (e) => e.visible(ref, context),
+    );
+    final plainQuery = plainQueryText(query);
+    final suggestions = hasQuery
+        ? suggestFor(
+            activeTokenAt(query, caret.clamp(0, query.length)),
+            ref.watch(unifiedLibraryFacetsProvider),
+          )
+        : const <SearchSuggestion>[];
+
+    final (
+      String pageRowText,
+      bool pageHasMatches,
+      IconData pageIcon,
+    ) = switch (origin) {
+      PhoneSearchOrigin.library => (
+        l.phoneSearchLibraryFor(query),
+        libraryPageMatches,
+        FluentIcons.library_24_regular,
+      ),
+      PhoneSearchOrigin.history => (
+        l.phoneSearchHistoryFor(query),
+        historyMatches.isNotEmpty,
+        FluentIcons.history_24_regular,
+      ),
+      PhoneSearchOrigin.sources => (
+        l.phoneSearchSourcesFor(query),
+        sourceMatches.isNotEmpty,
+        FluentIcons.compass_northwest_24_regular,
+      ),
+      PhoneSearchOrigin.plain => ('', false, FluentIcons.search_24_regular),
+    };
+
+    return ListView(
+      // Read the view inset directly; the page Scaffold strips it from the overlay's MediaQuery.
+      padding: EdgeInsets.only(
+        bottom:
+            16 + MediaQueryData.fromView(View.of(context)).viewInsets.bottom,
+      ),
+      children: [
+        if (hasQuery && origin != PhoneSearchOrigin.plain)
+          ListTile(
+            selected: pageHasMatches,
+            selectedTileColor: cs.secondaryContainer,
+            selectedColor: cs.onSurface,
+            iconColor: cs.onSurfaceVariant,
+            leading: Icon(pageIcon),
+            title: Text(
+              pageRowText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: pageHasMatches
+                ? null
+                : Text(
+                    l.phoneSearchNoResults,
+                    style: context.textTheme.bodySmall,
+                  ),
+            enabled: pageHasMatches,
+            onTap: pageHasMatches ? onApplyPage : null,
+          ),
+        if (hasQuery &&
+            origin == PhoneSearchOrigin.history &&
+            historyMatches.isNotEmpty) ...[
+          const Divider(height: 1),
+          for (final item in historyMatches.take(3))
+            ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: ServerImage(
+                  imageUrl: item.manga.displayCoverUrl,
+                  fallbackImageUrl: item.manga.thumbnailUrl,
+                  coverVersion: item.manga.coverVersion,
+                  fallbackCoverVersion: item.manga.thumbnailUrlLastFetched,
+                  size: const Size(40, 56),
+                ),
+              ),
+              title: Text(
+                item.manga.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                _historySubtitle(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.textTheme.bodySmall,
+              ),
+              onTap: () => onLeave(
+                () => pushDetailPage(
+                  context,
+                  MangaRoute(mangaId: item.manga.id).location,
+                ),
+              ),
+            ),
+        ],
+        if (hasQuery &&
+            origin == PhoneSearchOrigin.sources &&
+            sourceMatches.isNotEmpty) ...[
+          const Divider(height: 1),
+          for (final source in sourceMatches.take(3))
+            ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: ServerImage(
+                  imageUrl: source.iconUrl,
+                  size: const Size.square(48),
+                ),
+              ),
+              title: Text(
+                source.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: (source.language?.displayName).isNotBlank
+                  ? Text(
+                      source.language?.displayName ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              onTap: () => onLeave(() {
+                ref.read(sourceLastUsedProvider.notifier).update(source.id);
+                SourceTypeRoute(
+                  sourceId: source.id,
+                  sourceType: SourceType.POPULAR,
+                ).go(context);
+              }),
+            ),
+        ],
+        if (suggestions.isNotEmpty) ...[
+          SearchSectionHeader(l.unifiedSearchFiltersSection),
+          for (final s in suggestions)
+            ListTile(
+              dense: true,
+              leading: Icon(
+                s.isKey
+                    ? FluentIcons.braces_24_regular
+                    : FluentIcons.options_24_regular,
+              ),
+              title: Text(s.display),
+              onTap: () => onApplySuggestion(s),
+            ),
+        ],
+        if (hasQuery && libraryHits.isNotEmpty) ...[
+          if (origin == PhoneSearchOrigin.library)
+            CoverRowSection(
+              title: '${l.unifiedSearchLibrarySection} ($libraryTotal)',
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 110 * 1.5 + 46,
+              itemCount: libraryHits.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final m = libraryHits[index];
+                return _PhoneLibraryCoverCard(
+                  title: m.title,
+                  thumbnailUrl: m.displayCoverUrl,
+                  fallbackThumbnailUrl: m.thumbnailUrl,
+                  coverVersion: m.coverVersion,
+                  fallbackCoverVersion: m.thumbnailUrlLastFetched,
+                  onTap: () => onLeave(
+                    () => pushDetailPage(
+                      context,
+                      MangaRoute(mangaId: m.id).location,
+                    ),
+                  ),
+                );
+              },
+            )
+          else ...[
+            SearchSectionHeader(l.unifiedSearchLibrarySection),
+            for (final m in libraryHits)
+              ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: ServerImage(
+                    imageUrl: m.displayCoverUrl,
+                    fallbackImageUrl: m.thumbnailUrl,
+                    coverVersion: m.coverVersion,
+                    fallbackCoverVersion: m.thumbnailUrlLastFetched,
+                    size: const Size(40, 56),
+                  ),
+                ),
+                title: Text(
+                  m.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '${m.user.unreadCount} unread',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.textTheme.bodySmall,
+                ),
+                onTap: () => onLeave(
+                  () => pushDetailPage(
+                    context,
+                    MangaRoute(mangaId: m.id).location,
+                  ),
+                ),
+              ),
+          ],
+        ],
+        if (hasQuery && goToHits.isNotEmpty) ...[
+          SearchSectionHeader(l.unifiedSearchGoToSection),
+          for (final t in goToHits)
+            ListTile(
+              leading: Icon(t.icon),
+              title: Text(t.label(l)),
+              subtitle: t.subtitle == null
+                  ? null
+                  : Text(
+                      t.subtitle!(l),
+                      style: context.textTheme.bodySmall?.copyWith(
+                        color: context.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+              onTap: () => onLeave(() => t.navigate(context)),
+            ),
+        ],
+        if (hasQuery && settingsHits.isNotEmpty) ...[
+          SearchSectionHeader(l.settings),
+          for (final e in settingsHits)
+            SettingsSearchResultRow(
+              entry: e,
+              query: query,
+              onTap: () => onLeave(() => e.open(context)),
+            ),
+        ],
+        if (plainQuery.isNotEmpty) ...[
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(FluentIcons.globe_search_24_regular),
+            title: Text(l.unifiedSearchAllSources(plainQuery)),
+            onTap: () =>
+                onLeave(() => openGlobalSearch(context, query: plainQuery)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PhoneLibraryCoverCard extends StatelessWidget {
+  const _PhoneLibraryCoverCard({
+    required this.title,
+    required this.thumbnailUrl,
+    required this.fallbackThumbnailUrl,
+    required this.onTap,
+    this.coverVersion,
+    this.fallbackCoverVersion,
+  });
+
+  final String title;
+  final String? thumbnailUrl;
+  final String? fallbackThumbnailUrl;
+  final String? coverVersion;
+  final String? fallbackCoverVersion;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 110,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ServerImage(
+              imageUrl: thumbnailUrl ?? '',
+              fallbackImageUrl: fallbackThumbnailUrl,
+              coverVersion: coverVersion,
+              fallbackCoverVersion: fallbackCoverVersion,
+              size: const Size(110, 165),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: context.textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    ),
+  );
+}

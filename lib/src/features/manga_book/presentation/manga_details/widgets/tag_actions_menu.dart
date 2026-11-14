@@ -1,0 +1,78 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/services.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../routes/navigation.dart';
+import '../../../../../routes/router_config.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/toast/toast.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../widgets/ios/apple_glass_popover.dart';
+import '../../../../library/presentation/library/controller/library_controller.dart';
+import 'chapter_context_menu.dart';
+
+/// [context] must belong to the tapped chip so the menu anchors to it.
+Future<void> showTagActionsMenu(
+  BuildContext context,
+  WidgetRef ref, {
+  required String tag,
+}) async {
+  final box = context.findRenderObject() as RenderBox?;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  if (box == null || overlay == null) return;
+  final position = RelativeRect.fromRect(
+    Rect.fromPoints(
+      box.localToGlobal(Offset.zero, ancestor: overlay),
+      box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+    ),
+    Offset.zero & overlay.size,
+  );
+
+  final action = await showAppleGlassMenu<String>(
+    context: context,
+    position: position,
+    items: [
+      PopupMenuItem(
+        value: 'search',
+        child: ChapterMenuRow(
+          icon: FluentIcons.search_24_regular,
+          label: context.l10n.search,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'global',
+        child: ChapterMenuRow(
+          icon: FluentIcons.globe_search_24_regular,
+          label: context.l10n.globalSearch,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'copy',
+        child: ChapterMenuRow(
+          icon: FluentIcons.copy_24_regular,
+          label: context.l10n.copyToClipboard,
+        ),
+      ),
+    ],
+    popUpAnimationStyle: context.motionStyle,
+  );
+  if (action == null || !context.mounted) return;
+
+  switch (action) {
+    case 'search':
+      ref.read(libraryQueryProvider.notifier).update(tag);
+      const LibraryRoute(categoryId: 0).go(context);
+    case 'global':
+      openGlobalSearch(context, query: tag);
+    case 'copy':
+      Clipboard.setData(ClipboardData(text: tag));
+      ref.read(toastProvider)?.show(context.l10n.copiedToClipboard);
+  }
+}

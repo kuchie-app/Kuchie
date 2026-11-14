@@ -1,0 +1,90 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../constants/app_sizes.dart';
+import '../utils/extensions/custom_extensions.dart';
+import 'kuchie_character_motion.dart';
+import 'web_selection_area.dart';
+
+const errorFaces = ['(･o･;)', 'Σ(ಠ_ಠ)', 'ಥ_ಥ', '(˘･_･˘)', '(；￣Д￣)', '(･Д･。'];
+
+class Emoticons extends HookWidget {
+  const Emoticons({
+    super.key,
+    this.title,
+    this.subTitle,
+    this.button,
+    this.iconData,
+    this.illustration,
+  });
+  final String? title;
+  final String? subTitle;
+  final IconData? iconData;
+  final Widget? button;
+  final KuchieCharacterPhase? illustration;
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = illustration;
+    final errorFace = useMemoized(() => errorFaces.getRandom!);
+    final content = Padding(
+      padding: KEdgeInsets.a8.size,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 8,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: phase != null
+                  ? KuchieCharacterMotion(phase: phase)
+                  : iconData != null
+                  ? Icon(iconData, size: context.height * .2)
+                  : Text(
+                      errorFace,
+                      textAlign: TextAlign.center,
+                      style: context.textTheme.displayMedium,
+                    ),
+            ),
+            if (title.isNotBlank)
+              Text(
+                title!,
+                textAlign: TextAlign.center,
+                style: context.textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 3,
+              ),
+            if (subTitle.isNotBlank)
+              Text(
+                subTitle!,
+                textAlign: TextAlign.center,
+                style: context.textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ?button,
+          ],
+        ),
+      ),
+    );
+    return WebSelectionArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) => constraints.hasBoundedHeight
+            ? SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: content,
+                ),
+              )
+            : content,
+      ),
+    );
+  }
+}

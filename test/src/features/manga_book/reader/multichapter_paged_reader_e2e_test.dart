@@ -1,0 +1,592 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter_batch/chapter_batch_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter_page/chapter_page_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/manga_details/controller/manga_details_controller.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/controller/auto_scroll_controller.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/controller/reader_controller.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/reader_screen.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_chapter_gap_warning.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_display_window.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_reader_viewport.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_spread_mapping.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_wrapper.dart';
+import 'package:kuchie/src/features/tracking/data/tracker_repository.dart';
+import 'package:kuchie/src/features/tracking/domain/tracking_settings_providers.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+const _png1x1 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+
+class _FakeMangaWithId extends MangaWithId {
+  _FakeMangaWithId(this.manga);
+  final MangaDto? manga;
+  @override
+  Future<MangaDto?> build({required int mangaId}) async => manga;
+}
+
+GraphQLClient _dummyClient() =>
+    GraphQLClient(link: HttpLink('http://localhost:0'), cache: GraphQLCache());
+
+class _FakeTrackerRepository extends TrackerRepository {
+  _FakeTrackerRepository() : super(_dummyClient());
+  @override
+  Future<void> trackProgress(int mangaId) async {}
+}
+
+class _FixedToggle extends UpdateProgressAfterReading {
+  _FixedToggle(this._value);
+  final bool _value;
+  @override
+  bool? build() => _value;
+}
+
+class _RecordingRepo extends Fake implements MangaBookRepository {
+  final putChapterCalls = <({int chapterId, ChapterChange patch})>[];
+  @override
+  Future<void> putChapter({
+    required int chapterId,
+    required ChapterChange patch,
+  }) async {
+    putChapterCalls.add((chapterId: chapterId, patch: patch));
+  }
+}
+
+List<String> _localPages(int count, String tag) {
+  final dir = Directory.systemTemp.createTempSync('kuchie-e2e-$tag-');
+  addTearDown(() {
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  });
+  final bytes = base64Decode(_png1x1);
+  return [
+    for (var i = 0; i < count; i++)
+      (File('${dir.path}/$i.png')..writeAsBytesSync(bytes)).uri.toString(),
+  ];
+}
+
+MangaDto _manga({
+  ReaderMode mode = ReaderMode.singleHorizontalLTR,
+}) => Fragment$MangaDto(
+  id: 1,
+  title: 'Test Manga',
+  chapters: Fragment$MangaDto$chapters(totalCount: 2),
+  genre: const [],
+  initialized: true,
+  meta: [
+    Fragment$MangaDto$meta(
+      key: MangaMetaKeys.readerMode.key,
+      value: mode.name,
+    ),
+  ],
+  sourceId: '1',
+  status: Enum$MangaStatus.ONGOING,
+  categories: Fragment$MangaDto$categories(nodes: const []),
+  trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
+  updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+  url: '/manga/1',
+  user: Fragment$MangaDto$user(
+    bookmarkCount: 0,
+    downloadCount: 0,
+    inLibrary: true,
+    inLibraryAt: '0',
+    unreadCount: 2,
+  ),
+);
+
+ChapterDto _chapter({
+  required int id,
+  required int sourceOrder,
+  required int pageCount,
+  int lastPageRead = 0,
+  bool isRead = false,
+}) => Fragment$ChapterDto(
+  chapterNumber: sourceOrder.toDouble(),
+  fetchedAt: '0',
+  id: id,
+  mangaId: 1,
+  name: 'Chapter $id',
+  pageCount: pageCount,
+  sourceOrder: sourceOrder,
+  uploadDate: '0',
+  url: '/chapter/$id',
+  meta: const [],
+  user: Fragment$ChapterDto$user(
+    isBookmarked: false,
+    isDownloaded: false,
+    isRead: isRead,
+    lastPageRead: lastPageRead,
+    lastReadAt: '0',
+  ),
+);
+
+ChapterPagesDto _pages(int id, int count) => ChapterPagesDto(
+  chapter: ChapterPagesChapterDto(id: id, pageCount: count),
+  pages: _localPages(count, 'c$id'),
+);
+
+ReaderInputCallbacks _crossingCallbacks() => ReaderInputCallbacks(
+  onTap: () {},
+  onLongPressStart: (_) {},
+  onLongPressMoveUpdate: (_) {},
+  onLongPressEnd: () {},
+  onLongPressCancel: () {},
+  onNext: () {},
+  onPrevious: () {},
+  onNextBoundary: () => false,
+  onPreviousBoundary: () => false,
+  navigationLayout: ReaderNavigationLayout.disabled,
+  tapInvert: TapInvert.none,
+  smallerTapZones: false,
+);
+
+WindowChapter _windowChapter(int id, int pageCount) => WindowChapter(
+  chapterId: id,
+  chapterName: 'Chapter $id',
+  mapping: buildSpreadMapping(
+    pageCount: pageCount,
+    doublePages: false,
+    splitWide: false,
+    splitInvert: false,
+    isWide: (_) => false,
+  ),
+  pages: _localPages(pageCount, 'c$id'),
+);
+
+void main() {
+  for (final nextNumber in [2, 5]) {
+    testWidgets('paged reader crosses into chapter $nextNumber in-place', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      SharedPreferences.setMockInitialValues(const {
+        'alwaysShowChapterTransition': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final repo = _RecordingRepo();
+
+      final ch1 = _chapter(id: 1, sourceOrder: 1, pageCount: 3);
+      final ch2 = _chapter(id: 2, sourceOrder: nextNumber, pageCount: 2);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            mangaBookRepositoryProvider.overrideWithValue(repo),
+            mangaWithIdProvider(
+              mangaId: 1,
+            ).overrideWith(() => _FakeMangaWithId(_manga())),
+            chapterProvider(chapterId: 1).overrideWithBuild((ref, _) => ch1),
+            chapterProvider(chapterId: 2).overrideWithBuild((ref, _) => ch2),
+            chapterPagesProvider(
+              chapterId: 1,
+            ).overrideWith((ref) => _pages(1, 3)),
+            chapterPagesProvider(
+              chapterId: 2,
+            ).overrideWith((ref) => _pages(2, 2)),
+            // Chapter 1 has a next (chapter 2); chapter 2 has a previous (1).
+            getNextAndPreviousChaptersProvider(
+              mangaId: 1,
+              chapterId: 1,
+              readerScanlatorGroup: '',
+            ).overrideWithValue((first: ch2, second: null)),
+            getNextAndPreviousChaptersProvider(
+              mangaId: 1,
+              chapterId: 2,
+              readerScanlatorGroup: '',
+            ).overrideWithValue((first: null, second: ch1)),
+            // Keep the external tracker path inert in the test.
+            trackerRepositoryProvider.overrideWithValue(
+              _FakeTrackerRepository(),
+            ),
+            updateProgressAfterReadingProvider.overrideWith(
+              () => _FixedToggle(false),
+            ),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const ReaderScreen(mangaId: 1, chapterId: 1),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Opens on chapter 1 (3 pages).
+      expect(find.text('1 / 3'), findsOneWidget);
+
+      // Read forward through chapter 1. The host preloads chapter 2 near the edge,
+      // commits the window swap on idle, and paging flows straight into it.
+      var sawGapWarning = false;
+      for (var i = 0; i < 6; i++) {
+        await tester.timedDrag(
+          find.byType(PagedReaderViewport),
+          const Offset(-400, 0),
+          const Duration(milliseconds: 80),
+        );
+        if (i == 0) {
+          final viewport = tester.widget<PagedReaderViewport>(
+            find.byType(PagedReaderViewport),
+          );
+          viewport.onPageWide(1, 0, true);
+          await tester.pump();
+          await tester.pumpAndSettle();
+          expect(find.text('2 / 3'), findsOneWidget);
+        }
+        await tester.pumpAndSettle();
+        // Let the async chapter load + idle-gated commit settle.
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+        sawGapWarning |= find
+            .byType(ReaderChapterGapWarning)
+            .evaluate()
+            .isNotEmpty;
+      }
+
+      expect(sawGapWarning, nextNumber == 5);
+
+      expect(tester.takeException(), isNull);
+
+      // We must have crossed into chapter 2 — its page count (2) now drives the
+      // seekbar, which never shows "/ 2" while reading the 3-page chapter 1.
+      expect(
+        find.textContaining('/ 2'),
+        findsOneWidget,
+        reason: 'reader never crossed into chapter 2',
+      );
+
+      // Crossing the boundary forward marks chapter 1 read.
+      expect(
+        repo.putChapterCalls.any(
+          (c) => c.chapterId == 1 && c.patch.isRead == true,
+        ),
+        isTrue,
+        reason: 'chapter 1 was not marked read on the forward crossing',
+      );
+    });
+  }
+
+  Future<_RecordingRepo> pumpSingleChapter(
+    WidgetTester tester, {
+    ReaderMode mode = ReaderMode.singleHorizontalLTR,
+    int pageCount = 3,
+    int lastPageRead = 0,
+    bool isRead = false,
+  }) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues(const {
+      'autoAdvanceIntervalSeconds': 1,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final repo = _RecordingRepo();
+    final ch1 = _chapter(
+      id: 1,
+      sourceOrder: 1,
+      pageCount: pageCount,
+      lastPageRead: lastPageRead,
+      isRead: isRead,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          mangaBookRepositoryProvider.overrideWithValue(repo),
+          mangaWithIdProvider(
+            mangaId: 1,
+          ).overrideWith(() => _FakeMangaWithId(_manga(mode: mode))),
+          chapterProvider(chapterId: 1).overrideWithBuild((ref, _) => ch1),
+          chapterPagesProvider(
+            chapterId: 1,
+          ).overrideWith((ref) => _pages(1, pageCount)),
+          getNextAndPreviousChaptersProvider(
+            mangaId: 1,
+            chapterId: 1,
+          ).overrideWithValue(null),
+          trackerRepositoryProvider.overrideWithValue(_FakeTrackerRepository()),
+          updateProgressAfterReadingProvider.overrideWith(
+            () => _FixedToggle(false),
+          ),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ReaderScreen(mangaId: 1, chapterId: 1),
+        ),
+      ),
+    );
+    if (mode == ReaderMode.webtoon) {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      return repo;
+    }
+    await tester.pumpAndSettle();
+    return repo;
+  }
+
+  testWidgets('a fresh one-page chapter is recorded as read on open', (
+    tester,
+  ) async {
+    for (final mode in [ReaderMode.singleHorizontalLTR, ReaderMode.webtoon]) {
+      final repo = await pumpSingleChapter(tester, mode: mode, pageCount: 1);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(
+        repo.putChapterCalls.any(
+          (c) =>
+              c.chapterId == 1 &&
+              c.patch.lastPageRead == 0 &&
+              c.patch.isRead == true,
+        ),
+        isTrue,
+        reason: mode.name,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  });
+
+  testWidgets('resuming on the last page does not complete on open', (
+    tester,
+  ) async {
+    for (final mode in [ReaderMode.singleHorizontalLTR, ReaderMode.webtoon]) {
+      final repo = await pumpSingleChapter(tester, mode: mode, lastPageRead: 2);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(
+        repo.putChapterCalls.where((c) => c.patch.isRead == true),
+        isEmpty,
+        reason: mode.name,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  });
+
+  testWidgets('closing a read chapter preserves its saved page', (tester) async {
+    final repo = await pumpSingleChapter(
+      tester,
+      pageCount: 5,
+      lastPageRead: 4,
+      isRead: true,
+    );
+    expect(find.text('1 / 5'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(
+      repo.putChapterCalls.where((c) => c.chapterId == 1),
+      isEmpty,
+    );
+  });
+
+  testWidgets(
+    'auto-advance pauses behind another screen and resumes on return',
+    (tester) async {
+      await pumpSingleChapter(tester, pageCount: 6);
+      final reader = find.byType(ReaderWrapper);
+      final readerContext = tester.element(reader);
+      final container = ProviderScope.containerOf(readerContext, listen: false);
+      final navigator = Navigator.of(readerContext);
+      container.read(autoScrollActiveProvider.notifier).start();
+      await tester.pump();
+
+      navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('Another screen')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(find.text('Another screen'), findsOneWidget);
+      expect(
+        tester
+            .widget<ReaderWrapper>(
+              find.byType(ReaderWrapper, skipOffstage: false),
+            )
+            .currentIndex,
+        0,
+      );
+
+      navigator.pop();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ReaderWrapper>(reader).currentIndex, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('saves the visible page after the debounce and on exit', (
+    tester,
+  ) async {
+    // Leaving well within the debounce window flushes the visible page.
+    final flushRepo = await pumpSingleChapter(tester);
+    await tester.timedDrag(
+      find.byType(PagedReaderViewport),
+      const Offset(-400, 0),
+      const Duration(milliseconds: 80),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(
+      flushRepo.putChapterCalls.any(
+        (c) => c.chapterId == 1 && c.patch.lastPageRead == 1,
+      ),
+      isTrue,
+      reason:
+          'progress was not flushed on exit; '
+          '${flushRepo.putChapterCalls.map((c) => c.patch.lastPageRead).toList()}',
+    );
+
+    // Staying put lets the same progress save on the debounce instead.
+    final repo = await pumpSingleChapter(tester);
+    await tester.timedDrag(
+      find.byType(PagedReaderViewport),
+      const Offset(-400, 0),
+      const Duration(milliseconds: 80),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+
+    // Let the 2s progress debounce fire.
+    await tester.pump(const Duration(seconds: 3));
+
+    expect(
+      // Partial read: position is saved, read-state is omitted (never un-reads).
+      repo.putChapterCalls.any(
+        (c) =>
+            c.chapterId == 1 &&
+            c.patch.lastPageRead == 1 &&
+            c.patch.isRead == null,
+      ),
+      isTrue,
+      reason:
+          'debounced progress for page 2 was not saved; '
+          '${repo.putChapterCalls.map((c) => c.patch.lastPageRead).toList()}',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a chapter loading mid page-turn keeps the page you were on', (
+    tester,
+  ) async {
+    final reported = <({int chapterId, int raw})>[];
+    final controller = PagedReaderController();
+
+    Widget viewportWith(PagedDisplayWindow window) => ReaderInputScope(
+      callbacks: _crossingCallbacks(),
+      child: Center(
+        child: SizedBox(
+          width: 300,
+          height: 500,
+          child: PagedReaderViewport(
+            controller: controller,
+            window: window,
+            initialDisplayIndex: 0,
+            axis: Axis.horizontal,
+            reverse: false,
+            animateTransitions: true,
+            pageFit: BoxFit.contain,
+            pageSize: null,
+            pagesAtNaturalSize: false,
+            mouseScrollSpeed: 1.7,
+            centerMargin: CenterMarginType.none,
+            rotateWide: false,
+            rotateWideInvert: false,
+            reversePair: false,
+            offsetDoublePages: false,
+            cropBorders: false,
+            onPageWide: (_, _, _) {},
+            onChapterPageChanged: (chapterId, raw) =>
+                reported.add((chapterId: chapterId, raw: raw)),
+            transitionBuilder: (_) => const SizedBox.shrink(),
+            pinchEnabled: true,
+            doubleTapToZoom: true,
+            disableZoomIn: false,
+            disableZoomOut: false,
+            navigateToPan: true,
+          ),
+        ),
+      ),
+    );
+
+    // Reading chapter 2 alone; chapter 1 loads in behind us, which shifts every
+    // display index by a chapter.
+    final window1 = buildPagedDisplayWindow(
+      chapters: [_windowChapter(2, 3)],
+      forceTransition: false,
+    );
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: viewportWith(window1),
+      ),
+    );
+    await tester.pump();
+
+    // Turn a page and swap the window while that turn is still settling.
+    await tester.timedDrag(
+      find.byType(PagedReaderViewport),
+      const Offset(-90, 0),
+      const Duration(milliseconds: 80),
+    );
+    await tester.pump(const Duration(milliseconds: 30));
+
+    reported.clear();
+    final window2 = buildPagedDisplayWindow(
+      chapters: [_windowChapter(1, 3), _windowChapter(2, 3)],
+      forceTransition: false,
+    );
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: viewportWith(window2),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The in-flight turn was aimed at the old window; committing it now would
+    // land on whatever chapter 1 page happens to share that index.
+    expect(reported.isNotEmpty, isTrue);
+    expect(
+      reported.last.chapterId,
+      2,
+      reason: 'landed outside the chapter being read; reported=$reported',
+    );
+  });
+}

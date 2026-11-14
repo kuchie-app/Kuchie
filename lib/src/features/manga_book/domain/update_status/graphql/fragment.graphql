@@ -1,0 +1,9 @@
+
+fragment UpdateStatusBaseDto on UpdateStatus {
+  isRunning
+}
+fragment UpdateProgressDto on UpdaterJobsInfoType {
+  isRunning
+  totalJobs
+  finishedJobs
+}

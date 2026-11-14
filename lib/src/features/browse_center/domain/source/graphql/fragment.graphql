@@ -1,0 +1,20 @@
+fragment SourceDto on SourceType {
+  displayName
+  homeUrl
+  iconUrl
+  id
+  isConfigurable
+  contentWarning
+  lang
+  name
+  supportsLatest
+  meta {
+    key
+    value
+  }
+  extension {
+        pkgName
+        repo
+        isObsolete
+    }
+}

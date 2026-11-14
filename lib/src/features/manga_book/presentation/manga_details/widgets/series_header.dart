@@ -1,0 +1,403 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/enum.dart';
+import '../../../../../routes/navigation.dart';
+import '../../../../../routes/router_config.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/motion/reduce_motion.dart';
+import '../../../../../utils/theme/brand.dart';
+import '../../../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import '../../../../browse_center/domain/source/source_model.dart';
+import '../../../domain/manga/manga_model.dart';
+import '../controller/manga_details_controller.dart';
+import 'manga_rating_bar.dart';
+
+class SeriesAppBarTitle extends StatelessWidget {
+  const SeriesAppBarTitle({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: title,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        var size = 20.0;
+        final base = context.textTheme.titleMedium!.copyWith(
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        );
+        while (size > 15) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: title,
+              style: base.copyWith(fontSize: size),
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          final fits = painter.width <= constraints.maxWidth;
+          painter.dispose();
+          if (fits) break;
+          size--;
+        }
+        return Text(
+          title,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: base.copyWith(fontSize: size),
+        );
+      },
+    ),
+  );
+}
+
+class SeriesHeader extends ConsumerWidget {
+  const SeriesHeader({
+    super.key,
+    required this.manga,
+    required this.onLibraryPressed,
+    this.belowStatus,
+  });
+
+  final MangaDto manga;
+  final VoidCallback onLibraryPressed;
+  final Widget? belowStatus;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final desktop = context.windowSizeClass >= WindowSizeClass.expanded;
+    final coverWidth = desktop ? 180.0 : 140.0;
+    final next = desktop
+        ? ref.watch(firstUnreadInFilteredChapterListProvider(mangaId: manga.id))
+        : null;
+    final inLibrary = manga.user.inLibrary.ifNull();
+    final resumeLabel = manga.user.lastReadChapter?.hasReadingProgress == true
+        ? context.l10n.resume
+        : context.l10n.start;
+    final libraryLabel = inLibrary
+        ? context.l10n.inLibrary
+        : context.l10n.addToLibrary;
+    // Switch layout when measured labels, padding, and icons no longer fit beside the cover.
+    final resumeWidth = next != null
+        ? _pillWidth(context, resumeLabel, gradient: true)
+        : 0.0;
+    final libraryWidth = _pillWidth(context, libraryLabel, gradient: false);
+    final controlsWidth = resumeWidth + libraryWidth + (next != null ? 10 : 0);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        16,
+      ).onDesktopPageLine(context, top: true),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final infoWidth = constraints.maxWidth - coverWidth - 18;
+          final stackControls = controlsWidth > infoWidth;
+          final halfWidth = (constraints.maxWidth - 10) / 2;
+          final equalButtons =
+              halfWidth >= resumeWidth && halfWidth >= libraryWidth;
+          Widget stacked(Widget pill, double width) =>
+              Expanded(flex: equalButtons ? 1 : width.ceil(), child: pill);
+          Widget resumePill() => SeriesHeaderPill(
+            gradient: true,
+            icon: FluentIcons.play_24_regular,
+            label: resumeLabel,
+            onPressed: () => ReaderRoute(
+              mangaId: next!.mangaId,
+              chapterId: next.id,
+              showReaderLayoutAnimation: true,
+            ).push(context),
+          );
+          Widget libraryPill() => SeriesHeaderPill(
+            icon: inLibrary
+                ? FluentIcons.heart_24_filled
+                : FluentIcons.heart_24_regular,
+            label: libraryLabel,
+            onPressed: onLibraryPressed,
+          );
+          final controls = Row(
+            key: const ValueKey('series-header-controls'),
+            children: [
+              if (next != null) ...[
+                Flexible(flex: resumeWidth.ceil(), child: resumePill()),
+                const SizedBox(width: 10),
+              ],
+              Flexible(flex: libraryWidth.ceil(), child: libraryPill()),
+            ],
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        key: const ValueKey('series-header-cover'),
+                        width: coverWidth,
+                        height: coverWidth * 1.5,
+                        child: CardTheme(
+                          data: CardTheme.of(
+                            context,
+                          ).copyWith(margin: EdgeInsets.zero),
+                          child: MangaCoverGridTile(
+                            manga: manga,
+                            showBadges: false,
+                            showTitle: false,
+                            showDarkOverlay: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          if (!desktop) ...[
+                            InkWell(
+                              onTap: () =>
+                                  openGlobalSearch(context, query: manga.title),
+                              child: Text(
+                                manga.title,
+                                style: context.textTheme.titleLarge,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          InkWell(
+                            onTap: manga.author.isNotBlank
+                                ? () => openGlobalSearch(
+                                    context,
+                                    query: manga.author,
+                                  )
+                                : null,
+                            child: Text(
+                              manga.author ?? context.l10n.unknownAuthor,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.textTheme.bodyMedium,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                MangaStatus.fromJson(manga.status.name).icon,
+                                size: 16,
+                                color: context.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      MangaStatus.fromJson(
+                                        manga.status.name,
+                                      ).toLocale(context),
+                                      style: context.textTheme.bodySmall,
+                                    ),
+                                    if (manga.source?.displayName != null) ...[
+                                      const Text(' • '),
+                                      InkWell(
+                                        onTap: manga.source!.id.isNotBlank
+                                            ? () => SourceTypeRoute(
+                                                sourceId: manga.source!.id,
+                                                sourceType: SourceType.POPULAR,
+                                              ).go(context)
+                                            : null,
+                                        child: Text(
+                                          manga.source!.displayName,
+                                          style: context.textTheme.bodySmall,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (belowStatus != null) ...[
+                            const SizedBox(height: 6),
+                            belowStatus!,
+                          ],
+                          if (desktop) ...[
+                            const Spacer(),
+                            const SizedBox(height: 10),
+                            MangaRatingBar(mangaId: manga.id, compact: true),
+                            if (!stackControls) ...[
+                              const SizedBox(height: 4),
+                              controls,
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (stackControls) ...[
+                const SizedBox(height: 14),
+                Row(
+                  key: const ValueKey('series-header-stacked-controls'),
+                  children: [
+                    if (next != null) ...[
+                      stacked(resumePill(), resumeWidth),
+                      const SizedBox(width: 10),
+                    ],
+                    stacked(libraryPill(), libraryWidth),
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+double _pillWidth(
+  BuildContext context,
+  String label, {
+  required bool gradient,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: label,
+      style: context.textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final labelWidth = painter.width.ceilToDouble();
+  painter.dispose();
+  // Horizontal padding, the 20 px icon and its gap, matching SeriesHeaderPill.
+  return labelWidth + (gradient ? 44 : 40) + 20 + (gradient ? 6 : 8);
+}
+
+class SeriesHeaderPill extends HookWidget {
+  const SeriesHeaderPill({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.gradient = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool gradient;
+
+  @override
+  Widget build(BuildContext context) {
+    final hovered = useState(false);
+    final pressed = useState(false);
+    final focused = useState(false);
+    final highlighted = hovered.value || focused.value;
+    final cs = context.colorScheme;
+    final brand = BrandColors.of(context);
+    final radius = BorderRadius.circular(18);
+    final fill = gradient
+        ? OnImage.text.withValues(
+            alpha: pressed.value
+                ? .24
+                : highlighted
+                ? .16
+                : 0,
+          )
+        : cs.primary.withValues(
+            alpha: pressed.value
+                ? .26
+                : highlighted
+                ? .18
+                : .10,
+          );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => hovered.value = true,
+      onExit: (_) {
+        hovered.value = false;
+        pressed.value = false;
+      },
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: context.reduceMotion ? 0 : 120),
+        decoration: BoxDecoration(
+          gradient: gradient ? brand.gradient : null,
+          borderRadius: radius,
+          border: gradient
+              ? null
+              : Border.all(color: cs.primary.withValues(alpha: .45)),
+          boxShadow: gradient
+              ? [
+                  BoxShadow(
+                    color: cs.secondary.withValues(
+                      alpha: highlighted ? .45 : .25,
+                    ),
+                    blurRadius: highlighted ? 22 : 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            onFocusChange: (value) => focused.value = value,
+            overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+            onHighlightChanged: (value) => pressed.value = value,
+            borderRadius: radius,
+            child: Ink(
+              color: fill,
+              padding: EdgeInsets.symmetric(
+                horizontal: gradient ? 22 : 20,
+                vertical: gradient ? 12 : 11,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: gradient ? brand.onGradient : cs.primary,
+                  ),
+                  SizedBox(width: gradient ? 6 : 8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: gradient ? brand.onGradient : cs.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

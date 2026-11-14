@@ -1,0 +1,16 @@
+
+fragment CategoryDto on CategoryType {
+  defaultCategory : default
+  id
+  includeInDownload
+  includeInUpdate
+  name
+  order
+  mangas {
+    totalCount
+  }
+  meta {
+    key
+    value
+  }
+}

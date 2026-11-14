@@ -1,0 +1,139 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/app_sizes.dart';
+import '../../../../../routes/router_config.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/toast/toast.dart';
+import '../../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../../widgets/server_image.dart';
+import '../../../../../widgets/web_route_link.dart';
+import '../../../data/source_repository/source_repository.dart';
+import '../../../domain/source/source_model.dart';
+import '../controller/source_controller.dart';
+
+class SourceListTile extends ConsumerWidget {
+  const SourceListTile({super.key, required this.source});
+
+  final SourceDto source;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final glass = supportsAppleGlass(context);
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (source.supportsLatest.ifNull())
+          WebRouteLink(
+            location: SourceTypeRoute(
+              sourceId: source.id,
+              sourceType: SourceType.LATEST,
+            ).location,
+            builder: (context, openLatestInNewTab) {
+              void openLatest() {
+                ref.read(sourceLastUsedProvider.notifier).update(source.id);
+                WebRouteLink.handleTap(openLatestInNewTab, () {
+                  SourceTypeRoute(
+                    sourceId: source.id,
+                    sourceType: SourceType.LATEST,
+                  ).go(context);
+                });
+              }
+
+              return glass
+                  ? IconButton(
+                      onPressed: openLatest,
+                      tooltip: context.l10n.latest,
+                      icon: const Icon(FluentIcons.news_24_regular),
+                    )
+                  : TextButton(
+                      onPressed: openLatest,
+                      child: Text(context.l10n.latest),
+                    );
+            },
+          ),
+        _PinButton(source: source),
+      ],
+    );
+    Widget tile(VoidCallback? openInNewTab, Widget? trailing) => ListTile(
+      onTap: () {
+        ref.read(sourceLastUsedProvider.notifier).update(source.id);
+        WebRouteLink.handleTap(openInNewTab, () {
+          SourceTypeRoute(
+            sourceId: source.id,
+            sourceType: SourceType.POPULAR,
+          ).go(context);
+        });
+      },
+      leading: ClipRRect(
+        borderRadius: KBorderRadius.r8.radius,
+        child: ServerImage(
+          imageUrl: source.iconUrl,
+          size: const Size.square(48),
+        ),
+      ),
+      title: Text(
+        source.name,
+        style: glass ? context.textTheme.titleMedium : null,
+      ),
+      subtitle: (source.language?.displayName).isNotBlank
+          ? Text(source.language?.displayName ?? "")
+          : null,
+      trailing: trailing,
+    );
+    final popular = WebRouteLink(
+      location: SourceTypeRoute(
+        sourceId: source.id,
+        sourceType: SourceType.POPULAR,
+      ).location,
+      builder: (context, openInNewTab) =>
+          tile(openInNewTab, kIsWeb ? null : actions),
+    );
+    if (!kIsWeb) return popular;
+    // The Latest button cannot sit inside the row link: the anchor would cover it.
+    return Row(
+      children: [
+        Expanded(child: popular),
+        actions,
+      ],
+    );
+  }
+}
+
+class _PinButton extends ConsumerWidget {
+  const _PinButton({required this.source});
+
+  final SourceDto source;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pinned = source.isPinned;
+    return IconButton(
+      tooltip: pinned ? context.l10n.unpinSource : context.l10n.pinSource,
+      icon: Icon(
+        pinned ? FluentIcons.pin_24_filled : FluentIcons.pin_24_regular,
+      ),
+      color: pinned ? context.theme.colorScheme.primary : null,
+      onPressed: () async {
+        try {
+          await ref
+              .read(sourceRepositoryProvider)
+              .setSourcePinned(source.id, !pinned);
+          ref.invalidate(sourceListProvider);
+        } catch (e) {
+          if (context.mounted) {
+            ref.read(toastProvider)?.showError(e.toString());
+          }
+        }
+      },
+    );
+  }
+}

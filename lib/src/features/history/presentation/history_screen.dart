@@ -1,0 +1,448 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../constants/app_sizes.dart';
+import '../../../routes/router_config.dart';
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../widgets/app_bottom_sheet.dart';
+import '../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../widgets/desktop/desktop_top_bar.dart';
+import '../../../widgets/emoticons.dart';
+import '../../../widgets/ios/apple_glass_capability.dart';
+import '../../../widgets/ios/apple_glass_toolbar.dart';
+import '../../../widgets/ios/apple_page_title.dart';
+import '../../../widgets/search_field.dart';
+import '../../../widgets/server_image.dart';
+import '../../../widgets/shell/detail_navigation_shell_screen.dart';
+import '../../library/presentation/library/widgets/desktop_library_panels.dart';
+import '../../library/presentation/library/widgets/desktop_library_toolbar.dart';
+import '../../offline/data/server_reachability.dart';
+import '../../quick_open/presentation/unified_search/desktop_search_field.dart';
+import '../../quick_open/presentation/unified_search/phone_search_view.dart';
+import '../../quick_open/presentation/unified_search/unified_search_results.dart';
+import '../../settings/presentation/incognito/incognito_mode.dart';
+import '../../settings/presentation/library/widgets/persistent_search_bar/persistent_search_bar.dart';
+import '../domain/history_item.dart';
+import 'history_controller.dart';
+import 'widgets/history_filter.dart';
+import 'widgets/history_filter_panel.dart';
+import 'widgets/history_group_widget.dart';
+import 'widgets/history_item_tile.dart';
+
+class HistoryScreen extends HookConsumerWidget {
+  const HistoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final historyGroups = ref.watch(filteredHistoryGroupsProvider);
+    final historyState = ref.watch(readingHistoryProvider);
+    final searchQuery = ref.watch(historySearchQueryProvider);
+    final hasActiveFilters = ref.watch(historyHasActiveFiltersProvider);
+    final desktop = context.usesDesktopShell;
+    final phone = context.windowSizeClass == WindowSizeClass.compact;
+    final compactGlass = supportsAppleGlass(context);
+    final connected = compactGlass && !ref.watch(serverUnreachableProvider);
+    final incognito = compactGlass && ref.watch(incognitoModeProvider);
+    final persistentBox =
+        phone && ref.watch(libraryPersistentSearchBarProvider).ifNull();
+    final historyTop = [
+      for (final group in historyGroups) ...group.items,
+    ].take(3).toList();
+    final topBar = showsMergedTopBar(context);
+    final search = DesktopSearchField(
+      query: searchQuery,
+      onChanged: (value) =>
+          ref.read(historySearchQueryProvider.notifier).updateQuery(value),
+      onNavigate: () =>
+          ref.read(historySearchQueryProvider.notifier).clearQuery(),
+      // Build synchronously so selectable rows receive the first keyboard indices in visual order.
+      leadingBuilder: (selectable) => [
+        if (historyTop.isNotEmpty) SearchSectionHeader(l10n.history),
+        for (final item in historyTop)
+          selectable(
+            action: () {
+              MangaRoute(mangaId: item.manga.id).push(context);
+              ref.read(historySearchQueryProvider.notifier).clearQuery();
+            },
+            tile: (onTap) => HistoryDropdownRow(item: item, onTap: onTap),
+          ),
+      ],
+      hasLeadingResults: historyTop.isNotEmpty,
+      onSubmitLeading: historyTop.isEmpty
+          ? null
+          : () {
+              MangaRoute(mangaId: historyTop.first.manga.id).push(context);
+              return true;
+            },
+    );
+    final filterButtonKey = useMemoized(GlobalKey.new);
+    final filterFocus = useMemoized(FocusNode.new);
+    useEffect(() => filterFocus.dispose, [filterFocus]);
+    final scheme = context.theme.colorScheme;
+    final actions = <Widget>[
+      if (compactGlass)
+        AppleGlassToolbarButton(
+          id: 'history-incognito',
+          symbol: 'eyeglasses',
+          label: l10n.incognitoMode,
+          color: incognito ? scheme.primary : null,
+          fallbackIcon: FluentIcons.incognito_24_regular,
+          onPressed: () =>
+              ref.read(incognitoModeProvider.notifier).set(!incognito),
+        ),
+      if (phone && !persistentBox) ...[
+        const PhoneSearchClearFilter(origin: PhoneSearchOrigin.history),
+        const PhoneSearchEntry(origin: PhoneSearchOrigin.history),
+      ],
+      if (desktop)
+        DesktopToolbarBox(
+          key: filterButtonKey,
+          borderColor: hasActiveFilters ? scheme.primary : null,
+          child: InkWell(
+            focusNode: filterFocus,
+            onTap: () => showAnchoredPanel(
+              context: context,
+              buttonKey: filterButtonKey,
+              focusNode: filterFocus,
+              panelWidth: 400,
+              child: const HistoryFilterPanel(),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 6),
+              child: Row(
+                spacing: 8,
+                children: [
+                  const Icon(FluentIcons.filter_24_regular, size: 20),
+                  Text(l10n.filter),
+                  const Icon(FluentIcons.caret_down_24_filled, size: 20),
+                ],
+              ),
+            ),
+          ),
+        )
+      else
+        AppleGlassToolbarButton(
+          id: 'history-filter',
+          symbol: 'line.3.horizontal.decrease',
+          fallbackIcon: FluentIcons.filter_24_regular,
+          label: l10n.filter,
+          color: hasActiveFilters ? scheme.primary : null,
+          onPressed: () => showAppBottomSheet<void>(
+            context: context,
+            builder: (_) => const HistoryFilterSheet(),
+          ),
+        ),
+      if (!compactGlass)
+        IconButton(
+          onPressed: () => ref.read(readingHistoryProvider.notifier).refresh(),
+          icon: const Icon(FluentIcons.arrow_clockwise_24_regular),
+        ),
+    ];
+    final backButton = detailNavigationBackButton(context);
+    final scaffold = Scaffold(
+      appBar: topBar
+          ? null
+          : AppBar(
+              centerTitle: compactGlass ? false : null,
+              leading: backButton,
+              title: desktop
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720),
+                        child: search,
+                      ),
+                    )
+                  : ApplePageTitle(l10n.history, cloud: connected),
+              bottom: persistentBox
+                  ? const PhoneSearchBoxBottom(
+                      origin: PhoneSearchOrigin.history,
+                    )
+                  : null,
+              actions: actions,
+            ),
+      body: Column(
+        children: [
+          if (!desktop && !phone)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: SizedBox(
+                width: context.windowSizeClass >= WindowSizeClass.expanded
+                    ? context.widthScale(scale: .5)
+                    : null,
+                child: Padding(
+                  padding: KEdgeInsets.h16v4.size,
+                  child: SearchField(
+                    initialText: searchQuery,
+                    onChanged: (query) => ref
+                        .read(historySearchQueryProvider.notifier)
+                        .updateQuery(query ?? ''),
+                    onSubmitted: (query) => ref
+                        .read(historySearchQueryProvider.notifier)
+                        .updateQuery(query ?? ''),
+                    labelText: l10n.searchHistory,
+                    autofocus: false,
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: historyState.when(
+              data: (data) {
+                if (data == null || data.isEmpty) {
+                  return const HistoryEmptyState();
+                }
+
+                if (historyGroups.isEmpty &&
+                    (searchQuery.isNotBlank || hasActiveFilters)) {
+                  return const HistoryNoSearchResults();
+                }
+
+                final notifier = ref.read(readingHistoryProvider.notifier);
+                final rows = <(int, int)>[];
+                if (desktop || compactGlass) {
+                  for (var g = 0; g < historyGroups.length; g++) {
+                    final group = historyGroups[g];
+                    if (group.isEmpty) continue;
+                    if (desktop) rows.add((g, -1));
+                    for (var i = 0; i < group.items.length; i++) {
+                      rows.add((g, i));
+                    }
+                    if (desktop) rows.add((g, -2));
+                  }
+                }
+                final list = RefreshIndicator(
+                  onRefresh: notifier.refresh,
+                  child: desktop
+                      ? CustomScrollView(
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.all(
+                                8,
+                              ).onDesktopPageLine(context, top: true),
+                              sliver: SliverList.builder(
+                                itemCount: rows.length,
+                                itemBuilder: (context, index) {
+                                  final (g, i) = rows[index];
+                                  if (i == -2) {
+                                    return const SizedBox(height: 16);
+                                  }
+                                  if (i == -1) {
+                                    return HistoryGroupHeader(
+                                      group: historyGroups[g],
+                                      first: g == 0,
+                                    );
+                                  }
+                                  return HistoryItemTile(
+                                    item: historyGroups[g].items[i],
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        )
+                      : compactGlass
+                      ? ListView.builder(
+                          padding: EdgeInsets.fromLTRB(
+                            8,
+                            8,
+                            8,
+                            MediaQuery.paddingOf(context).bottom + 8,
+                          ),
+                          itemCount: rows.length,
+                          itemBuilder: (context, index) {
+                            final (group, item) = rows[index];
+                            return HistoryItemTile(
+                              item: historyGroups[group].items[item],
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: historyGroups.length,
+                          itemBuilder: (context, index) =>
+                              HistoryGroupWidget(group: historyGroups[index]),
+                        ),
+                );
+                return desktop ? DesktopCentredColumn(child: list) : list;
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => HistoryErrorState(
+                error: error,
+                onRetry: () =>
+                    ref.read(readingHistoryProvider.notifier).refresh(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return topBar
+        ? TopBarSlot(
+            content: desktopSearchSlotContent(
+              leading: backButton,
+              search: search,
+              actions: actions,
+              spacedActionCount: 1,
+            ),
+            minWidth: searchTopBarSlotMinWidth(
+              actions.length,
+              backButton != null ? 48.0 : 0.0,
+            ),
+            child: scaffold,
+          )
+        : scaffold;
+  }
+}
+
+/// The caller supplies the selectable wrapper to place history rows first in keyboard order.
+class HistoryDropdownRow extends StatelessWidget {
+  const HistoryDropdownRow({
+    super.key,
+    required this.item,
+    required this.onTap,
+  });
+
+  final HistoryItemDto item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: ServerImage(
+          imageUrl: item.manga.displayCoverUrl,
+          fallbackImageUrl: item.manga.thumbnailUrl,
+          coverVersion: item.manga.coverVersion,
+          fallbackCoverVersion: item.manga.thumbnailUrlLastFetched,
+          size: const Size(40, 56),
+        ),
+      ),
+      title: Text(
+        item.manga.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        item.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: context.textTheme.bodySmall,
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+class HistoryEmptyState extends StatelessWidget {
+  const HistoryEmptyState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Emoticons(iconData: FluentIcons.history_24_regular),
+            const SizedBox(height: 16),
+            Text(
+              l10n.noHistoryFound,
+              style: context.theme.textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HistoryNoSearchResults extends StatelessWidget {
+  const HistoryNoSearchResults({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Emoticons(iconData: FluentIcons.search_info_24_regular),
+            const SizedBox(height: 16),
+            Text(
+              l10n.noSearchResults,
+              style: context.theme.textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.tryDifferentSearchTerm,
+              style: context.theme.textTheme.bodyMedium?.copyWith(
+                color: context.theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HistoryErrorState extends StatelessWidget {
+  const HistoryErrorState({
+    super.key,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Emoticons(iconData: FluentIcons.error_circle_24_regular),
+            const SizedBox(height: 16),
+            Text(
+              l10n.errorOccurred,
+              style: context.theme.textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error.toString(),
+              style: context.theme.textTheme.bodyMedium?.copyWith(
+                color: context.theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: onRetry, child: Text(l10n.retry)),
+          ],
+        ),
+      ),
+    );
+  }
+}

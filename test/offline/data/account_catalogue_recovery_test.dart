@@ -1,0 +1,97 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/offline/data/account_catalogue_recovery_io.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
+
+void main() {
+  late Directory root;
+  late String source;
+  late String target;
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('catalogue-recovery-');
+    source = p.join(root.path, 'old.sqlite');
+    target = p.join(root.path, 'new.sqlite');
+    for (final path in [source, target]) {
+      final db = sqlite3.open(path);
+      db.execute(
+        'CREATE TABLE offline_chapters (id INTEGER PRIMARY KEY, manga_id INTEGER NOT NULL, name TEXT NOT NULL, is_read INTEGER NOT NULL, last_page_read INTEGER NOT NULL, is_bookmarked INTEGER NOT NULL, progress_dirty INTEGER NOT NULL DEFAULT 0, read_state_dirty INTEGER NOT NULL DEFAULT 0, bookmark_dirty INTEGER NOT NULL DEFAULT 0, read_state_manual INTEGER NOT NULL DEFAULT 0, synced_is_read INTEGER NOT NULL DEFAULT 0, last_read_at TEXT)',
+      );
+      db.execute(
+        "INSERT INTO offline_chapters (id,manga_id,name,is_read,last_page_read,is_bookmarked) VALUES (7,1,'Chapter 7',0,2,0)",
+      );
+      db.close();
+    }
+  });
+  tearDown(() => root.deleteSync(recursive: true));
+
+  test('migration preserves timestamps and pending flags, and keeps a '
+      'deliberate reset', () async {
+    void resetRows() {
+      for (final path in [source, target]) {
+        final db = sqlite3.open(path);
+        db.execute(
+          'UPDATE offline_chapters SET last_page_read=2, last_read_at=NULL, '
+          'progress_dirty=0, read_state_dirty=0, bookmark_dirty=0',
+        );
+        db.close();
+      }
+    }
+
+    for (final pending in [false, true]) {
+      resetRows();
+      final old = sqlite3.open(source);
+      old.execute(
+        "UPDATE offline_chapters SET last_page_read=8, last_read_at='1700000000', progress_dirty=?",
+        [pending ? 1 : 0],
+      );
+      old.close();
+      final current = sqlite3.open(target);
+      current.execute("UPDATE offline_chapters SET last_read_at='1800000000'");
+      current.close();
+
+      await reconcileAccountCatalogues(source, target, choices: {7: true});
+      await reconcileAccountCatalogues(source, target);
+
+      final recovered = sqlite3.open(target);
+      final row = recovered.select('SELECT * FROM offline_chapters').single;
+      expect(row['last_page_read'], 8);
+      expect(row['progress_dirty'], pending ? 1 : 0);
+      expect(row['read_state_dirty'], 0);
+      expect(row['bookmark_dirty'], 0);
+      expect(row['last_read_at'], '1700000000');
+      recovered.close();
+    }
+
+    // Choosing the current side keeps a deliberate reset.
+    resetRows();
+    final old = sqlite3.open(source);
+    old.execute(
+      'UPDATE offline_chapters SET last_page_read=112,progress_dirty=1',
+    );
+    old.close();
+    final current = sqlite3.open(target);
+    current.execute(
+      'UPDATE offline_chapters SET last_page_read=0,progress_dirty=1',
+    );
+    current.close();
+    await reconcileAccountCatalogues(source, target, choices: {7: false});
+    await reconcileAccountCatalogues(source, target);
+    final after = sqlite3.open(target);
+    expect(
+      after
+          .select('SELECT last_page_read,progress_dirty FROM offline_chapters')
+          .single
+          .values,
+      [0, 1],
+    );
+    after.close();
+  });
+}

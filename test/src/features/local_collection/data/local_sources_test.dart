@@ -1,0 +1,817 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
+import 'package:kuchie/src/features/local_collection/data/local_collection_services.dart';
+import 'package:kuchie/src/features/local_collection/data/local_mihon_runtime.dart';
+import 'package:kuchie/src/features/local_collection/data/local_sources.dart';
+import 'package:kuchie/src/features/local_collection/data/local_updates.dart';
+import 'package:pointycastle/digests/sha256.dart';
+
+const host = 'https://fixture.example';
+final index = Uri.parse('$host/index.json');
+
+String _hash(String content) => SHA256Digest()
+    .process(Uint8List.fromList(utf8.encode(content)))
+    .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+    .join();
+
+String _extension({
+  String version = '1.0.0',
+  String catalog = '/catalog.json',
+}) => jsonEncode({
+  'format': 'kuchie.extension.v1',
+  'id': 'qa.sample',
+  'name': 'QA Sample',
+  'version': version,
+  'language': 'id',
+  'catalog': catalog,
+});
+
+String _index({
+  String version = '1.0.0',
+  String? digest,
+  String package = 'extension.json',
+  String? catalogOrigin,
+}) => jsonEncode({
+  'format': 'kuchie.repository.v1',
+  'name': 'QA Sources',
+  'extensions': [
+    {
+      'id': 'qa.sample',
+      'name': 'QA Sample',
+      'version': version,
+      'language': 'id',
+      'url': package,
+      'sha256': digest ?? _hash(_extension(version: version)),
+      'catalogOrigin': ?catalogOrigin,
+    },
+  ],
+});
+
+void main() {
+  late Directory root;
+  late Map<String, String> server;
+  late LocalSources sources;
+  late http.Client client;
+  late List<http.BaseRequest> requests;
+  late Map<String, int> responseStatuses;
+  late bool online;
+
+  setUp(() async {
+    root = await Directory.systemTemp.createTemp('kuchie-sources-test-');
+    server = {
+      '/index.json': _index(),
+      '/extension.json': _extension(),
+      '/catalog.json': jsonEncode({
+        'manga': [
+          {
+            'id': 'series-1',
+            'title': 'Lantern Station',
+            'description': 'Original QA pages',
+            'cover': 'cover.png',
+            'chapters': 'chapters.json',
+          },
+          {
+            'id': 'series-2',
+            'title': 'Night Ferry',
+            'chapters': 'chapters.json',
+          },
+        ],
+      }),
+      '/chapters.json': jsonEncode({
+        'chapters': [
+          {'id': 'chapter-1', 'title': 'Chapter 1', 'pages': 'pages.json'},
+        ],
+      }),
+      '/pages.json': jsonEncode({
+        'pages': ['1.png', '2.png'],
+      }),
+    };
+    requests = [];
+    responseStatuses = {};
+    online = true;
+    client = MockClient((request) async {
+      requests.add(request);
+      if (!online) throw const SocketException('Offline');
+      if (responseStatuses[request.url.path] case final status?) {
+        return http.Response('Unavailable', status);
+      }
+      final response = server[request.url.path];
+      return response == null
+          ? http.Response('Not found', 404)
+          : http.Response(response, 200);
+    });
+    sources = LocalSources(root, client: client);
+  });
+
+  tearDown(() async {
+    client.close();
+    await root.delete(recursive: true);
+  });
+
+  test('updates use saved locators and isolate a failed title', () async {
+    final index = await sources.addRepository(Uri.parse('$host/index.json'));
+    final source = await sources.install(index.packages.single);
+    final manga = await sources.browse(source.id);
+    final books = [
+      for (final selection in manga)
+        LocalSeries(
+          id: localSourceSeriesId(source, selection.id),
+          title: selection.title,
+          chapters: const [],
+          source: sources.seriesReference(selection),
+        ),
+    ];
+    // The second title has a different feed, which is now unavailable.
+    final broken = books[1];
+    books[1] = LocalSeries(
+      id: broken.id,
+      title: broken.title,
+      chapters: const [],
+      source: LocalSeriesSource(
+        sourceId: source.id,
+        mangaId: manga[1].id,
+        locator: '$host/broken.json',
+      ),
+    );
+    server.remove('/catalog.json');
+    requests.clear();
+
+    final result = await loadLocalUpdates(sources, books);
+    expect(result.items.single.manga.title, 'Lantern Station');
+    expect(result.items.single.count, 1);
+    expect(result.failed, 1);
+    expect(
+      requests.map((request) => request.url.path),
+      isNot(contains('/catalog.json')),
+    );
+  });
+
+  test(
+    'installs a Keiyoushi APK, reopens its sources, and preserves page headers',
+    () async {
+      const package = 'eu.kanade.tachiyomi.extension.all.example';
+      final index = Uri.parse(
+        'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json',
+      );
+      final apkUrl = Uri.parse(
+        'https://github.com/keiyoushi/extensions/releases/download/fixture/tachiyomi-all.example-v1.6.5.apk',
+      );
+      final assetUrl = Uri.parse(
+        'https://release-assets.githubusercontent.com/example/fixture.apk?token=fixture',
+      );
+      final apk = Uint8List.fromList([80, 75, 3, 4, 5]);
+      final responses = MockClient((request) async {
+        if (request.url == index) {
+          return http.Response(
+            jsonEncode({
+              'name': 'Keiyoushi',
+              'extensionList': {
+                'extensions': [
+                  {
+                    'name': 'Example Package',
+                    'packageName': package,
+                    'versionName': '1.6.5',
+                    'resources': {'apkUrl': apkUrl.toString()},
+                    'contentWarning': 'CONTENT_WARNING_NSFW',
+                    'sources': [
+                      {'id': '1234', 'name': 'Example', 'language': 'en'},
+                    ],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url == apkUrl) {
+          return http.Response(
+            '',
+            302,
+            headers: {'location': assetUrl.toString()},
+          );
+        }
+        if (request.url == assetUrl) return http.Response.bytes(apk, 200);
+        return http.Response('', 404);
+      });
+      addTearDown(responses.close);
+      final runtime = _FixtureRuntime(package, apk);
+      addTearDown(runtime.close);
+      final catalog = LocalSources(root, client: responses, runtime: runtime);
+      final repository = await catalog.addRepository(index);
+      expect(repository.packages.single.isNsfw, isTrue);
+      final installed = await catalog.install(repository.packages.single);
+      expect(installed.packageId, package);
+      expect(installed.packageName, 'Example Package');
+      expect(installed.name, 'Example EN');
+
+      final reopened = LocalSources(root, client: responses, runtime: runtime);
+      final variants = await reopened.sources();
+      expect(variants.map((item) => item.id), [
+        '$package:1234',
+        '$package:5678',
+      ]);
+      expect((await reopened.extensions()).single.packageId, package);
+      final second = variants.last;
+      expect(second.language, 'id');
+      expect(second.isNsfw, isTrue);
+      final manga = (await reopened.browsePage(
+        second.id,
+        query: 'kuchie',
+        page: 2,
+      )).items.single;
+      expect(manga.title, 'Manga Lokal');
+      final detail = await reopened.mangaDetails(second.id, manga);
+      expect(detail.id, manga.id);
+      expect(detail.title, 'Manga Lokal Lengkap');
+      expect(detail.description, 'Synopsis from the extension');
+      expect(detail.cover.toString(), '$host/cover.png');
+      expect(detail.coverHeaders, {'Referer': '$host/'});
+      final chapter = (await reopened.chapters(second.id, detail)).single;
+      expect(chapter.runtimeLocator, '/chapter/1|mangayomi-memo|memo1');
+      final pages = await reopened.chapterPages(second.id, chapter);
+      expect(pages.single.url, Uri.parse('https://fixture.example/1.png'));
+      expect(pages.single.headers, {'Referer': 'https://fixture.example/'});
+      final refreshed = await reopened.refreshChapterPages(
+        second.id,
+        chapter.runtimeLocator!,
+      );
+      expect(refreshed.single.url, pages.single.url);
+      expect(refreshed.single.headers, pages.single.headers);
+      await reopened.setEnabled(second.id, false);
+      await expectLater(reopened.browse(second.id), throwsStateError);
+      await reopened.uninstall(package);
+      expect(await reopened.extensions(), isEmpty);
+      expect(
+        await Directory('${root.path}/sources/mihon/$package').list().toList(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'clean install can add, install, browse, and read chapter page URLs',
+    () async {
+      expect(await sources.repositories(), isEmpty);
+      expect(await sources.extensions(), isEmpty);
+      expect(requests, isEmpty);
+      final repo = await sources.addRepository(index);
+      expect(repo.name, 'QA Sources');
+      expect(repo.packages.single.name, 'QA Sample');
+      final installed = await sources.install(repo.packages.single);
+      expect(installed.enabled, isTrue);
+      final restored = LocalSources(root, client: client);
+      expect((await restored.extensions()).single.id, 'qa.sample');
+      expect((await restored.repositories()).single.url, index);
+      final manga = (await restored.browse(
+        'qa.sample',
+        query: 'lantern',
+      )).single;
+      expect(manga.title, 'Lantern Station');
+      expect(manga.cover, Uri.parse('$host/cover.png'));
+      final chapters = await restored.chapters('qa.sample', manga);
+      expect(chapters.single.title, 'Chapter 1');
+      expect(await restored.pages('qa.sample', chapters.single), [
+        Uri.parse('$host/1.png'),
+        Uri.parse('$host/2.png'),
+      ]);
+      expect(requests.every((request) => request.method == 'GET'), isTrue);
+    },
+  );
+
+  test(
+    'update preserves enablement and bad downloads preserve the old package',
+    () async {
+      final repo = await sources.addRepository(index);
+      await sources.install(repo.packages.single);
+      await sources.setEnabled('qa.sample', false);
+      await expectLater(sources.browse('qa.sample'), throwsStateError);
+      server['/index.json'] = _index(version: '2.0.0');
+      final next = await sources.refreshRepository(index);
+      await expectLater(
+        sources.install(next.packages.single),
+        throwsFormatException,
+      );
+      expect((await sources.extensions()).single.version, '1.0.0');
+      server['/extension.json'] = _extension(version: '2.0.0');
+      final updated = await sources.install(next.packages.single);
+      expect(updated.version, '2.0.0');
+      expect(updated.enabled, isFalse);
+      await sources.uninstall('qa.sample');
+      expect(await sources.extensions(), isEmpty);
+      expect(await sources.repositories(), hasLength(1));
+    },
+  );
+
+  test(
+    'imports a declarative package from Files and rejects unsupported files',
+    () async {
+      final file = File('${root.path}/fixture.json');
+      await file.writeAsString(_extension(catalog: '$host/catalog.json'));
+      expect((await sources.importFile(file)).id, 'qa.sample');
+      expect(await sources.repositories(), isEmpty);
+      final apk = File('${root.path}/fixture.apk');
+      await apk.writeAsString(_extension(catalog: '$host/catalog.json'));
+      await expectLater(sources.importFile(apk), throwsFormatException);
+    },
+  );
+
+  test(
+    'rejects uncontrolled origin changes and remote executable package formats',
+    () async {
+      server['/index.json'] = _index(
+        package: 'https://elsewhere.example/extension.json',
+      );
+      await expectLater(sources.addRepository(index), throwsFormatException);
+      server['/index.json'] = _index(package: 'extension.apk');
+      await expectLater(sources.addRepository(index), throwsFormatException);
+      await expectLater(
+        sources.addRepository(Uri.parse('http://fixture.example/index.json')),
+        throwsFormatException,
+      );
+      expect(await sources.repositories(), isEmpty);
+    },
+  );
+
+  test('disallows cross-origin catalog and chapter links', () async {
+    server['/extension.json'] = _extension(
+      catalog: 'https://elsewhere.example/catalog.json',
+    );
+    server['/index.json'] = _index(digest: _hash(server['/extension.json']!));
+    final repo = await sources.addRepository(index);
+    await expectLater(
+      sources.install(repo.packages.single),
+      throwsFormatException,
+    );
+    server['/extension.json'] = _extension();
+    server['/index.json'] = _index();
+    await sources.install(
+      (await sources.refreshRepository(index)).packages.single,
+    );
+    server['/catalog.json'] = jsonEncode({
+      'manga': [
+        {
+          'id': 'series-1',
+          'title': 'Bad',
+          'chapters': 'https://elsewhere.example/chapters.json',
+        },
+      ],
+    });
+    await expectLater(sources.browse('qa.sample'), throwsFormatException);
+    expect(
+      requests.any((request) => request.url.host == 'elsewhere.example'),
+      isFalse,
+    );
+  });
+
+  test(
+    'explicit catalog origins allow repositories to serve independent sources',
+    () async {
+      const catalogOrigin = 'https://source.example';
+      server['/extension.json'] = _extension(
+        catalog: '$catalogOrigin/catalog.json',
+      );
+      server['/index.json'] = _index(
+        digest: _hash(server['/extension.json']!),
+        catalogOrigin: catalogOrigin,
+      );
+      final repo = await sources.addRepository(index);
+      expect(repo.packages.single.catalogOrigin, Uri.parse(catalogOrigin));
+      final extension = await sources.install(repo.packages.single);
+      expect(extension.catalogOrigin, Uri.parse(catalogOrigin));
+      final manga = (await sources.browse(
+        'qa.sample',
+        query: 'lantern',
+      )).single;
+      expect(manga.cover?.origin, catalogOrigin);
+      expect(requests.last.url.origin, catalogOrigin);
+    },
+  );
+
+  test(
+    'airplane mode keeps the last valid catalog after an invalid refresh',
+    () async {
+      final repo = await sources.addRepository(index);
+      await sources.install(repo.packages.single);
+      expect(await sources.browse('qa.sample'), hasLength(2));
+      server['/catalog.json'] = jsonEncode({
+        'manga': ['invalid row'],
+      });
+      await expectLater(sources.browse('qa.sample'), throwsFormatException);
+      online = false;
+      final restored = LocalSources(root, client: client);
+      expect(await restored.repositories(), hasLength(1));
+      expect(
+        (await restored.browse('qa.sample', query: 'lantern')).single.title,
+        'Lantern Station',
+      );
+    },
+  );
+
+  test(
+    'upgrades the previously saved Keiyoushi store and lists runtime packages',
+    () async {
+      const canonical =
+          'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json';
+      final path = File('${root.path}/sources/sources.json');
+      await path.parent.create(recursive: true);
+      await path.writeAsString(
+        jsonEncode({
+          'repositories': {
+            canonical: {
+              'format': 'kuchie.keiyoushi.v1',
+              'shinigami': {'version': '1.6.85'},
+            },
+          },
+          'extensions': {},
+        }),
+      );
+      const package = 'eu.kanade.tachiyomi.extension.en.example';
+      const validApk =
+          'https://github.com/keiyoushi/extensions/releases/download/example/tachiyomi-en.example-v1.6.5.apk';
+      Map<String, Object> entry(String packageName, String apk) => {
+        'name': 'Example',
+        'packageName': packageName,
+        'versionName': '1.6.5',
+        'contentWarning': 'CONTENT_WARNING_NSFW',
+        'resources': {'apkUrl': apk},
+        'sources': [
+          {'id': '12345', 'name': 'Example', 'language': 'en'},
+        ],
+      };
+      server['/keiyoushi/extensions/repo/index.json'] = jsonEncode({
+        'name': 'Keiyoushi',
+        'extensionList': {
+          'extensions': [
+            entry(package, validApk),
+            entry(
+              'eu.kanade.tachiyomi.extension.en.invalid',
+              'https://other.example/example.apk',
+            ),
+          ],
+        },
+      });
+
+      online = false;
+      expect(
+        (await sources.repositories()).single.packages.single.name,
+        'Shinigami',
+      );
+
+      online = true;
+      final connected = LocalSources(root, client: client);
+      final repo = (await connected.repositories()).single;
+      expect(repo.packages.map((item) => item.id), [package]);
+      expect(repo.packages.single.url, Uri.parse(validApk));
+      expect(await connected.extensions(), isEmpty);
+      online = false;
+      expect(
+        (await LocalSources(
+          root,
+          client: client,
+        ).repositories()).single.packages.single.id,
+        package,
+      );
+    },
+  );
+
+  test(
+    'installs Shinigami from an official store alias and reads local pages',
+    () async {
+      const extensionId = 'eu.kanade.tachiyomi.extension.id.shinigami';
+      const canonical =
+          'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json';
+      final storeLink = Uri(
+        scheme: 'mihon',
+        host: 'extension-store',
+        queryParameters: {
+          'url': 'https://github.com/keiyoushi/extensions/raw/repo/index.pb',
+        },
+      );
+      server['/keiyoushi/extensions/repo/index.json'] = jsonEncode({
+        'name': 'Keiyoushi',
+        'extensionList': {
+          'extensions': [
+            {
+              'packageName': extensionId,
+              'versionName': '1.6.85',
+              'sources': [
+                {'id': '3411809758861089969'},
+              ],
+            },
+            {'packageName': 'eu.kanade.tachiyomi.extension.en.example'},
+          ],
+        },
+      });
+      server['/v1/manga/list'] = jsonEncode({
+        'retcode': 0,
+        'meta': {'page': 1, 'total_page': 2},
+        'data': [
+          {
+            'manga_id': 'villain',
+            'title': 'The Villain Wants to Live',
+            'description': 'QA synopsis',
+            'cover_portrait_url': 'https://assets.shngm.id/thumbnail/cover.jpg',
+          },
+        ],
+      });
+      server['/v1/chapter/villain/list'] = jsonEncode({
+        'retcode': 0,
+        'data': [
+          {
+            'chapter_id': 'chapter-1',
+            'chapter_number': 1.0,
+            'chapter_title': '',
+            'release_date': '2026-11-13T14:44:05Z',
+          },
+        ],
+      });
+      server['/v1/chapter/detail/chapter-1'] = jsonEncode({
+        'retcode': 0,
+        'data': {
+          'base_url': 'https://assets.shngm.id',
+          'chapter': {
+            'path': '/chapter/villain/one/',
+            'data': ['1.jpg', '2.jpg'],
+          },
+        },
+      });
+
+      final repo = await sources.addRepository(storeLink);
+      expect(repo.url.toString(), canonical);
+      expect(repo.hasNativeAdapters, isTrue);
+      expect(repo.packages.single.id, extensionId);
+      expect(await sources.extensions(), isEmpty);
+      expect(requests.single.url, repo.url);
+      await sources.install(repo.packages.single);
+      expect(
+        requests,
+        hasLength(1),
+        reason: 'Installing must not fetch the APK',
+      );
+
+      final reopened = LocalSources(root, client: client);
+      final source = (await reopened.extensions()).single;
+      expect(source.supportsLatest, isTrue);
+      expect(source.chaptersNewestFirst, isTrue);
+      expect(source.enabled, isTrue);
+      expect(source.homepage.toString(), 'https://11.shinigami.asia');
+      expect(source.icon, isNotNull);
+      expect(
+        (await reopened.repositories()).single.packages.single.id,
+        extensionId,
+      );
+
+      final cacheStates = <bool>[];
+      final first = await reopened.browsePage(
+        source.id,
+        latest: true,
+        onFreshness: cacheStates.add,
+      );
+      expect(first.hasMore, isTrue);
+      expect(requests.last.url.queryParameters['sort'], 'latest');
+      expect(
+        first.items.single.cover.toString(),
+        'https://assets.shngm.id/thumbnail/cover.jpg',
+      );
+      responseStatuses['/v1/manga/list'] = 403;
+      final cached = await reopened.browsePage(
+        source.id,
+        latest: true,
+        onFreshness: cacheStates.add,
+      );
+      expect(cached.items.single.id, first.items.single.id);
+      expect(cacheStates, [false, true]);
+      await expectLater(
+        reopened.browsePage(source.id, latest: true, page: 3),
+        throwsA(
+          isA<HttpException>().having((e) => e.message, 'status', 'HTTP 403'),
+        ),
+      );
+      responseStatuses['/v1/manga/list'] = 404;
+      await expectLater(
+        reopened.browsePage(source.id, latest: true),
+        throwsA(isA<HttpException>()),
+      );
+      responseStatuses.remove('/v1/manga/list');
+      server['/v1/manga/list'] = jsonEncode({
+        'retcode': 0,
+        'meta': {'page': 2, 'total_page': 2},
+        'data': [
+          {
+            'manga_id': 'villain',
+            'title': 'The Villain Wants to Live',
+            'cover_portrait_url': '',
+            'cover_image_url': 'https://assets.shngm.id/thumbnail/banner.jpg',
+            'description': 'QA synopsis',
+          },
+          {
+            'manga_id': 'other-villain',
+            'title': 'Another villain',
+            'cover_portrait_url':
+                'https://assets.shngm.id/thumbnail/poster.jpg',
+            'cover_image_url': 'https://assets.shngm.id/thumbnail/other.jpg',
+          },
+          {
+            'manga_id': 'bad-cover',
+            'title': 'Untrusted cover',
+            'cover_portrait_url': 'https://untrusted.example/poster.jpg',
+            'cover_image_url': 'https://assets.shngm.id/thumbnail/safe.jpg',
+          },
+        ],
+      });
+      final search = await reopened.browsePage(
+        source.id,
+        query: 'The Villain',
+        page: 2,
+      );
+      expect(requests.last.url.queryParameters['q'], 'The Villain');
+      expect(requests.last.url.queryParameters['page'], '2');
+      final manga = search.items.first;
+      expect(manga.title, 'The Villain Wants to Live');
+      expect(manga.description, 'QA synopsis');
+      expect(
+        manga.cover.toString(),
+        'https://assets.shngm.id/thumbnail/banner.jpg',
+      );
+      expect(manga.coverFallback, isNull);
+      expect(
+        search.items[1].cover.toString(),
+        'https://assets.shngm.id/thumbnail/poster.jpg',
+      );
+      expect(
+        search.items[1].coverFallback.toString(),
+        'https://assets.shngm.id/thumbnail/other.jpg',
+      );
+      expect(
+        search.items[2].cover.toString(),
+        'https://assets.shngm.id/thumbnail/safe.jpg',
+      );
+      server['/v1/manga/detail/villain'] = jsonEncode({
+        'retcode': 0,
+        'data': {
+          'title': 'The Villain Wants to Live',
+          'status': 3,
+          'description': 'More about this title',
+          'alternative_title': 'Alternate title',
+          'taxonomy': {
+            'Author': [
+              {'name': 'Writer'},
+            ],
+            'Artist': [
+              {'name': 'Artist'},
+            ],
+            'Genre': [
+              {'name': 'Action'},
+            ],
+            'Format': [
+              {'name': 'Manhwa'},
+            ],
+          },
+        },
+      });
+      final details = await reopened.mangaDetails(source.id, manga);
+      expect(details.author, 'Writer');
+      expect(details.artist, 'Artist');
+      expect(details.status, 6);
+      expect(details.genres, ['Action', 'Manhwa']);
+      expect(details.cover, manga.cover);
+      expect(details.description, 'More about this title');
+      expect(details.alternativeTitle, 'Alternate title');
+      expect(
+        details.webUrl.toString(),
+        'https://11.shinigami.asia/series/villain',
+      );
+      final chapter = (await reopened.chapters(source.id, manga)).single;
+      expect(chapter.title, 'Chapter 1');
+      expect(chapter.number, 1.0);
+      expect(chapter.uploadDate, DateTime.utc(2026, 11, 13, 14, 44, 5));
+      expect(await reopened.pages(source.id, chapter), [
+        Uri.parse('https://assets.shngm.id/chapter/villain/one/1.jpg'),
+        Uri.parse('https://assets.shngm.id/chapter/villain/one/2.jpg'),
+      ]);
+      responseStatuses['/v1/chapter/detail/chapter-1'] = 503;
+      expect(await reopened.pages(source.id, chapter), hasLength(2));
+      responseStatuses.remove('/v1/chapter/detail/chapter-1');
+
+      server['/v1/chapter/detail/chapter-1'] =
+          server['/v1/chapter/detail/chapter-1']!.replaceFirst(
+            'assets.shngm.id',
+            'untrusted.example',
+          );
+      await expectLater(
+        reopened.pages(source.id, chapter),
+        throwsFormatException,
+      );
+      await reopened.setEnabled(source.id, false);
+      await expectLater(reopened.browse(source.id), throwsStateError);
+      final refreshed = await reopened.refreshRepository(
+        Uri.parse(
+          'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json',
+        ),
+      );
+      expect(refreshed.url, repo.url);
+      expect(await reopened.repositories(), hasLength(1));
+      await reopened.removeRepository(storeLink);
+      expect(await reopened.repositories(), isEmpty);
+      expect((await reopened.extensions()).single.id, source.id);
+    },
+  );
+}
+
+class _FixtureRuntime extends MihonRuntimeClient {
+  _FixtureRuntime(this.package, this.expectedApk);
+
+  final String package;
+  final Uint8List expectedApk;
+
+  @override
+  Future<List<MihonRuntimeSource>> inspect(
+    Uint8List apk, {
+    required String packageName,
+  }) async {
+    expect(apk, expectedApk);
+    expect(packageName, package);
+    return const [
+      MihonRuntimeSource(id: '1234', name: 'Example EN', language: 'en'),
+      MihonRuntimeSource(id: '5678', name: 'Example ID', language: 'id'),
+    ];
+  }
+
+  @override
+  Future<({List<MihonRuntimeManga> items, bool hasMore})> browse(
+    Uint8List apk,
+    MihonRuntimeSource source, {
+    required String query,
+    required bool latest,
+    required int page,
+  }) async {
+    expect(apk, expectedApk);
+    expect(source.id, '5678');
+    expect(query, 'kuchie');
+    expect(page, 2);
+    return (
+      items: const [
+        MihonRuntimeManga(locator: '/manga/1', title: 'Manga Lokal'),
+      ],
+      hasMore: false,
+    );
+  }
+
+  @override
+  Future<MihonRuntimeManga> details(
+    Uint8List apk,
+    MihonRuntimeSource source,
+    MihonRuntimeManga manga,
+  ) async {
+    expect(apk, expectedApk);
+    expect(source.id, '5678');
+    expect(manga.locator, '/manga/1');
+    return MihonRuntimeManga(
+      locator: '/manga/alternate',
+      title: 'Manga Lokal Lengkap',
+      description: 'Synopsis from the extension',
+      cover: Uri.parse('$host/cover.png'),
+      coverHeaders: const {'Referer': '$host/'},
+    );
+  }
+
+  @override
+  Future<List<MihonRuntimeChapter>> chapters(
+    Uint8List apk,
+    MihonRuntimeSource source,
+    MihonRuntimeManga manga,
+  ) async {
+    expect(apk, expectedApk);
+    expect(source.id, '5678');
+    expect(manga.locator, '/manga/1');
+    return const [
+      MihonRuntimeChapter(
+        locator: '/chapter/1|mangayomi-memo|memo1',
+        title: '1',
+      ),
+    ];
+  }
+
+  @override
+  Future<List<MihonRuntimePage>> pages(
+    Uint8List apk,
+    MihonRuntimeSource source,
+    MihonRuntimeChapter chapter,
+  ) async {
+    expect(apk, expectedApk);
+    expect(source.id, '5678');
+    expect(chapter.locator, '/chapter/1|mangayomi-memo|memo1');
+    return [
+      MihonRuntimePage(
+        url: Uri.parse('https://fixture.example/1.png'),
+        headers: const {'Referer': 'https://fixture.example/'},
+      ),
+    ];
+  }
+}

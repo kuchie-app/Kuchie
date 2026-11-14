@@ -1,0 +1,118 @@
+fragment MangaDto on MangaType {
+  age
+  artist
+  author
+  user {
+    bookmarkCount
+    downloadCount
+    # Only the library's "continue reading" button reads this, by id, and that
+    # button is off by default. Selecting it costs the server a ranking over
+    # every chapter of every series returned, so the library asks for it only
+    # when the button is on; every other operation keeps the default.
+    firstUnreadChapter @include(if: $withFirstUnread) {
+      id
+    }
+    inLibrary
+    inLibraryAt
+    # This fragment carries every series of the library list (~1.5 MB for 360
+    # series), so the chapters and source below keep only the fields read off
+    # them: a full ChapterDto per chapter was ~440 B, a full SourceDto ~530 B.
+    # Sort and offline mirror read these timestamps; the page shows progress.
+    lastReadChapter {
+      id
+      user {
+        isRead
+        lastPageRead
+        lastReadAt
+      }
+    }
+    unreadCount
+  }
+  chapters {
+    totalCount
+  }
+  # Only the library requests this; old offline snapshots omit it.
+  hasDuplicateChapters @include(if: $withLibraryFields)
+  chaptersAge
+  chaptersLastFetchedAt
+  description
+  genre
+  id
+  initialized
+  lastFetchedAt
+  latestFetchedChapter {
+    id
+    fetchedAt
+  }
+  latestUploadedChapter {
+    id
+    uploadDate
+  }
+  meta {
+    key
+    value
+  }
+  realUrl
+  source {
+    id
+    name
+    displayName
+    lang
+    contentWarning
+    iconUrl
+    extension {
+      isObsolete
+    }
+  }
+  sourceId
+  status
+  thumbnailUrl
+  thumbnailUrlLastFetched
+  title
+  categories {
+    nodes { id }
+  }
+  # No totalCount: the server counts in a query of its own, and the nodes
+  # already say it.
+  trackRecords {
+    nodes { id trackerId remoteId status score title }
+  }
+  updateStrategy
+  url
+}
+
+fragment MangaMetaDto on MangaMetaType {
+  key,
+  value,
+  mangaId,
+}
+
+
+fragment MangaBaseDto on MangaType {
+  age
+  artist
+  author
+  chaptersLastFetchedAt
+  description
+  genre
+  id
+  user {
+    inLibrary
+    inLibraryAt
+    unreadCount
+  }
+  initialized
+  lastFetchedAt
+  meta {
+    key
+    value
+  }
+  realUrl
+  sourceId
+  status
+  thumbnailUrl
+  thumbnailUrlLastFetched
+  title
+  updateStrategy
+  url
+}

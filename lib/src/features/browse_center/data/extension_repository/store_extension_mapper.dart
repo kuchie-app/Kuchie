@@ -1,0 +1,31 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import '../../domain/extension/graphql/__generated__/fragment.graphql.dart';
+import '../../domain/extension/graphql/__generated__/store_fragment.graphql.dart';
+
+Fragment$ExtensionDto extensionFromStoreDto(Fragment$StoreExtensionDto d) =>
+    Fragment$ExtensionDto(
+      apkName: d.apkName,
+      hasUpdate: d.hasUpdate,
+      iconUrl: d.iconUrl,
+      isInstalled: d.isInstalled,
+      contentWarning: d.contentWarning,
+      isObsolete: d.isObsolete,
+      lang: d.lang,
+      name: d.name,
+      pkgName: d.pkgName,
+      versionCodeLong: d.versionCodeLong,
+      versionName: d.versionName,
+      storeIndexUrl: d.storeIndexUrl,
+      extensionLib: d.extensionLib,
+      extensionStore: d.extensionStore == null
+          ? null
+          : Fragment$ExtensionDto$extensionStore(
+              name: d.extensionStore!.name,
+              indexUrl: d.extensionStore!.indexUrl,
+            ),
+    );

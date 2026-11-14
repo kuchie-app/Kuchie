@@ -1,0 +1,238 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
+import 'package:kuchie/src/features/migration/data/offline_migration_service.dart';
+import 'package:kuchie/src/features/migration/domain/migration_models.dart';
+import 'package:kuchie/src/features/offline/data/background/background_completion_log.dart';
+import 'package:kuchie/src/features/offline/data/chapter_commit.dart';
+import 'package:kuchie/src/features/offline/data/offline_database.dart';
+import 'package:kuchie/src/features/offline/data/offline_sync.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+
+import '../../../helpers/fake_page_store.dart';
+import '../../../helpers/offline_test_db.dart';
+
+MangaDto mangaDto(int id) => Fragment$MangaDto(
+  id: id,
+  title: 'M$id',
+  chapters: Fragment$MangaDto$chapters(totalCount: 0),
+  genre: const [],
+  initialized: true,
+  meta: const [],
+  sourceId: '1',
+  status: Enum$MangaStatus.ONGOING,
+  categories: Fragment$MangaDto$categories(nodes: const []),
+  trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
+  updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+  url: '/manga/$id',
+  user: Fragment$MangaDto$user(
+    bookmarkCount: 0,
+    downloadCount: 0,
+    inLibrary: true,
+    inLibraryAt: '0',
+    unreadCount: 0,
+  ),
+);
+
+ChapterDto chapterDto(int id, int mangaId, double number) =>
+    Fragment$ChapterDto(
+      id: id,
+      mangaId: mangaId,
+      name: 'c$number',
+      chapterNumber: number,
+      sourceOrder: id,
+      pageCount: 2,
+      fetchedAt: '0',
+      uploadDate: '0',
+      url: '',
+      meta: const <Fragment$ChapterDto$meta>[],
+      user: Fragment$ChapterDto$user(
+        isRead: false,
+        isBookmarked: false,
+        isDownloaded: false,
+        lastPageRead: 0,
+        lastReadAt: '0',
+      ),
+    );
+
+void main() {
+  late OfflineDatabase db;
+  late FakePageStore store;
+  late List<int> reconciled;
+
+  setUp(() {
+    ChapterFileLock.resetForTest();
+    db = testOfflineDatabase();
+    store = FakePageStore();
+    reconciled = [];
+  });
+  tearDown(() => db.close());
+
+  // Source manga 1 has chapter 101 (number N) downloaded; target manga 2 has
+  // chapter 201 (same number N). fetchChapters returns the source/target lists.
+  Future<OfflineMigrationService> seed({
+    OfflineKeepRule sourceRule = OfflineKeepRule.off,
+    double sourceNumber = 1,
+    double targetNumber = 1,
+    bool targetAlreadyDownloaded = false,
+  }) async {
+    await db.upsertMangaMetadata(id: 1, title: 'M1', updatedAt: DateTime(2026));
+    if (sourceRule != OfflineKeepRule.off) {
+      await db.setKeepRule(1, sourceRule, 4);
+    }
+    await db.upsertChapterMetadata(
+      id: 101,
+      mangaId: 1,
+      name: 'a',
+      chapterIndex: 0,
+      isRead: false,
+      lastPageRead: 0,
+      isBookmarked: false,
+      serverIsDownloaded: true,
+      pageCount: 2,
+      updatedAt: DateTime(2026),
+    );
+    await db.setChapterDeviceState(
+      101,
+      OfflineDeviceState.downloaded,
+      bytes: 100,
+    );
+    // The transfer copies real page files, so the source has to actually have
+    // some — a store that invented them would hide a broken transfer.
+    store.seedCommitted(101, {0: 50, 1: 50});
+    if (targetAlreadyDownloaded) {
+      await db.upsertChapterMetadata(
+        id: 201,
+        mangaId: 2,
+        name: 'a',
+        chapterIndex: 0,
+        isRead: false,
+        lastPageRead: 0,
+        isBookmarked: false,
+        serverIsDownloaded: true,
+        pageCount: 2,
+        updatedAt: DateTime(2026),
+      );
+      await db.setChapterDeviceState(
+        201,
+        OfflineDeviceState.downloaded,
+        bytes: 100,
+      );
+      store.seedCommitted(201, {0: 50, 1: 50});
+    }
+    return OfflineMigrationService(
+      db: db,
+      pageStore: store,
+      sync: OfflineSync(db),
+      fetchManga: (id) async => mangaDto(id),
+      fetchChapters: (id) async => id == 1
+          ? [chapterDto(101, 1, sourceNumber)]
+          : [chapterDto(201, 2, targetNumber)],
+      reconcileTarget: (id) async => reconciled.add(id),
+    );
+  }
+
+  const migrate = MigrationOption(migrateDownloads: true, deleteSource: true);
+
+  test(
+    'Migrate moves the matched download onto the target and clears source',
+    () async {
+      final svc = await seed();
+      final res = await svc.migrate(
+        fromMangaId: 1,
+        toMangaId: 2,
+        options: migrate,
+      );
+      expect(res.movedDownloads, 1);
+      expect(store.calls.single.toChapterId, 201);
+      // Always a copy now; a Migrate is the copy plus dropping the source
+      // afterwards, so a crash mid-transfer can't destroy the only copy.
+      expect(store.deletedChapters, contains(101));
+      final target = (await db.chapterById(201))!;
+      expect(target.deviceState, OfflineDeviceState.downloaded);
+      expect(target.pinned, isTrue); // pinned so reconcile can't evict the move
+      final source = (await db.chapterById(101))!;
+      expect(source.deviceState, OfflineDeviceState.none); // cleared
+      expect(reconciled, [2]); // target reconciled once
+    },
+  );
+
+  test('old failed adoption cannot restore a moved source chapter', () async {
+    final svc = await seed();
+    await svc.migrate(fromMangaId: 1, toMangaId: 2, options: migrate);
+    await db.setKeepRule(1, OfflineKeepRule.all, 4);
+    final tmp = await Directory.systemTemp.createTemp('migration-replay-');
+    final log = BackgroundCompletionLog(File('${tmp.path}/completion.log'));
+    await log.appendAdopt(
+      const AdoptChapterEntry(
+        chapterId: 101,
+        mangaId: 1,
+        serverId: 'srv',
+        name: 'a',
+        chapterIndex: 0,
+        chapterNumber: 1,
+        pageCount: 2,
+        bytes: 0,
+        isRead: false,
+        status: 'permissionDenied',
+      ),
+    );
+    await replayCompletionLog(
+      db: db,
+      store: store,
+      log: log,
+      catalogServerId: 'srv',
+    );
+    expect((await db.chapterById(101))!.deviceState, OfflineDeviceState.none);
+  });
+
+  test('a transfer failure pins the target for a reconcile re-fetch', () async {
+    final svc = await seed();
+    store.failFromChapters = {101};
+    final res = await svc.migrate(
+      fromMangaId: 1,
+      toMangaId: 2,
+      options: migrate,
+    );
+    expect(res.refetchedDownloads, 1);
+    expect(res.movedDownloads, 0);
+    final target = (await db.chapterById(201))!;
+    expect(target.pinned, isTrue); // pinned → reconcile will server-download it
+    expect(target.deviceState, isNot(OfflineDeviceState.downloaded));
+  });
+
+  test(
+    'a target owned by another download is re-fetched, never dropped',
+    () async {
+      // A live (or stale) download holds the target's staging, so migration may
+      // not commit on top of it. The chapter must still end up on the device.
+      final svc = await seed();
+      // Staging on the target belongs to a download of its own; committing the
+      // copy on top of it would publish a chapter assembled from both.
+      store.seedStaged(201, {0: 10}, indices: [0, 1]);
+      final res = await svc.migrate(
+        fromMangaId: 1,
+        toMangaId: 2,
+        options: migrate,
+      );
+
+      expect(res.movedDownloads, 0);
+      expect(
+        res.refetchedDownloads,
+        1,
+        reason: 'refused transfers are re-downloaded, not silently lost',
+      );
+      expect((await db.chapterById(201))!.pinned, isTrue);
+    },
+  );
+}

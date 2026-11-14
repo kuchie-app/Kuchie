@@ -1,0 +1,92 @@
+
+mutation UpdateBackupTTL($backupTTL: Int = 14) {
+  setSettings(input: {settings: {backupTTL: $backupTTL}}) {
+    settings {
+      ...SettingsDto
+    }
+  }
+}
+
+mutation UpdateBackupTime($backupTime: String = "12:00") {
+  setSettings(input: {settings: {backupTime: $backupTime}}) {
+    settings {
+      ...SettingsDto
+    }
+  }
+}
+
+mutation UpdateBackupPath($backupPath: String!) {
+  setSettings(input: {settings: {backupPath: $backupPath}}) {
+    settings {
+      ...SettingsDto
+    }
+  }
+}
+
+mutation UpdateBackupInterval($backupInterval: Int = 1) {
+  setSettings(input: {settings: {backupInterval: $backupInterval}}) {
+    settings {
+      ...SettingsDto
+    }
+  }
+}
+
+query RestoreStatus($restoreId: String!) {
+  restoreStatus(id: $restoreId) {
+    ...RestoreStatusDto
+  }
+}
+
+mutation RestoreBackup($backup: Upload!, $flags: PartialBackupFlagsInput) {
+  restoreBackup(input: { backup: $backup, flags: $flags }) {
+    clientMutationId
+    id
+    status {
+      ...RestoreStatusDto
+    }
+  }
+}
+
+mutation CreateBackup($flags: PartialBackupFlagsInput) {
+  createBackup(input: { flags: $flags }) {
+    clientMutationId
+    url
+  }
+}
+
+fragment AutoBackupFlagsDto on SettingsType {
+  autoBackupIncludeManga
+  autoBackupIncludeCategories
+  autoBackupIncludeChapters
+  autoBackupIncludeTracking
+  autoBackupIncludeHistory
+  autoBackupIncludeClientData
+  autoBackupIncludeServerSettings
+}
+
+query AutoBackupFlags {
+  settings {
+    ...AutoBackupFlagsDto
+  }
+}
+
+mutation UpdateAutoBackupFlags($settings: PartialSettingsTypeInput!) {
+  setSettings(input: { settings: $settings }) {
+    settings {
+      ...AutoBackupFlagsDto
+    }
+  }
+}
+
+query ValidateBackup($backup: Upload!) {
+    validateBackup(input: { backup: $backup }) {
+        missingSources {
+            name
+            id
+        }
+    }
+}
+
+query BackupUserSettingsCapability {
+  settings { autoBackupIncludeUserSettings }
+}

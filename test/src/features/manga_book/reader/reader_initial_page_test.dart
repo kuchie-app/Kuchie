@@ -1,0 +1,65 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter_page/chapter_page_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/utils/reader_initial_page.dart';
+
+ChapterDto _chapter({
+  bool isRead = false,
+  int lastPageRead = 0,
+  int pageCount = 5,
+}) => Fragment$ChapterDto(
+  chapterNumber: 1,
+  fetchedAt: '0',
+  id: 1,
+  mangaId: 1,
+  name: 'Chapter 1',
+  pageCount: pageCount,
+  sourceOrder: 1,
+  uploadDate: '0',
+  url: '/chapter/1',
+  meta: const [],
+  user: Fragment$ChapterDto$user(
+    isBookmarked: false,
+    isDownloaded: false,
+    isRead: isRead,
+    lastPageRead: lastPageRead,
+    lastReadAt: '0',
+  ),
+);
+
+ChapterPagesDto _pages({int loadedCount = 5, int pageCount = 5}) =>
+    ChapterPagesDto(
+      chapter: ChapterPagesChapterDto(id: 1, pageCount: pageCount),
+      pages: [for (var index = 0; index < loadedCount; index++) '/page/$index'],
+    );
+
+void main() {
+  group('readerInitialPageIndex', () {
+    test('opens previous chapters on the last loaded page', () {
+      final index = readerInitialPageIndex(
+        chapter: _chapter(lastPageRead: 1),
+        chapterPages: _pages(loadedCount: 5),
+        openAtEnd: true,
+      );
+
+      expect(index, 4);
+    });
+
+    test('clamps stale progress to the loaded pages', () {
+      final index = readerInitialPageIndex(
+        chapter: _chapter(lastPageRead: 99),
+        chapterPages: _pages(loadedCount: 3),
+        openAtEnd: false,
+      );
+
+      expect(index, 2);
+    });
+  });
+}

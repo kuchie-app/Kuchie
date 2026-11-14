@@ -1,0 +1,229 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../constants/app_sizes.dart';
+import '../../../../features/auth/data/custom_headers_store.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/motion/reduce_motion.dart';
+import '../../../../widgets/fluent_expansion_tile.dart';
+import '../../../../widgets/popup_widgets/app_dialog.dart';
+import '../../search/settings_search_registry.dart';
+import '../../widgets/settings_group_card/settings_group_card.dart';
+
+class CustomHeadersSection extends HookConsumerWidget {
+  const CustomHeadersSection({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final headers = ref.watch(customHttpHeadersProvider).value ?? const {};
+    final entries = headers.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    Future<void> addOrEdit({String? existingName}) async {
+      final result = await showDialog<({String name, String value})>(
+        context: context,
+        animationStyle: context.motionStyle,
+        builder: (_) => _HeaderDialog(
+          isEdit: existingName != null,
+          initialName: existingName ?? '',
+          initialValue: existingName == null
+              ? ''
+              : (headers[existingName] ?? ''),
+          takenNames: headers.keys.toSet(),
+          editingName: existingName,
+        ),
+      );
+      if (result == null || result.name.isEmpty) return;
+      if (existingName != null && existingName != result.name) {
+        await ref.read(customHttpHeadersProvider.notifier).remove(existingName);
+      }
+      await ref
+          .read(customHttpHeadersProvider.notifier)
+          .put(result.name, result.value);
+    }
+
+    Widget headerRow(MapEntry<String, String> entry) => ListTile(
+      leading: compact ? const Icon(FluentIcons.key_24_regular) : null,
+      title: Text(entry.key),
+      subtitle: Text(
+        entry.value.isEmpty ? '—' : '••••••••',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(FluentIcons.edit_24_regular),
+            onPressed: () => addOrEdit(existingName: entry.key),
+          ),
+          IconButton(
+            icon: Icon(
+              FluentIcons.delete_24_regular,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () =>
+                ref.read(customHttpHeadersProvider.notifier).remove(entry.key),
+          ),
+        ],
+      ),
+    );
+
+    final editor = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!compact) SettingsGroupHeading(label: context.l10n.customHeaders),
+        if (compact)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 16, 4),
+            child: Text(
+              context.l10n.onboardingCustomHeadersHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        if (compact) ...[
+          if (entries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 4, 16, 4),
+              child: Text(
+                context.l10n.customHeaderEmpty,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          for (final entry in entries) headerRow(entry),
+          SettingsHighlightTarget(
+            id: 'customHeaders',
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: OutlinedButton.icon(
+                onPressed: () => addOrEdit(),
+                icon: const Icon(FluentIcons.add_24_regular),
+                label: Text(context.l10n.customHeaderAdd),
+              ),
+            ),
+          ),
+        ] else
+          SettingsGroupCard(
+            children: [
+              for (final entry in entries) headerRow(entry),
+              SettingsHighlightTarget(
+                id: 'customHeaders',
+                child: ListTile(
+                  leading: const Icon(FluentIcons.add_24_regular),
+                  title: Text(context.l10n.customHeaderAdd),
+                  onTap: () => addOrEdit(),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+    if (!compact) return editor;
+    return FluentExpansionTile(
+      dense: true,
+      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+      tilePadding: KEdgeInsets.h16.size,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(
+        entries.isEmpty
+            ? context.l10n.customHeaders
+            : '${context.l10n.customHeaders} · ${entries.length}',
+        style: context.textTheme.titleSmall?.copyWith(
+          color: context.theme.colorScheme.primary,
+        ),
+      ),
+      children: [editor],
+    );
+  }
+}
+
+class _HeaderDialog extends HookConsumerWidget {
+  const _HeaderDialog({
+    required this.isEdit,
+    required this.initialName,
+    required this.initialValue,
+    required this.takenNames,
+    required this.editingName,
+  });
+
+  final bool isEdit;
+  final String initialName;
+  final String initialValue;
+  final Set<String> takenNames;
+  final String? editingName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nameController = useTextEditingController(text: initialName);
+    final valueController = useTextEditingController(text: initialValue);
+    final nameError = useState<String?>(null);
+
+    void save() {
+      final name = nameController.text.trim();
+      if (validateCustomHeaderName(name) != null) {
+        nameError.value = context.l10n.customHeaderNameInvalid;
+        return;
+      }
+      if ((editingName == null || editingName != name) &&
+          takenNames.contains(name)) {
+        nameError.value = context.l10n.customHeaderExists;
+        return;
+      }
+      Navigator.pop(context, (name: name, value: valueController.text));
+    }
+
+    return AdaptiveAppAlert(
+      title: Text(
+        isEdit ? context.l10n.customHeaderName : context.l10n.customHeaderAdd,
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameController,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: context.l10n.customHeaderName,
+              hintText: 'X-Custom-Header',
+              border: const OutlineInputBorder(),
+              errorText: nameError.value,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: valueController,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: context.l10n.customHeaderValue,
+              hintText: '••••••••',
+              border: const OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => save(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.cancel),
+        ),
+        ElevatedButton(onPressed: save, child: Text(context.l10n.save)),
+      ],
+    );
+  }
+}

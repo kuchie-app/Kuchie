@@ -1,0 +1,99 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'dart:async';
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/account/data/account_providers.dart';
+import 'package:kuchie/src/features/manga_book/data/downloads/downloads_repository.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/presentation/downloads/controller/downloads_controller.dart';
+import 'package:kuchie/src/features/manga_book/widgets/download_status_icon.dart';
+import 'package:kuchie/src/features/offline/data/offline_repository.dart';
+import 'package:kuchie/src/widgets/custom_circular_progress_indicator.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../helpers/legacy_account_access.dart';
+
+class _FakeRepo implements DownloadsRepository {
+  final enqueue = Completer<void>();
+
+  @override
+  Future<void> addChaptersBatchToDownloadQueue(List<int> chapterIds) =>
+      enqueue.future;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+ChapterDto _chapter() => Fragment$ChapterDto(
+  id: 1,
+  mangaId: 1,
+  name: 'c1',
+  chapterNumber: 1,
+  sourceOrder: 1,
+  pageCount: 20,
+  fetchedAt: '0',
+  uploadDate: '0',
+  url: '',
+  meta: const <Fragment$ChapterDto$meta>[],
+  user: Fragment$ChapterDto$user(
+    isRead: false,
+    isBookmarked: false,
+    isDownloaded: false,
+    lastPageRead: 0,
+    lastReadAt: '0',
+  ),
+);
+
+void main() {
+  Future<_FakeRepo> pump(WidgetTester tester) async {
+    final repo = _FakeRepo();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settledAccountAccessProvider.overrideWithValue(legacyAccountAccess),
+          offlineEnabledProvider.overrideWithValue(false),
+          downloadsFromIdProvider(1).overrideWithValue(null),
+          downloadUpdatesProvider.overrideWith((ref) => const Stream.empty()),
+          downloadsRepositoryProvider.overrideWithValue(repo),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: DownloadStatusIcon(
+              updateData: () async {},
+              chapter: _chapter(),
+              mangaId: 1,
+              isDownloaded: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    return repo;
+  }
+
+  testWidgets(
+    'tapping download shows progress, restored when the queue fails',
+    (tester) async {
+      final repo = await pump(tester);
+
+      await tester.tap(find.byIcon(FluentIcons.cloud_arrow_down_24_regular));
+      await tester.pump();
+
+      expect(find.byType(MiniCircularProgressIndicator), findsOneWidget);
+      expect(find.byIcon(FluentIcons.cloud_arrow_down_24_regular), findsNothing);
+
+      repo.enqueue.completeError(Exception('offline'));
+      await tester.pump();
+
+      expect(find.byIcon(FluentIcons.cloud_arrow_down_24_regular), findsOneWidget);
+    },
+  );
+}

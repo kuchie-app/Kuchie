@@ -1,0 +1,218 @@
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gql/ast.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/misc.dart';
+import 'package:kuchie/src/features/account/data/account_providers.dart';
+import 'package:kuchie/src/features/account/domain/account_access.dart';
+import 'package:kuchie/src/features/settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
+import 'package:kuchie/src/features/settings/presentation/koreader_sync/domain/koreader_sync_domain.dart';
+import 'package:kuchie/src/features/settings/presentation/koreader_sync/koreader_sync_settings_screen.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:kuchie/src/widgets/desktop/desktop_top_bar.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class KoSyncLink extends Link {
+  KoSyncLink({this.connectSucceeds = true});
+
+  final bool connectSucceeds;
+  bool loggedIn = false;
+  final operations = <String>[];
+
+  Map<String, dynamic> get _status => {
+    '__typename': 'KoSyncStatusPayload',
+    'isLoggedIn': loggedIn,
+    'serverAddress': loggedIn ? 'http://example' : null,
+    'username': loggedIn ? 'kuchie' : null,
+  };
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    final name = request.operation.document.definitions
+        .whereType<OperationDefinitionNode>()
+        .single
+        .name!
+        .value;
+    operations.add(name);
+    if (name == 'KoSyncStatus') {
+      yield Response(
+        response: {},
+        data: {'__typename': 'Query', 'koSyncStatus': _status},
+      );
+      return;
+    }
+    if (name == 'KoreaderSyncLegacySettings') {
+      yield Response(
+        response: {},
+        errors: [
+          const GraphQLError(
+            message:
+                "Validation error (FieldUndefined@[settings/koreaderSyncChecksumMethod]) : Field 'koreaderSyncChecksumMethod' in type 'SettingsType' is undefined",
+          ),
+        ],
+      );
+      return;
+    }
+    if (name == 'ConnectKoSyncAccount') {
+      if (connectSucceeds) loggedIn = true;
+      yield Response(
+        response: {},
+        data: {
+          '__typename': 'Mutation',
+          'connectKoSyncAccount': {
+            '__typename': 'KoSyncConnectPayload',
+            'message': connectSucceeds
+                ? null
+                : 'Incorrect username or password',
+            'status': _status,
+          },
+        },
+      );
+      return;
+    }
+    throw StateError('Unexpected operation $name');
+  }
+}
+
+KoreaderSyncSettings settingsFixture() => (
+  strategyForward: Enum$KoreaderSyncConflictStrategy.PROMPT,
+  strategyBackward: Enum$KoreaderSyncConflictStrategy.PROMPT,
+  checksumMethod: Enum$KoreaderSyncChecksumMethod.BINARY,
+  percentageTolerance: 1e-15,
+);
+
+Future<void> pumpScreen(
+  WidgetTester tester,
+  Link link, {
+  List<Override> overrides = const [],
+  bool overrideSettings = true,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(const MethodChannel('window_manager'), (
+        call,
+      ) async {
+        if (call.method == 'isMaximized') return false;
+        return null;
+      });
+  addTearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('window_manager'), null),
+  );
+  final client = GraphQLClient(
+    link: link,
+    cache: GraphQLCache(store: InMemoryStore()),
+    defaultPolicies: DefaultPolicies(
+      query: Policies(fetch: FetchPolicy.noCache),
+    ),
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        graphQlClientProvider.overrideWithValue(client),
+        if (overrideSettings)
+          koreaderSyncSettingsProvider.overrideWith(
+            (ref) async => settingsFixture(),
+          ),
+        ...overrides,
+      ],
+      // Native desktop draws the toolbar in the shell bar above the page.
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Column(
+              children: [
+                if (showsMergedTopBar(context)) const DesktopTopBar(),
+                const Expanded(child: KoreaderSyncSettingsScreen()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> openConnectDialog(WidgetTester tester) async {
+  await tester.tap(find.text('Sync status'));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('load, unsupported server and connect states', (tester) async {
+    await pumpScreen(tester, KoSyncLink());
+
+    expect(find.text('KOReader Sync'), findsOneWidget);
+    expect(find.text('Disconnected'), findsOneWidget);
+    expect(find.text('Sync to a newer state'), findsOneWidget);
+    expect(find.text('Sync to an older state'), findsOneWidget);
+    expect(find.text('Document matching method'), findsOneWidget);
+    expect(find.text('Percentage tolerance'), findsOneWidget);
+    expect(find.text('Prompt'), findsNWidgets(2));
+    expect(find.text('Binary'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
+
+    // A server without KOReader Sync fields shows the update message.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpScreen(
+      tester,
+      KoSyncLink(),
+      overrideSettings: false,
+      overrides: [
+        settledAccountAccessProvider.overrideWithValue(
+          AccountAccess(capability: AccountCapability.unsupported),
+        ),
+      ],
+    );
+
+    expect(
+      find.text(
+        'This server does not support KOReader Sync. Update Suwayomi to use it.',
+      ),
+      findsOneWidget,
+    );
+
+    // A failed connect keeps the dialog open and saves nothing.
+    await tester.pumpWidget(const SizedBox.shrink());
+    final failing = KoSyncLink(connectSucceeds: false);
+    await pumpScreen(tester, failing);
+    await openConnectDialog(tester);
+    expect(find.text('Connect to KOReader Sync server'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).at(1), 'kuchie');
+    await tester.enterText(find.byType(TextFormField).at(2), 'secret');
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to KOReader Sync server'), findsOneWidget);
+    expect(find.text('kuchie'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Failed to connect to KOReader Sync server.'),
+      ),
+      findsOneWidget,
+    );
+    expect(failing.operations, ['KoSyncStatus', 'ConnectKoSyncAccount']);
+
+    // A successful connect shows the connected status.
+    await tester.pumpWidget(const SizedBox.shrink());
+    final succeeding = KoSyncLink();
+    await pumpScreen(tester, succeeding);
+    await openConnectDialog(tester);
+    await tester.enterText(find.byType(TextFormField).at(0), 'http://example');
+    await tester.enterText(find.byType(TextFormField).at(1), 'kuchie');
+    await tester.enterText(find.byType(TextFormField).at(2), 'secret');
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to KOReader Sync server'), findsNothing);
+    expect(find.text('Connected as kuchie to http://example'), findsOneWidget);
+  });
+}

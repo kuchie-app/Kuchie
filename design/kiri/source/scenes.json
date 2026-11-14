@@ -1,0 +1,65 @@
+{
+  "offline": {
+    "label": "Tidak ada internet",
+    "duration": 2400,
+    "summary": "Jalur kertas putus. Kiri menarik syalnya kembali dan memeluk komik yang masih bisa dibaca.",
+    "action": "Buka unduhan",
+    "alt": "Kiri memeluk sebuah komik di depan jalur kertas yang terputus."
+  },
+  "loading": {
+    "label": "Memuat bab",
+    "duration": 2000,
+    "summary": "Kiri menangkap halaman yang melayang, membaliknya, lalu mengambil halaman berikutnya.",
+    "action": "Batal",
+    "alt": "Kiri membalik halaman yang melayang dari komik terbuka."
+  },
+  "fetch-failed": {
+    "label": "Gagal mengambil data",
+    "duration": 2300,
+    "summary": "Kiri meraih lembar dari bingkai. Lembar itu tersedot kembali, dan Kiri mengulurkan tangan sekali lagi.",
+    "action": "Coba lagi",
+    "alt": "Kiri mengulurkan tangan ke halaman yang tertarik kembali ke dalam bingkai."
+  },
+  "error": {
+    "label": "Halaman bermasalah",
+    "duration": 2050,
+    "summary": "Kertas terbelah di tangannya. Kiri terkejut, lalu menyandingkan kedua potongannya.",
+    "action": "Muat ulang",
+    "alt": "Kiri memegang dua potongan halaman manga yang robek."
+  },
+  "empty": {
+    "label": "Library kosong",
+    "duration": 1850,
+    "summary": "Kiri duduk di ambang rak kosong dan menggantung syalnya sebagai penanda tempat.",
+    "action": "Jelajahi",
+    "alt": "Kiri duduk di depan rak kosong dengan syal penanda buku terjulur."
+  },
+  "no-results": {
+    "label": "Pencarian tanpa hasil",
+    "duration": 2050,
+    "summary": "Kiri mengintip ke balik dua lembar, lalu memiringkan kepala ketika keduanya kosong.",
+    "action": "Ubah kata kunci",
+    "alt": "Kiri mengintip dari balik dua lembar kertas kosong."
+  },
+  "intro": {
+    "label": "Pembuka Kuchie",
+    "duration": 1450,
+    "summary": "Kiri melangkah keluar dari bingkai manga, disusul syalnya.",
+    "action": "",
+    "alt": "Kiri melangkah keluar dari sebuah bingkai manga."
+  },
+  "download-paused": {
+    "label": "Unduhan dijeda",
+    "duration": 1700,
+    "summary": "Kiri menaruh penanda di tengah komik dan duduk di sampingnya.",
+    "action": "Lanjutkan",
+    "alt": "Kiri duduk di sebelah komik dengan penanda buku terpasang."
+  },
+  "complete": {
+    "label": "Unduhan selesai",
+    "duration": 1700,
+    "summary": "Kiri menangkap lembar terakhir, memasukkannya ke jilid, lalu mengangkat komiknya.",
+    "action": "Baca",
+    "alt": "Kiri mengangkat komik yang sudah lengkap."
+  }
+}

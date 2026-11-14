@@ -1,0 +1,80 @@
+// Regression tests: a chapter absent from the filtered list (e.g. unread-only
+// filter while re-reading) must resolve to NO neighbours, not an arbitrary one.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/presentation/manga_details/controller/manga_details_controller.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+ChapterDto _chapter({
+  required int id,
+  required String name,
+  int sourceOrder = 0,
+  double number = 0,
+  String? scanlator,
+}) => Fragment$ChapterDto(
+  chapterNumber: number,
+  fetchedAt: '0',
+  id: id,
+  mangaId: 1,
+  name: name,
+  pageCount: 0,
+  sourceOrder: sourceOrder,
+  uploadDate: '0',
+  url: '',
+  scanlator: scanlator,
+  meta: const [],
+  user: Fragment$ChapterDto$user(
+    isBookmarked: false,
+    isDownloaded: false,
+    isRead: false,
+    lastPageRead: 0,
+    lastReadAt: '0',
+  ),
+);
+
+class _FakeChapterList extends MangaChapterList {
+  _FakeChapterList(this.chapters);
+  final List<ChapterDto> chapters;
+
+  @override
+  Future<List<ChapterDto>?> build({required int mangaId}) async => chapters;
+}
+
+Future<ProviderContainer> _container(List<ChapterDto> chapters) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final c = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      mangaChapterListProvider(
+        mangaId: 1,
+      ).overrideWith(() => _FakeChapterList(chapters)),
+    ],
+  );
+  addTearDown(c.dispose);
+  await c.read(mangaChapterListProvider(mangaId: 1).future);
+  return c;
+}
+
+void main() {
+  final chapters = [
+    _chapter(id: 1, name: 'One', number: 1, sourceOrder: 1),
+    _chapter(id: 2, name: 'Two', number: 2, sourceOrder: 2),
+    _chapter(id: 3, name: 'Three', number: 3, sourceOrder: 3),
+  ];
+
+  test('a chapter absent from the filtered list has NO neighbours', () async {
+    final c = await _container(chapters);
+    final pair = c.read(
+      getNextAndPreviousChaptersProvider(mangaId: 1, chapterId: 9999),
+    );
+    expect(pair, isNotNull);
+    // Before the fix, indexWhere == -1 resolved one side to filteredList[0].
+    expect(pair!.first, isNull);
+    expect(pair.second, isNull);
+  });
+}

@@ -1,0 +1,32 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Pure mappings: ReaderOrientation → platform orientations
+// and TapInvert legacy-bool migration + axis truth table.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/constants/enum.dart';
+
+void main() {
+  group('TapInvert', () {
+    test('legacy bool migration: true→both, false/null→none', () {
+      expect(TapInvert.fromLegacyInvert(true), TapInvert.both);
+      expect(TapInvert.fromLegacyInvert(false), TapInvert.none);
+      expect(TapInvert.fromLegacyInvert(null), TapInvert.none);
+    });
+
+    test('axis truth table (Komikku TappingInvertMode)', () {
+      expect(TapInvert.none.invertsHorizontal, isFalse);
+      expect(TapInvert.none.invertsVertical, isFalse);
+      expect(TapInvert.horizontal.invertsHorizontal, isTrue);
+      expect(TapInvert.horizontal.invertsVertical, isFalse);
+      expect(TapInvert.vertical.invertsHorizontal, isFalse);
+      expect(TapInvert.vertical.invertsVertical, isTrue);
+      expect(TapInvert.both.invertsHorizontal, isTrue);
+      expect(TapInvert.both.invertsVertical, isTrue);
+    });
+  });
+}

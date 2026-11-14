@@ -1,0 +1,138 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
+import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/updates/updates_grouping.dart';
+import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
+
+Fragment$MangaBaseDto _manga(int id) => Fragment$MangaBaseDto(
+  genre: const [],
+  id: id,
+  initialized: true,
+  meta: const [],
+  sourceId: '1',
+  status: Enum$MangaStatus.ONGOING,
+  title: 'Manga $id',
+  updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+  url: 'manga/$id',
+  user: Fragment$MangaBaseDto$user(
+    inLibrary: true,
+    inLibraryAt: '0',
+    unreadCount: 0,
+  ),
+);
+
+/// A minimal fixture chapter. [day] is a distinct calendar day expressed as
+/// whole days since epoch (converted to a fetchedAt second timestamp), so
+/// tests can express "same day" / "different day" without real dates.
+/// [secondOffset] shifts fetchedAt within the same day to order releases.
+ChapterWithMangaDto _chapter({
+  required int id,
+  required int mangaId,
+  int day = 0,
+  int secondOffset = 0,
+  bool isRead = false,
+}) => ChapterWithMangaDto(
+  chapterNumber: id.toDouble(),
+  fetchedAt: '${day * 86400 + secondOffset}',
+  id: id,
+  mangaId: mangaId,
+  name: 'Chapter $id',
+  pageCount: 10,
+  sourceOrder: id,
+  uploadDate: '0',
+  url: 'chapter/$id',
+  meta: const [],
+  manga: _manga(mangaId),
+  user: Fragment$ChapterWithMangaDto$user(
+    isBookmarked: false,
+    isDownloaded: false,
+    isRead: isRead,
+    lastPageRead: 0,
+    lastReadAt: '0',
+  ),
+);
+
+void main() {
+  group('groupUpdatesForDisplay', () {
+    test('consecutive chapters from the same manga on the same day merge', () {
+      final result = groupUpdatesForDisplay([
+        _chapter(id: 1, mangaId: 1, day: 0),
+        _chapter(id: 2, mangaId: 1, day: 0),
+        _chapter(id: 3, mangaId: 1, day: 0),
+      ]);
+
+      expect(
+        result,
+        hasLength(1),
+        reason: 'all three chapters share manga and day — one group',
+      );
+      expect(
+        result.single.head.id,
+        1,
+        reason: 'all unread — the oldest release leads',
+      );
+      expect(
+        result.single.tail.map((c) => c.id),
+        unorderedEquals([2, 3]),
+        reason: 'the two non-head chapters fold into the tail',
+      );
+    });
+
+    test('same series and day separated by another series forms one group', () {
+      final items = [
+        _chapter(id: 1, mangaId: 1, day: 0),
+        _chapter(id: 9, mangaId: 2, day: 0),
+        _chapter(id: 2, mangaId: 1, day: 0),
+      ];
+      final result = groupUpdatesForDisplay(items);
+
+      expect(result, hasLength(2), reason: 'series 1 merges across series 2');
+      expect(
+        result.first.tail.map((c) => c.id),
+        [2],
+        reason: 'the separated row folds into the first group',
+      );
+      final headIndex = headFlatIndexToDisplayIndex(items, result);
+      expect(headIndex[0], 0, reason: 'first row of series 1 maps to group 0');
+      expect(
+        headIndex.containsKey(2),
+        isFalse,
+        reason: 'the separated row renders nothing',
+      );
+      expect(headIndex[1], 1, reason: 'series 2 keeps its own group');
+    });
+  });
+
+  group('pickGroupHead', () {
+    test('head is the oldest unread, newest when all are read', () {
+      final mixed = [
+        _chapter(id: 3, mangaId: 1, day: 0, secondOffset: 30),
+        _chapter(id: 1, mangaId: 1, day: 0, secondOffset: 10),
+        _chapter(id: 2, mangaId: 1, day: 0, secondOffset: 20, isRead: true),
+      ];
+      expect(
+        pickGroupHead(mixed).id,
+        1,
+        reason: 'the earliest unread release leads',
+      );
+
+      final allRead = [
+        _chapter(id: 1, mangaId: 1, day: 0, secondOffset: 10, isRead: true),
+        _chapter(id: 3, mangaId: 1, day: 0, secondOffset: 30, isRead: true),
+        _chapter(id: 2, mangaId: 1, day: 0, secondOffset: 20, isRead: true),
+      ];
+      expect(
+        pickGroupHead(allRead).id,
+        3,
+        reason: 'all read — the newest release leads',
+      );
+    });
+  });
+}

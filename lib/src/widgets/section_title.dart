@@ -1,0 +1,19 @@
+import 'package:material_ui/material_ui.dart';
+
+import '../constants/app_sizes.dart';
+import '../utils/extensions/custom_extensions.dart';
+
+class SectionTitle extends StatelessWidget {
+  const SectionTitle({super.key, required this.title});
+  final String title;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: KEdgeInsets.h16.size + KEdgeInsets.v4.size,
+        child: Text(
+          title,
+          // ThemeData.primaryColor is unset; use ColorScheme.primary for visible accent text.
+          style: context.textTheme.titleSmall
+              ?.copyWith(color: context.theme.colorScheme.primary),
+        ),
+      );
+}

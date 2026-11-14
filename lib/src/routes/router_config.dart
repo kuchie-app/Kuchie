@@ -1,0 +1,596 @@
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../constants/db_keys.dart';
+import '../constants/enum.dart';
+import '../features/about/presentation/about/about_screen.dart';
+import '../features/account/presentation/account_codes_screen.dart';
+import '../features/account/presentation/manage_users_screen.dart';
+import '../features/browse_center/domain/source/source_model.dart';
+import '../features/browse_center/presentation/browse/browse_screen.dart';
+import '../features/browse_center/presentation/extension/extension_info_screen.dart';
+import '../features/browse_center/presentation/extension/extension_screen.dart';
+import '../features/browse_center/presentation/extension_store/extension_store_screen.dart';
+import '../features/browse_center/presentation/global_search/global_search_screen.dart';
+import '../features/browse_center/presentation/source/source_filter_screen.dart';
+import '../features/browse_center/presentation/source/source_screen.dart';
+import '../features/browse_center/presentation/source_manga_list/source_manga_list_screen.dart';
+import '../features/browse_center/presentation/source_preference/source_preference_screen.dart';
+import '../features/history/presentation/history_screen.dart';
+import '../features/hotkeys/presentation/global_shortcut_host.dart';
+import '../features/hotkeys/presentation/hotkeys_settings_screen.dart';
+import '../features/library/presentation/category/edit_category_screen.dart';
+import '../features/library/presentation/duplicates/library_duplicates_screen.dart';
+import '../features/library/presentation/library/library_screen.dart';
+import '../features/local_collection/presentation/local_collection_home.dart';
+import '../features/manga_book/presentation/downloads/downloads_screen.dart';
+import '../features/manga_book/presentation/manga_details/manga_details_screen.dart';
+import '../features/manga_book/presentation/reader/reader_screen.dart';
+import '../features/manga_book/presentation/recommends/recommends_browse_screen.dart';
+import '../features/manga_book/presentation/recommends/recommends_screen.dart';
+import '../features/manga_book/presentation/upcoming/upcoming_screen.dart';
+import '../features/manga_book/presentation/update_errors/library_update_errors_screen.dart';
+import '../features/manga_book/presentation/updates/updates_screen.dart';
+import '../features/migration/domain/migration_models.dart';
+import '../features/migration/presentation/screens/migration_bulk_config_screen.dart';
+import '../features/migration/presentation/screens/migration_bulk_run_screen.dart';
+import '../features/migration/presentation/screens/migration_global_search_screen.dart';
+import '../features/migration/presentation/screens/migration_source_picker_screen.dart';
+import '../features/offline/presentation/offline_settings_screen.dart';
+import '../features/onboarding/data/collection_mode.dart';
+import '../features/onboarding/data/onboarding_complete.dart';
+import '../features/onboarding/presentation/onboarding_screen.dart';
+import '../features/quick_open/presentation/search_stack/search_stack_screen.dart';
+import '../features/settings/presentation/advanced/advanced_screen.dart';
+import '../features/settings/presentation/appearance/appearance_screen.dart';
+import '../features/settings/presentation/backup/backup_screen.dart';
+import '../features/settings/presentation/browse/browse_settings_screen.dart';
+import '../features/settings/presentation/connection/connection_screen.dart';
+import '../features/settings/presentation/downloads/downloads_settings_screen.dart';
+import '../features/settings/presentation/general/general_screen.dart';
+import '../features/settings/presentation/library/library_settings_screen.dart';
+import '../features/settings/presentation/more/more_screen.dart';
+import '../features/settings/presentation/notifications/notifications_settings_screen.dart';
+import '../features/settings/presentation/reader/reader_settings_screen.dart';
+import '../features/settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
+import '../features/settings/presentation/server/server_database_screen.dart';
+import '../features/settings/presentation/server/server_images_screen.dart';
+import '../features/settings/presentation/server/server_logs_screen.dart';
+import '../features/settings/presentation/server/server_network_screen.dart';
+import '../features/settings/presentation/server/server_opds_screen.dart';
+import '../features/settings/presentation/server/server_screen.dart';
+import '../features/settings/presentation/server/server_sign_in_screen.dart';
+import '../features/settings/presentation/server/server_web_interface_screen.dart';
+import '../features/settings/presentation/server/widget/images/image_conversions.dart';
+import '../features/settings/presentation/server/widget/images/image_processing_screen.dart';
+import '../features/settings/presentation/settings/settings_pane_scope.dart';
+import '../features/settings/presentation/settings/settings_screen.dart';
+import '../features/settings/presentation/settings/settings_window.dart';
+import '../features/settings/presentation/sync/sync_screen.dart';
+import '../features/tracking/presentation/settings/tracking_settings_screen.dart';
+import '../global_providers/global_providers.dart'
+    show sharedPreferencesProvider;
+import '../utils/extensions/custom_extensions.dart';
+import '../utils/motion/reduce_motion.dart';
+import '../widgets/desktop/desktop_page_frame.dart';
+import '../widgets/shell/detail_navigation_shell_screen.dart';
+import '../widgets/shell/navigation_shell_screen.dart';
+
+part 'router_config.g.dart';
+part 'detail_navigation_page.dart';
+part 'sub_routes/browser_routes.dart';
+part 'sub_routes/common_routes.dart';
+part 'sub_routes/downloads_routes.dart';
+part 'sub_routes/history_routes.dart';
+part 'sub_routes/library_routes.dart';
+part 'sub_routes/migration_routes.dart';
+part 'sub_routes/more_routes.dart';
+part 'sub_routes/updates_routes.dart';
+
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+final _quickOpenNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'Quick Open',
+);
+
+final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+final _browseNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'browse');
+
+abstract class Routes {
+  static const library = '/library/:categoryId';
+  static const libraryDuplicates = '/library-duplicates';
+
+  static const updates = '/updates';
+
+  static const upcoming = '/upcoming';
+
+  static const downloads = '/downloads';
+
+  static const history = 'history';
+
+  static const extensionRoute = '/extension';
+  static const migrate = '/migrate';
+  static const source = '/source';
+  static const sourceFilter = '/source-filter';
+  static const sourceManga = ':sourceId';
+  static const sourceMangaType = '$sourceManga/:sourceType';
+  static const sourcePreference = '$sourceManga/preference';
+
+  static const more = '/more';
+  static const settings = 'settings';
+  static const librarySettings = 'library';
+  static const editCategories = 'edit-categories';
+  static const browseSettings = 'browse';
+  static const extensionStoreSettings = 'extension-store';
+  static const readerSettings = 'reader';
+  static const appearanceSettings = 'appearance';
+  static const generalSettings = 'general';
+  static const backup = 'backup';
+  static const serverSettings = 'server';
+  static const serverNetwork = 'network';
+  static const serverWebInterface = 'web-interface';
+  static const serverOpds = 'opds';
+  static const serverImages = 'images';
+  static const serverDatabase = 'database';
+  static const serverSignIn = 'sign-in';
+  static const serverLogs = 'logs';
+  static const syncSettings = 'sync';
+  static const advancedSettings = 'advanced';
+  static const imageProcessing = 'image-processing';
+  static const downloadsSettings = 'downloads';
+  static const offlineSettings = 'offline';
+  static const notificationsSettings = 'notifications';
+  static const connection = 'connection';
+  static const account = 'account';
+  static const trackingSettings = 'tracking';
+  static const syncyomiSettings = 'syncyomi';
+  static const koreaderSyncSettings = 'koreader-sync';
+  static const hotkeysSettings = 'hotkeys';
+
+  static const mangaRoute = '/manga/:mangaId';
+  static const reader = 'chapter/:chapterId';
+  static const libraryUpdateErrors = "/library-update-errors";
+  static const about = 'about';
+  static const globalSearch = '/global-search';
+  static const globalSearchSource = 'source/:sourceId';
+  static const recommends = '/recommends/:mangaId';
+  static const recommendsBrowse = '/recommends/:mangaId/:providerName';
+  static const local = '/local';
+  static const onboarding = '/onboarding';
+
+  static const migrationGlobalSearch = '/migration/global-search';
+  static const migrationBulkConfig = '/migration/bulk-config';
+  static const migrationBulkRun = '/migration/bulk-run';
+  static const migrationSourcePicker = '/migration/source-picker';
+  static const migrationSourceManga = '/migration/source-manga';
+}
+
+/// Identity changes replace the container; keep the next initial location outside it.
+String? _pendingRouteAfterIdentityChange;
+
+void routeAfterIdentityChange(String location) {
+  _pendingRouteAfterIdentityChange = location;
+}
+
+const localAppearanceLocation = '/local-appearance';
+const localReaderSettingsLocation = '/local-reader-settings';
+
+String localCollectionLocation([String? section, int? request]) => Uri(
+  path: Routes.local,
+  queryParameters: section == null
+      ? null
+      : {'section': section, if (request != null) 'open': '$request'},
+).toString();
+
+Future<void> openLocalCollection(
+  BuildContext context,
+  WidgetRef ref, [
+  String? section,
+]) async {
+  await ref.read(collectionModeProvider.notifier).select(CollectionMode.local);
+  if (context.mounted) context.go(localCollectionLocation(section));
+}
+
+String serverCollectionLocation(String? section) => switch (section) {
+  'updates' => const UpdatesRoute().location,
+  'history' => const HistoryTabRoute().location,
+  'browse' => const BrowseSourceRoute().location,
+  'more' => const MoreRoute().location,
+  'downloads' => const DownloadsRoute().location,
+  _ => const LibraryRoute(categoryId: 0).location,
+};
+
+class _LocalCollectionRoute extends ConsumerWidget {
+  const _LocalCollectionRoute({super.key, required this.initialSection});
+
+  final String? initialSection;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => LocalCollectionHome(
+    initialSection: initialSection,
+    onOpenServer: (section) async {
+      final complete = ref.read(onboardingCompleteProvider) == true;
+      if (!complete) {
+        final prefs = ref.read(sharedPreferencesProvider);
+        await prefs.setString('onboarding.returnSection', section);
+        if ((prefs.getInt('onboarding.step') ?? 0) == 0) {
+          await prefs.setInt('onboarding.step', 1);
+        }
+      }
+      if (!context.mounted) return;
+      await ref
+          .read(collectionModeProvider.notifier)
+          .select(CollectionMode.server);
+      if (!context.mounted) return;
+      context.go(
+        complete
+            ? serverCollectionLocation(section)
+            : const OnboardingRoute().location,
+      );
+    },
+  );
+}
+
+@riverpod
+GoRouter routerConfig(Ref ref) {
+  final shellState = ref.read(navigationShellStateProvider);
+  ref.onDispose(() => shellState.shell = null);
+  final router = GoRouter(
+    routes: [
+      ...$appRoutes,
+      if (supportsLocalCollection) ...[
+        GoRoute(
+          path: Routes.local,
+          pageBuilder: (context, state) {
+            final request = state.uri.queryParameters['open'];
+            return MaterialPage<void>(
+              // Replace the page for a Live Activity link so any Local detail
+              // screens pushed above it are dismissed by Navigator.
+              key: request == null ? state.pageKey : ValueKey(state.uri),
+              child: _LocalCollectionRoute(
+                key: ValueKey(state.uri),
+                initialSection: state.uri.queryParameters['section'],
+              ),
+            );
+          },
+        ),
+        GoRoute(
+          path: localAppearanceLocation,
+          pageBuilder: (context, state) =>
+              _detailNavigationPage(context, state, const AppearanceScreen()),
+        ),
+        GoRoute(
+          path: localReaderSettingsLocation,
+          pageBuilder: (context, state) => _detailNavigationPage(
+            context,
+            state,
+            const ReaderSettingsScreen(),
+          ),
+        ),
+      ],
+    ],
+    debugLogDiagnostics: true,
+    initialLocation: const LibraryRoute(categoryId: 0).location,
+    navigatorKey: rootNavigatorKey,
+    redirect: (context, state) {
+      final complete = ref.read(onboardingCompleteProvider) ?? false;
+      final atOnboarding =
+          state.matchedLocation == const OnboardingRoute().location;
+      if (supportsLocalCollection) {
+        final mode = ref.read(collectionModeProvider);
+        final atLocal = const {
+          Routes.local,
+          localAppearanceLocation,
+          localReaderSettingsLocation,
+        }.contains(state.matchedLocation);
+        if (mode == CollectionMode.local) {
+          return atLocal ? null : localCollectionLocation();
+        }
+        if (mode == null) {
+          return atOnboarding ? null : const OnboardingRoute().location;
+        }
+        if (atLocal && complete) return serverCollectionLocation(null);
+      }
+      if (!complete && !atOnboarding) return const OnboardingRoute().location;
+      if (complete && atOnboarding) {
+        return const LibraryRoute(categoryId: 0).location;
+      }
+      final pending = _pendingRouteAfterIdentityChange;
+      if (pending != null) {
+        _pendingRouteAfterIdentityChange = null;
+        if (state.matchedLocation != pending) return pending;
+      }
+      // Redirect /more only when the desktop sidebar shows its Settings foot.
+      if (state.matchedLocation == const MoreRoute().location &&
+          context.usesDesktopShell &&
+          context.windowSizeClass >= WindowSizeClass.expanded) {
+        return const LibraryRoute(categoryId: 0).location;
+      }
+      return null;
+    },
+  );
+  ref.onDispose(router.dispose);
+  return router;
+}
+
+@TypedShellRoute<QuickSearchRoute>(
+  routes: [
+    TypedStatefulShellRoute<NavigationShellRoute>(
+      branches: [
+        TypedStatefulShellBranch<LibraryBranch>(
+          routes: [
+            TypedGoRoute<LibraryRoute>(path: Routes.library, routes: []),
+          ],
+        ),
+        TypedStatefulShellBranch<UpdatesBranch>(
+          routes: [TypedGoRoute<UpdatesRoute>(path: Routes.updates)],
+        ),
+        TypedStatefulShellBranch<HistoryBranch>(
+          routes: [TypedGoRoute<HistoryTabRoute>(path: '/history')],
+        ),
+        TypedStatefulShellBranch<BrowserBranch>(
+          routes: [
+            TypedStatefulShellRoute<BrowseShellRoute>(
+              branches: [
+                TypedStatefulShellBranch<BrowseSourceBranch>(
+                  routes: [
+                    TypedGoRoute<BrowseSourceRoute>(
+                      path: Routes.source,
+                      routes: [
+                        TypedGoRoute<SourcePreferenceRoute>(
+                          path: Routes.sourcePreference,
+                        ),
+                        TypedGoRoute<SourceTypeRoute>(
+                          path: Routes.sourceMangaType,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                TypedStatefulShellBranch<BrowseExtensionBranch>(
+                  routes: [
+                    TypedGoRoute<BrowseExtensionRoute>(
+                      path: Routes.extensionRoute,
+                      routes: [
+                        TypedGoRoute<ExtensionInfoRoute>(path: ':pkgName'),
+                      ],
+                    ),
+                  ],
+                ),
+                TypedStatefulShellBranch<BrowseMigrateBranch>(
+                  routes: [
+                    TypedGoRoute<BrowseMigrateRoute>(path: Routes.migrate),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+        TypedStatefulShellBranch<DownloadsBranch>(
+          routes: [TypedGoRoute<DownloadsRoute>(path: Routes.downloads)],
+        ),
+        TypedStatefulShellBranch<MoreBranch>(
+          routes: [
+            TypedGoRoute<MoreRoute>(
+              path: Routes.more,
+              routes: [
+                TypedGoRoute<HistoryRoute>(path: Routes.history),
+                TypedShellRoute<SettingsWindowShellRoute>(
+                  routes: [
+                    TypedGoRoute<AboutRoute>(path: Routes.about),
+                    TypedGoRoute<ConnectionRoute>(path: Routes.connection),
+                    TypedGoRoute<AccountRoute>(
+                      path: Routes.account,
+                      routes: [
+                        TypedGoRoute<ManageUsersRoute>(
+                          path: 'users',
+                          routes: [
+                            TypedGoRoute<AccountCodesRoute>(path: 'codes'),
+                          ],
+                        ),
+                      ],
+                    ),
+                    TypedGoRoute<SettingsRoute>(
+                      path: Routes.settings,
+                      routes: [
+                        TypedGoRoute<LibrarySettingsRoute>(
+                          path: Routes.librarySettings,
+                          routes: [
+                            TypedGoRoute<EditCategoriesRoute>(
+                              path: Routes.editCategories,
+                            ),
+                            TypedGoRoute<SettingsLibraryDuplicatesRoute>(
+                              path: 'duplicates',
+                            ),
+                          ],
+                        ),
+                        TypedGoRoute<ServerSettingsRoute>(
+                          path: Routes.serverSettings,
+                          routes: [
+                            TypedGoRoute<ImageProcessingRoute>(
+                              path: Routes.imageProcessing,
+                            ),
+                            TypedGoRoute<ServerSignInRoute>(
+                              path: Routes.serverSignIn,
+                            ),
+                            TypedGoRoute<ServerNetworkRoute>(
+                              path: Routes.serverNetwork,
+                            ),
+                            TypedGoRoute<ServerWebInterfaceRoute>(
+                              path: Routes.serverWebInterface,
+                            ),
+                            TypedGoRoute<ServerOpdsRoute>(
+                              path: Routes.serverOpds,
+                            ),
+                            TypedGoRoute<ServerImagesRoute>(
+                              path: Routes.serverImages,
+                            ),
+                            TypedGoRoute<ServerDatabaseRoute>(
+                              path: Routes.serverDatabase,
+                            ),
+                            TypedGoRoute<ServerLogsRoute>(
+                              path: Routes.serverLogs,
+                            ),
+                          ],
+                        ),
+                        TypedGoRoute<SyncRoute>(path: Routes.syncSettings),
+                        TypedGoRoute<AdvancedRoute>(
+                          path: Routes.advancedSettings,
+                        ),
+                        TypedGoRoute<ReaderSettingsRoute>(
+                          path: Routes.readerSettings,
+                        ),
+                        TypedGoRoute<AppearanceSettingsRoute>(
+                          path: Routes.appearanceSettings,
+                        ),
+                        TypedGoRoute<GeneralSettingsRoute>(
+                          path: Routes.generalSettings,
+                        ),
+                        TypedGoRoute<BrowseSettingsRoute>(
+                          path: Routes.browseSettings,
+                          routes: [
+                            TypedGoRoute<ExtensionStoreRoute>(
+                              path: Routes.extensionStoreSettings,
+                            ),
+                          ],
+                        ),
+                        TypedGoRoute<BackupRoute>(path: Routes.backup),
+                        TypedGoRoute<DownloadsSettingsRoute>(
+                          path: Routes.downloadsSettings,
+                        ),
+                        TypedGoRoute<OfflineSettingsRoute>(
+                          path: Routes.offlineSettings,
+                        ),
+                        TypedGoRoute<NotificationsSettingsRoute>(
+                          path: Routes.notificationsSettings,
+                        ),
+                        TypedGoRoute<TrackingSettingsRoute>(
+                          path: Routes.trackingSettings,
+                        ),
+                        TypedGoRoute<SyncYomiSettingsRoute>(
+                          path: Routes.syncyomiSettings,
+                        ),
+                        TypedGoRoute<KoreaderSyncSettingsRoute>(
+                          path: Routes.koreaderSyncSettings,
+                        ),
+                        TypedGoRoute<HotkeysSettingsRoute>(
+                          path: Routes.hotkeysSettings,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+    TypedShellRoute<DetailNavigationShellRoute>(
+      routes: [
+        TypedGoRoute<MangaRoute>(
+          path: Routes.mangaRoute,
+          routes: [TypedGoRoute<ReaderRoute>(path: Routes.reader)],
+        ),
+        TypedGoRoute<LibraryUpdateErrorsRoute>(
+          path: Routes.libraryUpdateErrors,
+        ),
+        TypedGoRoute<GlobalSearchRoute>(
+          path: Routes.globalSearch,
+          routes: [
+            TypedGoRoute<GlobalSearchSourceRoute>(
+              path: Routes.globalSearchSource,
+            ),
+          ],
+        ),
+        TypedGoRoute<LibraryDuplicatesRoute>(path: Routes.libraryDuplicates),
+        TypedGoRoute<RecommendsRoute>(path: Routes.recommends),
+        TypedGoRoute<RecommendsBrowseRoute>(path: Routes.recommendsBrowse),
+        TypedGoRoute<SourceFilterRoute>(path: Routes.sourceFilter),
+        TypedGoRoute<MigrationGlobalSearchRoute>(
+          path: Routes.migrationGlobalSearch,
+        ),
+        TypedGoRoute<MigrationBulkConfigRoute>(
+          path: Routes.migrationBulkConfig,
+        ),
+        TypedGoRoute<MigrationBulkRunRoute>(path: Routes.migrationBulkRun),
+        TypedGoRoute<MigrationSourcePickerRoute>(
+          path: Routes.migrationSourcePicker,
+        ),
+        TypedGoRoute<MigrationSourceMangaRoute>(
+          path: Routes.migrationSourceManga,
+        ),
+      ],
+    ),
+  ],
+)
+@immutable
+class QuickSearchRoute extends ShellRouteData {
+  const QuickSearchRoute();
+
+  static final $navigatorKey = _quickOpenNavigatorKey;
+
+  @override
+  Widget builder(context, state, navigator) =>
+      AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          systemNavigationBarColor: Theme.of(
+            context,
+          ).colorScheme.surface.withValues(alpha: 0.60),
+          systemNavigationBarIconBrightness:
+              Theme.of(context).brightness == Brightness.dark
+              ? Brightness.light
+              : Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
+        child: GlobalShortcutHost(child: SearchStackScreen(child: navigator)),
+      );
+
+  @override
+  Page<void> pageBuilder(context, state, navigator) =>
+      navigationShellPage(context, state, builder(context, state, navigator));
+}
+
+class NavigationShellRoute extends StatefulShellRouteData {
+  const NavigationShellRoute();
+
+  static final $navigatorKey = _shellNavigatorKey;
+
+  @override
+  Widget builder(context, state, navigationShell) => Consumer(
+    builder: (context, ref, _) {
+      ref.read(navigationShellStateProvider).shell = navigationShell;
+      return NavigationShellScreen(child: navigationShell);
+    },
+  );
+
+  @override
+  Page<void> pageBuilder(context, state, navigationShell) =>
+      navigationShellPage(
+        context,
+        state,
+        builder(context, state, navigationShell),
+      );
+}
+
+final navigationShellStateProvider = Provider((ref) => NavigationShellState());
+
+class NavigationShellState {
+  StatefulNavigationShell? shell;
+}
+
+class DetailNavigationShellRoute extends ShellRouteData {
+  const DetailNavigationShellRoute();
+
+  @override
+  Widget builder(context, state, navigator) =>
+      DetailNavigationShellScreen(framed: false, child: navigator);
+
+  @override
+  Page<void> pageBuilder(context, state, navigator) =>
+      detailNavigationShellPage(context, state, navigator);
+}

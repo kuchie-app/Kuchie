@@ -1,0 +1,119 @@
+// Copyright (c) 2022 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:material_ui/material_ui.dart';
+
+import '../../utils/extensions/custom_extensions.dart';
+import '../count_pill.dart';
+import 'desktop_page_frame.dart';
+
+class DesktopViewSwitchBar extends StatelessWidget {
+  const DesktopViewSwitchBar({
+    super.key,
+    required this.labels,
+    this.counts,
+    required this.selectedIndex,
+    required this.onChanged,
+  }) : assert(counts == null || counts.length == labels.length);
+
+  final List<String> labels;
+  final List<int>? counts;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 12, 12, 12)
+          .onDesktopPageLine(context, top: true),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: context.colorScheme.outlineVariant),
+        ),
+      ),
+      alignment: Alignment.centerLeft,
+      child: DesktopViewSwitch(
+        labels: labels,
+        counts: counts,
+        selectedIndex: selectedIndex,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+class DesktopViewSwitch extends StatelessWidget {
+  const DesktopViewSwitch({
+    super.key,
+    required this.labels,
+    this.counts,
+    required this.selectedIndex,
+    required this.onChanged,
+  }) : assert(counts == null || counts.length == labels.length);
+
+  final List<String> labels;
+  final List<int>? counts;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Semantics(
+              selected: selectedIndex == i,
+              inMutuallyExclusiveGroup: true,
+              child: Material(
+                color: selectedIndex == i
+                    ? cs.primaryContainer
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(7),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(7),
+                  onTap: () => onChanged(i),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: DefaultTextStyle.merge(
+                      style: context.textTheme.labelLarge?.copyWith(
+                        color: selectedIndex == i ? cs.primary : cs.onSurface,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            labels[i],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if ((counts?[i] ?? 0) > 0) ...[
+                            const SizedBox(width: 4),
+                            CountPill(count: counts![i]),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

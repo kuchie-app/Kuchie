@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Panel Kiri</title>
+  <defs>
+    <linearGradient id="ink" x2=".82" y2="1">
+      <stop stop-color="#32254D"/><stop offset="1" stop-color="#151225"/>
+    </linearGradient>
+    <linearGradient id="violet" x2=".93" y2="1">
+      <stop stop-color="#D5C6FF"/><stop offset="1" stop-color="#8B72E4"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#ink)" d="M0 0H1024V1024H0Z"/>
+  <path d="M679 246H285q-39 0-39 39v454q0 39 39 39h454q39 0 39-39V462"
+        fill="none" stroke="url(#violet)" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill="#282039" d="M295 616 729 536V729H295Z"/>
+  <path d="M477 627c-70 3-118-49-174-55-28-3-53 7-89 23l39 29-30 47c44-17 69-25 98-19 51 11 90 61 151 62 39 0 82-25 117-53l-39-68Z"
+        fill="#BBA7FC" stroke="#20182F" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M335 383c67-25 137-34 221-48l194-39c6-1 13 2 16 13l24 52c16 33 42 49 70 80l30 34c-10 53-31 99-70 132-46 38-106 55-168 58-65-1-121-22-169-62-15-69-40-121-70-154-23-26-48-46-78-66Z"
+        fill="#211B31" stroke="#181326" stroke-width="21" stroke-linejoin="round"/>
+  <path d="M380 375c65-21 126-21 188-39l167-33-163 147-70 138c-18-91-62-162-122-213Z" fill="#5D4E77"/>
+  <path d="M503 583c49-75 130-148 237-274l-69 134-44 58c-45 20-91 49-124 82Z" fill="#FAF1DF"/>
+  <path d="m745 341 33 31c19 20 32 30 61 60l29 34c-52-22-103-41-151-15l-35 26Z" fill="#49395E"/>
+  <path d="M608 572c20-53 55-101 102-122 44-23 77-20 115 4 49 32 41 72 9 110-31 38-83 62-133 63-34-5-69-25-93-55Z"
+        fill="#FFF3DE" stroke="#1D172C" stroke-width="14"/>
+  <ellipse cx="706" cy="548" rx="20" ry="23" fill="#21192E" transform="rotate(-13 706 548)"/>
+  <ellipse cx="798" cy="511" rx="18" ry="21" fill="#21192E" transform="rotate(-15 798 511)"/>
+  <path d="M569 643c43 2 79-22 104-15l33 19-7 37-32 10c-43-11-65 10-101 14l-25-31Z" fill="url(#violet)" stroke="#20182F" stroke-width="14"/>
+  <path d="M778 198h50m-25-25v50" stroke="#D7C9FF" stroke-width="13" opacity=".72" stroke-linecap="round"/>
+</svg>

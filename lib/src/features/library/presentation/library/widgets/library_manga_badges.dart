@@ -1,0 +1,187 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../../constants/enum.dart';
+import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../widgets/custom_checkbox_list_tile.dart';
+import '../../../../../widgets/manga_cover/providers/manga_cover_providers.dart';
+import '../../../../../widgets/organizer_heading.dart';
+
+class LibraryMangaBadges extends ConsumerWidget {
+  const LibraryMangaBadges({super.key, this.scrollable = true});
+
+  /// Disable scrolling when embedded in another scrollable.
+  final bool scrollable;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadMode =
+        ref.watch(unreadBadgeStyleProvider) ?? UnreadBadgeMode.count;
+
+    return ListView(
+      shrinkWrap: true,
+      physics: scrollable ? null : const NeverScrollableScrollPhysics(),
+      children: [
+        OrganizerHeading(context.l10n.unreadBadgeMode),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final mode in UnreadBadgeMode.values)
+                FilterChip(
+                  selected: unreadMode == mode,
+                  showCheckmark: false,
+                  label: Text(mode.toLocale(context)),
+                  onSelected: (_) =>
+                      ref.read(unreadBadgeStyleProvider.notifier).update(mode),
+                ),
+            ],
+          ),
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.downloaded,
+          provider: downloadedBadgeProvider,
+          onChanged: ref.read(downloadedBadgeProvider.notifier).update,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.onDevice,
+          provider: onDeviceBadgeProvider,
+          onChanged: ref.read(onDeviceBadgeProvider.notifier).update,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.readProgressBar,
+          provider: readProgressBarProvider,
+          onChanged: ref.read(readProgressBarProvider.notifier).update,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.continueReadingButton,
+          provider: showContinueReadingButtonProvider,
+          onChanged: ref
+              .read(showContinueReadingButtonProvider.notifier)
+              .update,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.sourceBadge,
+          provider: sourceBadgeProvider,
+          onChanged: ref.read(sourceBadgeProvider.notifier).update,
+        ),
+        CustomCheckboxListTile(
+          title: context.l10n.languageBadge,
+          provider: languageBadgeProvider,
+          onChanged: ref.read(languageBadgeProvider.notifier).update,
+        ),
+        OrganizerHeading(context.l10n.badgeLayout),
+        OrganizerHint(context.l10n.badgeLayoutHint),
+        const BadgeLayoutList(),
+      ],
+    );
+  }
+}
+
+class BadgeLayoutList extends ConsumerWidget {
+  const BadgeLayoutList({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final layout = ref.watch(libraryBadgeLayoutProvider);
+
+    // onReorderItem already adjusts for removal; newIndex is the final slot.
+    void move(int oldIndex, int newIndex) {
+      final ids = layout.map((p) => p.badge.id).toList();
+      ids.insert(newIndex, ids.removeAt(oldIndex));
+      ref.read(badgeOrderProvider.notifier).update(ids);
+    }
+
+    void toggleSide(LibraryBadge badge, BadgeSide current) {
+      final right = layout
+          .where((p) => p.side == BadgeSide.right)
+          .map((p) => p.badge.id)
+          .toSet();
+      if (current == BadgeSide.right) {
+        right.remove(badge.id);
+      } else {
+        right.add(badge.id);
+      }
+      ref.read(badgeRightSideProvider.notifier).update(right.toList());
+    }
+
+    return ReorderableListView(
+      // The organizer's outer ListView owns scrolling.
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: move,
+      children: [
+        for (var i = 0; i < layout.length; i++)
+          _BadgeLayoutRow(
+            key: ValueKey(layout[i].badge.id),
+            index: i,
+            badge: layout[i].badge,
+            side: layout[i].side,
+            onToggleSide: () => toggleSide(layout[i].badge, layout[i].side),
+          ),
+      ],
+    );
+  }
+}
+
+class _BadgeLayoutRow extends StatelessWidget {
+  const _BadgeLayoutRow({
+    super.key,
+    required this.index,
+    required this.badge,
+    required this.side,
+    required this.onToggleSide,
+  });
+
+  final int index;
+  final LibraryBadge badge;
+  final BadgeSide side;
+  final VoidCallback onToggleSide;
+
+  @override
+  Widget build(BuildContext context) {
+    final isRight = side == BadgeSide.right;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          // Use an explicit drag handle so the side button stays tappable.
+          ReorderableDragStartListener(
+            index: index,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Icon(FluentIcons.re_order_24_regular),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              badge.toLocale(context),
+              style: context.theme.textTheme.bodyMedium,
+            ),
+          ),
+          IconButton(
+            tooltip: isRight
+                ? context.l10n.badgeMoveToLeft
+                : context.l10n.badgeMoveToRight,
+            onPressed: onToggleSide,
+            icon: Icon(
+              isRight
+                  ? FluentIcons.text_align_right_24_regular
+                  : FluentIcons.text_align_left_24_regular,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

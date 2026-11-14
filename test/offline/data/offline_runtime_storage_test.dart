@@ -1,0 +1,77 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/offline/data/offline_page_store_io.dart';
+import 'package:kuchie/src/features/offline/data/offline_paths.dart';
+import 'package:kuchie/src/features/offline/data/offline_runtime_storage.dart';
+
+import '../../helpers/offline_test_db.dart';
+
+void main() {
+  late Directory root;
+  late ProviderContainer container;
+  late OfflineRuntimeStorage runtime;
+  setUp(() async {
+    root = await Directory.systemTemp.createTemp('offline-account-runtime-');
+    container = ProviderContainer();
+    runtime = container.read(offlineRuntimeStorageProvider.notifier);
+  });
+  tearDown(() async {
+    await runtime.replace(drain: () async {}, open: () async => null);
+    container.dispose();
+  });
+  Future<OfflineStorage> open(String account) async {
+    final directory = Directory('${root.path}/$account');
+    await directory.create();
+    final paths = OfflinePaths(directory.path);
+    return (
+      db: testOfflineDatabaseFile('${directory.path}/catalog.sqlite'),
+      paths: paths,
+      store: IoOfflinePageStore(paths),
+    );
+  }
+
+  test('drains A writes before B opens and restores A on return', () async {
+    await runtime.replace(drain: () async {}, open: () => open('A'));
+    final a = container.read(offlineRuntimeStorageProvider)!;
+    final writing = Completer<void>();
+    final release = Completer<void>();
+    final write = () async {
+      writing.complete();
+      await release.future;
+      await a.db.upsertMangaMetadata(
+        id: 1,
+        title: 'A private title',
+        updatedAt: DateTime(2026),
+      );
+    }();
+    await writing.future;
+    var openedB = false;
+    final switchToB = runtime.replace(
+      drain: () => write,
+      open: () async {
+        openedB = true;
+        return open('B');
+      },
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(openedB, isFalse);
+    release.complete();
+    await switchToB;
+    final b = container.read(offlineRuntimeStorageProvider)!;
+    expect(await b.db.mangaById(1), isNull);
+    await b.db.upsertMangaMetadata(
+      id: 1,
+      title: 'B private title',
+      updatedAt: DateTime(2026),
+    );
+    await runtime.replace(drain: () async {}, open: () => open('A'));
+    expect(
+      (await container.read(offlineRuntimeStorageProvider)!.db.mangaById(1))
+          ?.title,
+      'A private title',
+    );
+  });
+}

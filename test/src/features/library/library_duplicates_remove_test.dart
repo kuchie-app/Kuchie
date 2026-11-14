@@ -1,0 +1,119 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/features/library/domain/duplicate_matcher.dart';
+import 'package:kuchie/src/features/library/presentation/duplicates/controller/library_duplicates_controller.dart';
+import 'package:kuchie/src/features/library/presentation/duplicates/library_duplicates_screen.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_controller.dart';
+import 'package:kuchie/src/features/library/presentation/library/controller/library_manga_list.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
+import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/l10n/generated/app_localizations.dart';
+import 'package:kuchie/src/widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../manga_book/reader/reader_test_fixtures.dart';
+
+MangaDto _m(int id, String title) =>
+    testManga().copyWith.call(id: id, title: title);
+
+/// Stubs the scan result and counts how many times the provider (re)built, so a
+/// test can prove a removal never re-triggers the scan.
+class _FakeLibraryDuplicates extends LibraryDuplicates {
+  _FakeLibraryDuplicates(this._groups, this._buildCount);
+  final List<DupGroup> _groups;
+  final List<int> _buildCount;
+  @override
+  Future<List<DupGroup>> build({required bool checkDescriptions}) async {
+    _buildCount[0]++;
+    return _groups;
+  }
+}
+
+Future<void> _pump(
+  WidgetTester tester, {
+  required List<MangaDto> library,
+  required List<DupGroup> groups,
+  required DuplicateEntryRemover remover,
+  List<int>? buildCount,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final client = GraphQLClient(
+    link: HttpLink('http://localhost'),
+    cache: GraphQLCache(),
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        graphQlClientProvider.overrideWithValue(client),
+        libraryMangaListProvider.overrideWith((ref) async => library),
+        libraryTrackerNamesProvider.overrideWithValue(const {}),
+        libraryDuplicatesProvider(
+          checkDescriptions: false,
+        ).overrideWith(() => _FakeLibraryDuplicates(groups, buildCount ?? [0])),
+        duplicateEntryRemoverProvider.overrideWithValue(remover),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const LibraryDuplicatesScreen(),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Long-press the [index]-th cover to enter/extend the selection.
+Future<void> _longPressCover(WidgetTester tester, int index) async {
+  await tester.longPress(find.byType(MangaCoverGridTile).at(index));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  group('multi-select remove', () {
+    testWidgets('confirming removes all: group drops below two and disappears, '
+        'no rescan', (tester) async {
+      final calls = <int>[];
+      final buildCount = [0];
+      await _pump(
+        tester,
+        library: [_m(1, 'A'), _m(2, 'A')],
+        groups: const [
+          (header: 'A', memberIds: [1, 2], reasons: {DupReason.title}),
+        ],
+        remover: (ref, id) async => calls.add(id),
+        buildCount: buildCount,
+      );
+
+      expect(buildCount[0], 1);
+
+      await _longPressCover(tester, 0);
+      await _longPressCover(tester, 1);
+      await tester.tap(
+        find.widgetWithIcon(IconButton, FluentIcons.delete_24_regular),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      expect(calls, [1, 2]);
+      // Both members gone → the group vanishes → empty state.
+      expect(find.byType(MangaCoverGridTile), findsNothing);
+      expect(find.text('No results found'), findsOneWidget);
+      expect(find.text('Removed 2 from library'), findsOneWidget);
+      // The read-once scan provider must not rebuild on a removal.
+      expect(buildCount[0], 1);
+    });
+  });
+}

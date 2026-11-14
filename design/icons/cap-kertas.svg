@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Cap Kertas</title>
+  <defs>
+    <linearGradient id="paper" x2=".76" y2="1">
+      <stop stop-color="#FFF1DB"/><stop offset="1" stop-color="#E9D5B7"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="6" cy="6" r="3.2" fill="#F7DEC0"/><circle cx="18" cy="18" r="3.2" fill="#F7DEC0"/>
+    </pattern>
+  </defs>
+  <path fill="url(#paper)" d="M0 0H1024V1024H0Z"/>
+  <circle cx="512" cy="510" r="324" fill="#312336"/>
+  <path d="M191 559a324 324 0 0 0 588 133q-149 32-302-1-162-39-286-132Z"
+        fill="url(#dots)" opacity=".22"/>
+  <path d="M483 641c-72-14-109-74-182-64-26 4-49 18-77 32l41 20-26 44c41-19 69-33 100-30 58 5 93 53 149 58 35 4 71-15 105-39l-39-54Z" fill="#BEA0E9"/>
+  <path d="M286 397c58-22 116-30 176-41l213-45c8-1 13 5 15 14 8 40 23 76 58 103l59 53c-15 87-75 145-145 168-72 24-151 11-207-30-18-71-41-117-79-158-26-28-54-48-90-64Z"
+        fill="#3B2B43" stroke="#F2DFC5" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M317 399 658 326 489 494l-30 111c-18-84-68-152-142-206Z" fill="#6A516A"/>
+  <path d="M453 614c42-97 111-169 220-290l-66 142-50 66c-46 21-80 53-104 82Z" fill="#F5E5CC"/>
+  <path d="M559 579c12-47 43-88 85-113 35-22 64-25 102-3 42 25 45 66 16 103-37 49-85 64-128 64-30-9-52-29-75-51Z"
+        fill="#F5E5CC" stroke="#302236" stroke-width="12"/>
+  <ellipse cx="640" cy="557" rx="19" ry="23" fill="#302236" transform="rotate(-17 640 557)"/>
+  <ellipse cx="721" cy="526" rx="17" ry="20" fill="#302236" transform="rotate(-17 721 526)"/>
+  <path d="M489 645c28 0 51-15 81-18l29 14-3 35-28 13c-36-6-64 14-89 11l-18-29Z" fill="#BEA0E9" stroke="#302236" stroke-width="11" stroke-linejoin="round"/>
+</svg>

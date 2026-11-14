@@ -1,0 +1,87 @@
+// Copyright (c) 2023 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/app_utils.dart';
+import '../../../../utils/misc/toast/toast.dart';
+import '../../../../widgets/desktop/desktop_top_bar.dart';
+import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
+import '../../../account/data/account_providers.dart';
+import '../../data/source_repository/source_repository.dart';
+import '../source_manga_list/controller/source_manga_controller.dart';
+import 'controller/source_preference_controller.dart';
+import 'widgets/source_preference_to_widget.dart';
+
+class SourcePreferenceScreen extends HookConsumerWidget {
+  const SourcePreferenceScreen({super.key, required this.sourceId});
+
+  final String sourceId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canManage = ref
+        .watch(settledAccountAccessProvider)
+        .allows(Enum$UserPermission.MANAGE_SOURCE_PREFERENCES);
+    final source = ref.watch(sourceProvider(sourceId));
+    final preferenceProvider = baseSourcePreferenceListProvider(sourceId);
+    final networkPreferences = ref.watch(preferenceProvider);
+    final preferences = networkPreferences.value;
+    final topBar = showsMergedTopBar(context);
+    final title = Text(
+      source.value?.displayName ?? "",
+      style: context.textTheme.titleLarge,
+    );
+    final scaffold = Scaffold(
+      appBar: topBar ? null : AppBar(title: title),
+      body: networkPreferences.showUiWhenData(
+        context,
+        (data) => Column(
+          children: [
+            if (!canManage)
+              ListTile(subtitle: Text(context.l10n.accountPermissionDenied)),
+            Expanded(
+              child: ListView.builder(
+                itemBuilder: (context, index) {
+                  final sourcePreference = preferences?[index];
+                  if (sourcePreference == null) return const SizedBox.shrink();
+                  return SourcePreferenceToWidget(
+                    enabled: canManage,
+                    key: ValueKey("Source-preference-$index"),
+                    index: index,
+                    sourcePreference: sourcePreference,
+                    onChanged: (value) async {
+                      await AppUtils.guard(
+                        () => ref
+                            .read(sourceRepositoryProvider)
+                            .updateSourcePreferenceById(
+                              sourceId,
+                              value.copyWith(position: index),
+                            ),
+                        ref.read(toastProvider),
+                      );
+                      if (context.mounted) ref.invalidate(preferenceProvider);
+                    },
+                  );
+                },
+                itemCount: preferences?.length ?? 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return titleTopBarSlot(
+      topBar: topBar,
+      leading: detailNavigationBackButton(context),
+      title: title,
+      child: scaffold,
+    );
+  }
+}

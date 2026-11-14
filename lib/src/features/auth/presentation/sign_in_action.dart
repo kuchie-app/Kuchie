@@ -1,0 +1,84 @@
+// Copyright (c) 2026 Contributors to the Suwayomi project
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import 'package:graphql/client.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+import '../../../constants/enum.dart';
+import '../../../global_providers/global_providers.dart';
+import '../../../routes/router_config.dart';
+import '../../../utils/extensions/custom_extensions.dart';
+import '../../../utils/misc/toast/toast.dart';
+import '../../offline/data/background/background_download_controller_shim.dart';
+import '../../settings/presentation/server/widget/credential_popup/login_credentials_popup.dart';
+import '../../settings/presentation/server/widget/sign_in/graphql/__generated__/sign_in.graphql.dart';
+import '../data/auth_coordinator.dart';
+import '../data/auth_credentials_store.dart';
+import '../data/auth_recovery_target.dart';
+import '../data/auth_state.dart';
+import '../data/secure_credentials_provider.dart';
+
+Future<void> performSignIn(
+  WidgetRef ref, {
+  required AuthType authType,
+  required String serverBaseUrl,
+  required String username,
+  required String password,
+}) {
+  resetCredentialWriteFailure();
+  return ref.read(backgroundDownloadControllerProvider).changeIdentity(() async {
+    final store = ref.read(authCredentialsStoreProvider.notifier);
+
+    final coordinator = ref.read(authCoordinatorProvider.notifier);
+    switch (authType) {
+      case AuthType.basic:
+        await coordinator.loginBasic(
+          serverBaseUrl: serverBaseUrl,
+          username: username,
+          password: password,
+        );
+      case AuthType.simpleLogin:
+        await coordinator.loginSimple(
+          serverBaseUrl: serverBaseUrl,
+          username: username,
+          password: password,
+        );
+      case AuthType.uiLogin:
+        await coordinator.loginUi(
+          gqlClient: ref.read(unauthenticatedGraphQlClientProvider),
+          username: username,
+          password: password,
+          serverBaseUrl: serverBaseUrl,
+        );
+      case AuthType.none:
+        final status = await ref
+            .read(unauthenticatedGraphQlClientProvider)
+            .query$ServerSignInStatus(
+              Options$Query$ServerSignInStatus(
+                fetchPolicy: FetchPolicy.noCache,
+              ),
+            )
+            .getData((data) => data.settings);
+        if (status == null) {
+          throw StateError('Could not verify anonymous access');
+    }
+    }
+    if (authType != AuthType.uiLogin) await store.clearUiLoginTokens();
+    if (authType != AuthType.simpleLogin) await store.clearSimpleLoginCookie();
+    if (authType != AuthType.basic) await store.clearBasicCredentials();
+    ref.read(authUsernameProvider.notifier).update(username);
+    ref.read(authTypeKeyProvider.notifier).update(authType);
+    ref.read(authRecoveryTargetProvider.notifier).set(null);
+    ref.read(needsReauthProvider.notifier).set(false);
+    // Sign-in remains active in memory even when it cannot be saved for next launch.
+    if (credentialWriteFailedThisRun) {
+      final context = rootNavigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        ref.read(toastProvider)?.show(context.l10n.authCredentialsNotSaved);
+      }
+    }
+  });
+}
