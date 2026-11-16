@@ -21,8 +21,6 @@ import 'package:workmanager/workmanager.dart';
 import 'src/constants/brand_icons.dart';
 import 'src/constants/enum.dart';
 import 'src/constants/inter_license.dart';
-import 'src/constants/timeout_constants.dart';
-import 'src/features/about/presentation/about/controllers/about_controller.dart';
 import 'src/features/account/data/account_bootstrap.dart';
 import 'src/features/account/data/account_session_startup.dart';
 import 'src/features/account/data/account_session_storage.dart';
@@ -35,7 +33,6 @@ import 'src/features/auth/data/auth_state.dart';
 import 'src/features/auth/data/basic_auth_migration.dart';
 import 'src/features/auth/data/custom_headers_store.dart';
 import 'src/features/auth/data/secure_credentials_provider.dart';
-import 'src/features/library/data/badge_preference_migration.dart';
 import 'src/features/notifications/data/background/notification_background_entry.dart';
 import 'src/features/offline/data/account_storage_recovery_state.dart';
 import 'src/features/offline/data/background/background_download_controller_shim.dart';
@@ -49,18 +46,17 @@ import 'src/features/offline/data/offline_runtime_storage.dart';
 import 'src/features/offline/data/offline_server_identity_repository.dart';
 import 'src/features/onboarding/data/collection_mode.dart';
 import 'src/features/onboarding/data/onboarding_complete.dart';
-import 'src/features/settings/data/grid_cover_preference_migration.dart';
-import 'src/features/settings/data/reader_animation_preference_migration.dart';
-import 'src/features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import 'src/features/settings/presentation/server/widget/client/server_url_tile/hosted_base_uri.dart';
-import 'src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart'
-    show serverExternalUrlProvider;
-import 'src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
-import 'src/features/settings/presentation/server/widget/credential_popup/login_credentials_popup.dart';
+import 'src/features/settings/data/preference_migrations.dart';
+import 'src/features/settings/data/server_connection/auth_username.dart';
+import 'src/features/settings/data/server_connection/basic_auth_credentials.dart';
+import 'src/features/settings/data/server_connection/hosted_base_uri.dart';
+import 'src/features/settings/data/server_connection/server_port.dart';
+import 'src/features/settings/data/server_connection/server_url.dart';
 import 'src/features/tracking/data/tracker_oauth.dart';
 import 'src/features/tracking/data/tracker_oauth_browser_stub.dart'
     if (dart.library.js_interop) 'src/features/tracking/data/tracker_oauth_browser_web.dart';
 import 'src/global_providers/global_providers.dart';
+import 'src/global_providers/package_info.dart';
 import 'src/kuchie_app.dart';
 import 'src/routes/router_config.dart';
 import 'src/utils/crash/crash_log.dart';
@@ -70,6 +66,7 @@ import 'src/utils/crash/redact_tokens.dart';
 import 'src/utils/desktop/desktop_window.dart';
 import 'src/utils/extensions/custom_extensions.dart';
 import 'src/utils/hive/graphql_cache_guard.dart';
+import 'src/utils/logger/logger.dart';
 import 'src/utils/misc/toast/toast.dart';
 import 'src/utils/network/graphql_errors.dart';
 import 'src/utils/platform/is_flatpak.dart';
@@ -138,17 +135,20 @@ Future<void> _startApp() async {
   // Initialize after the binding and before starting any download service.
   initForegroundTaskService();
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    Workmanager().initialize(notificationCallbackDispatcher);
+    unawaited(Workmanager().initialize(notificationCallbackDispatcher));
   }
   if (isFlatpak) {
     ConnectivityPlusLinuxPortalPlugin.registerWith();
   }
-  final packageInfo = await PackageInfo.fromPlatform();
+  // Independent platform reads; load them together.
+  final (packageInfo, sharedPreferences) = await (
+    PackageInfo.fromPlatform(),
+    SharedPreferences.getInstance(),
+  ).wait;
   _logBoot(
     'start v${packageInfo.version}+${packageInfo.buildNumber} '
     '(${defaultTargetPlatform.name})',
   );
-  final sharedPreferences = await SharedPreferences.getInstance();
   // Restore the desktop window before the first frame.
   await initDesktopWindow(sharedPreferences);
   final legacyBoxBytes = await deleteLegacyGraphqlCacheBox();
@@ -156,7 +156,7 @@ Future<void> _startApp() async {
     _logBoot('deleted legacy graphql cache box: $legacyBoxBytes bytes');
   }
 
-  SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+  unawaited(SystemChrome.setPreferredOrientations(DeviceOrientation.values));
   GoRouter.optionURLReflectsImperativeAPIs = true;
 
   final container = _createSessionContainer(packageInfo, sharedPreferences);
@@ -174,106 +174,20 @@ Future<void> _startApp() async {
     debugPrint('basic_auth migration failed: $e\n$st');
   }
 
-  try {
-    const migratedKey = 'readerIgnoreSafeAreaDefaultOnMigrated';
-    if (sharedPreferences.getBool(migratedKey) != true) {
-      if (sharedPreferences.getBool('readerIgnoreSafeArea') == false) {
-        await sharedPreferences.setBool('readerIgnoreSafeArea', true);
-      }
-      await sharedPreferences.setBool(migratedKey, true);
-    }
-  } catch (e, st) {
-    debugPrint('readerIgnoreSafeArea migration failed: $e\n$st');
-  }
-
-  try {
-    await migrateReaderAnimationPreference(sharedPreferences);
-  } catch (e, st) {
-    debugPrint('reader animation merge migration failed: $e\n$st');
-  }
-
-  try {
-    const migratedKey = 'updatesGroupingCollapsedMigrated';
-    if (sharedPreferences.getBool(migratedKey) != true) {
-      if (sharedPreferences.getInt('updatesGroupingMode') ==
-          UpdatesGroupingMode.disabled.index) {
-        await sharedPreferences.setInt(
-          'updatesGroupingMode',
-          UpdatesGroupingMode.collapsed.index,
-        );
-      }
-      await sharedPreferences.setBool(migratedKey, true);
-    }
-  } catch (e, st) {
-    debugPrint('updatesGrouping migration failed: $e\n$st');
-  }
-
-  try {
-    await seedFirstRunPreferences(sharedPreferences);
-  } catch (e, st) {
-    debugPrint('onboarding migration failed: $e\n$st');
-  }
-
-  // Preserve the remote URL before the LAN resolver can replace serverUrl.
-  try {
-    const externalKey = 'serverExternalUrl';
-    if (sharedPreferences.getString(externalKey) == null) {
-      final legacyUrl = sharedPreferences.getString('serverUrl');
-      if (legacyUrl != null) {
-        await sharedPreferences.setString(externalKey, legacyUrl);
-      }
-    }
-  } catch (e, st) {
-    debugPrint('server URL split migration failed: $e\n$st');
-  }
-
-  try {
-    const migratedKey = 'lastReadSortDirectionMigrated';
-    if (sharedPreferences.getBool(migratedKey) != true) {
-      final sortIdx = sharedPreferences.getInt('mangaSort');
-      // An unset mangaSort defaults to Last-Read.
-      final onLastRead = sortIdx == null || sortIdx == MangaSort.lastRead.index;
-      final savedDir = sharedPreferences.getBool('mangaSortDirection');
-      if (onLastRead && savedDir != null) {
-        await sharedPreferences.setBool('mangaSortDirection', !savedDir);
-      }
-      await sharedPreferences.setBool(migratedKey, true);
-    }
-  } catch (e, st) {
-    debugPrint('lastRead sort direction migration failed: $e\n$st');
-  }
-
-  try {
-    const migratedKey = 'requestTimeout30sMigrated';
-    if (sharedPreferences.getBool(migratedKey) != true) {
-      await sharedPreferences.setInt(
-        'serverRequestTimeout',
-        TimeoutConstants.requestTimeoutDefaultMs,
-      );
-      await sharedPreferences.setBool('autoRefreshOnTimeout', true);
-      await sharedPreferences.setBool(migratedKey, true);
-    }
-  } catch (e, st) {
-    debugPrint('request timeout migration failed: $e\n$st');
-  }
-
-  try {
-    final view = PlatformDispatcher.instance.views.firstOrNull;
-    await migrateGridCoverPreference(
-      sharedPreferences,
+  final view = PlatformDispatcher.instance.views.firstOrNull;
+  await runPreferenceMigrations(
+    sharedPreferences,
+    preferenceMigrations(
       windowWidth: view == null
           ? 0
           : view.physicalSize.width / view.devicePixelRatio,
-    );
-  } catch (e, st) {
-    debugPrint('grid cover preference migration failed: $e\n$st');
-  }
-
-  try {
-    await migrateBadgePreferences(sharedPreferences);
-  } catch (e, st) {
-    debugPrint('badge preference migration failed: $e\n$st');
-  }
+    ),
+    onError: (name, error, stack) => logger.w(
+      'preference migration $name failed',
+      error: error,
+      stackTrace: stack,
+    ),
+  );
 
   // Preload auth before image requests can cache tokenless 401s; sequential reads avoid repeated keychain prompts.
   try {

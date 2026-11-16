@@ -1,13 +1,13 @@
 import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../../../global_providers/global_providers.dart';
-import '../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/misc/graphql_undefined_field.dart';
-import '../../../../account/data/account_permission.dart';
-import '../../../../account/data/account_providers.dart';
-import '../../../../account/domain/account_access.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/graphql_undefined_field.dart';
+import '../../../account/data/account_permission.dart';
+import '../../../account/data/account_providers.dart';
+import '../../../account/domain/account_access.dart';
 import 'graphql/__generated__/web_interface.graphql.dart';
 
 List<Enum$WebUIFlavor> supportedWebInterfaceFlavors(Iterable<String> names) =>

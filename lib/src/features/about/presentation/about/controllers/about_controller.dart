@@ -6,7 +6,6 @@
 
 import 'dart:async';
 
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../data/about_repository.dart';
@@ -22,6 +21,3 @@ Future<AboutDto?> about(Ref ref) =>
 @riverpod
 Future<Query$GetAboutWebUI$aboutWebUI?> aboutWebUI(Ref ref) =>
     ref.watch(aboutRepositoryProvider).getAboutWebUI();
-
-@riverpod
-PackageInfo packageInfo(Ref ref) => throw UnimplementedError();

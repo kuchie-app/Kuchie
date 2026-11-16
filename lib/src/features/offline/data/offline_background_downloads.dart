@@ -18,9 +18,9 @@ import '../../auth/data/auth_coordinator.dart';
 import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/custom_headers_store.dart';
 import '../../manga_book/data/manga_book/manga_book_repository.dart';
-import '../../settings/presentation/general/timeout_settings/timeout_settings_section.dart';
-import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../settings/data/server_connection/request_timeout.dart';
+import '../../settings/data/server_connection/server_port.dart';
+import '../../settings/data/server_connection/server_url.dart';
 import 'chapter_commit.dart';
 import 'chapter_download_engine.dart';
 import 'offline_download_coordinator.dart';
@@ -40,7 +40,7 @@ ChapterDownloadEngine? chapterDownloadEngine(Ref ref) {
   final isCurrentSession = watchAuthSession(ref);
   final parallel =
       (ref.watch(offlineDownloadConcurrencyProvider) ??
-              DBKeys.offlineDownloadConcurrency.initial as int)
+              DBKeys.offlineDownloadConcurrency.initial)
           .clamp(1, 10);
   return ChapterDownloadEngine(
     fetchPage: (pageUrl) =>
@@ -69,7 +69,7 @@ ChapterDownloadEngine? chapterDownloadEngine(Ref ref) {
         queryRequestTimeout: Duration(
           milliseconds:
               (ref.read(serverRequestTimeoutProvider) ??
-                  DBKeys.serverRequestTimeout.initial as int) +
+                  DBKeys.serverRequestTimeout.initial) +
               2000,
         ),
       );

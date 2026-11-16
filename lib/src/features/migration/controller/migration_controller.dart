@@ -13,7 +13,7 @@ import '../../browse_center/data/source_repository/source_repository.dart';
 import '../../browse_center/domain/source/source_model.dart';
 import '../../browse_center/presentation/source/controller/source_controller.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
-import '../../settings/presentation/general/timeout_settings/timeout_settings_section.dart';
+import '../../settings/data/server_connection/request_timeout.dart';
 
 part 'migration_controller.g.dart';
 
@@ -37,7 +37,7 @@ Future<List<MangaDto>> migrationSourceQuickSearchMangaList(
   final timeout = Duration(
     milliseconds:
         ref.watch(serverRequestTimeoutProvider) ??
-        DBKeys.serverRequestTimeout.initial as int,
+        DBKeys.serverRequestTimeout.initial,
   );
   final mangaPage = await rateLimiterQueue.add(
     () => sourceRepository

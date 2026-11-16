@@ -14,11 +14,11 @@ import '../../../../../../widgets/popup_widgets/radio_list_popup.dart';
 import '../../../../../about/data/about_repository.dart';
 import '../../../../../account/data/account_providers.dart';
 import '../../../../../account/domain/account_access.dart';
+import '../../../../data/server/graphql/__generated__/web_interface.graphql.dart';
+import '../../../../data/server/web_interface_installer.dart';
+import '../../../../data/server/web_interface_repository.dart';
 import '../../../../search/settings_search_registry.dart';
 import '../../../../widgets/settings_group_card/settings_group_card.dart';
-import '../../data/graphql/__generated__/web_interface.graphql.dart';
-import '../../data/web_interface_installer.dart';
-import '../../data/web_interface_repository.dart';
 
 class WebInterfaceSection extends ConsumerStatefulWidget {
   const WebInterfaceSection({super.key});

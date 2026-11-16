@@ -8,58 +8,20 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../../../constants/db_keys.dart';
 import '../../../../../../constants/endpoints.dart';
 import '../../../../../../constants/enum.dart';
-import '../../../../../../features/auth/data/auth_coordinator.dart';
-import '../../../../../../features/auth/data/auth_credentials_store.dart';
-import '../../../../../../features/auth/data/credential_snapshot.dart';
-import '../../../../../../features/auth/data/secure_credentials_provider.dart';
-import '../../../../../../features/auth/presentation/auth_failure_text.dart';
-import '../../../../../../features/auth/presentation/sign_in_action.dart';
-import '../../../../../../global_providers/global_providers.dart';
 import '../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../../widgets/popup_widgets/pop_button.dart';
-import '../client/server_port_tile/server_port_tile.dart';
-import '../client/server_url_tile/server_url_tile.dart';
-
-part 'credentials_popup.g.dart';
+import '../../../../../auth/data/auth_coordinator.dart';
+import '../../../../../auth/presentation/auth_failure_text.dart';
+import '../../../../../auth/presentation/sign_in_action.dart';
+import '../../../../data/server_connection/server_port.dart';
+import '../../../../data/server_connection/server_url.dart';
 
 // Keep alive so preloaded credentials remain available to synchronous request builders.
-@Riverpod(keepAlive: true)
-class Credentials extends _$Credentials {
-  @override
-  Future<String?> build() async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    final vault = credentialSnapshot(ref.read(secureStorageProvider), prefs);
-    await vault.ensureLoaded(prefs);
-    return vault[kBasicCredentialsKey];
-  }
-
-  /// [forEpoch] discards or undoes writes across a server switch; omit when clearing.
-  Future<void> set(String? value, {int? forEpoch}) async {
-    await ref.read(authCredentialsStoreProvider.notifier).replaceCredentials((
-      epoch,
-    ) async {
-      await future;
-      final credentials = ref.read(authCredentialsStoreProvider.notifier);
-      if (epoch != credentials.serverEpoch) return;
-      final prefs = ref.read(sharedPreferencesProvider);
-      final vault = credentialSnapshot(ref.read(secureStorageProvider), prefs);
-      await vault.update({kBasicCredentialsKey: value}, prefs);
-      if (epoch != credentials.serverEpoch) {
-        // A server switch must not retain the previous server's Basic credential.
-        await vault.update({kBasicCredentialsKey: null}, prefs);
-        return;
-      }
-      state = AsyncData(value);
-    }, forEpoch: forEpoch);
-  }
-}
-
 final formKey = GlobalKey<FormState>();
 
 class CredentialsPopup extends HookConsumerWidget {

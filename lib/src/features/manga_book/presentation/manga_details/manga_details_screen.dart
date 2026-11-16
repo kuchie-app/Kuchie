@@ -126,11 +126,11 @@ class MangaDetailsScreen extends HookConsumerWidget {
 
     final chapterListRefresh = useCallback(
       ([bool onlineFetch = false]) async =>
-          await ref.read(chapterListProvider.notifier).refresh(onlineFetch),
+          ref.read(chapterListProvider.notifier).refresh(onlineFetch),
       [chapterListProvider],
     );
 
-    final refresh = useCallback(([onlineFetch = false]) async {
+    final refresh = useCallback(([bool onlineFetch = false]) async {
       // Bulk callbacks may arrive after the screen has been disposed.
       if (!context.mounted) return;
       if (onlineFetch) {

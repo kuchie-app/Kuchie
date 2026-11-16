@@ -12,19 +12,19 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../../constants/db_keys.dart';
 import '../../../../../constants/enum.dart';
-import '../../../../../features/offline/data/offline_download_providers.dart';
-import '../../../../../features/offline/data/offline_read_fallback.dart';
-import '../../../../../features/offline/data/offline_repository.dart';
-import '../../../../../features/offline/data/offline_types.dart';
-import '../../../../../features/offline/data/server_reachability.dart';
-import '../../../../../features/offline/data/webui_chapter_sort_meta.dart';
-import '../../../../../features/settings/presentation/library/widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../auth/data/auth_credentials_store.dart';
 import '../../../../history/presentation/history_controller.dart';
 import '../../../../library/domain/category/category_model.dart';
 import '../../../../library/presentation/library/controller/library_manga_list.dart';
+import '../../../../offline/data/offline_download_providers.dart';
+import '../../../../offline/data/offline_read_fallback.dart';
+import '../../../../offline/data/offline_repository.dart';
+import '../../../../offline/data/offline_types.dart';
+import '../../../../offline/data/server_reachability.dart';
+import '../../../../offline/data/webui_chapter_sort_meta.dart';
+import '../../../../settings/presentation/library/widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import '../../../data/manga_book/manga_book_repository.dart';
 import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/manga/manga_model.dart';
@@ -162,9 +162,9 @@ class MangaChapterList extends _$MangaChapterList {
     }
     if (didSourceFetch) {
       // Refresh metadata after scraping; defer invalidation outside the build phase.
-      Future.microtask(() {
+      unawaited(Future.microtask(() {
         if (current()) ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
-      });
+      }));
     }
     return result;
   }

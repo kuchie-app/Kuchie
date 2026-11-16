@@ -1,7 +1,7 @@
 import 'package:graphql/client.dart';
 
-import '../../../../../../../constants/enum.dart';
-import '../../../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../constants/enum.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
 import 'sign_in_transition.dart';
 
 class SignInValues {

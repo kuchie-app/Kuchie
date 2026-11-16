@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuchie/src/constants/enum.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/sign_in/data/sign_in_executor.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/sign_in/data/sign_in_transition.dart';
+import 'package:kuchie/src/features/settings/data/sign_in/sign_in_executor.dart';
+import 'package:kuchie/src/features/settings/data/sign_in/sign_in_transition.dart';
 
 void main() {
   test('masked or unconfirmed settings never change the sign-in', () async {

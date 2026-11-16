@@ -7,8 +7,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/data/backup_settings_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/widgets/backup_flags/backup_flags.dart';
+import 'package:kuchie/src/features/settings/data/backup/backup_settings_repository.dart';
+import 'package:kuchie/src/features/settings/domain/backup/backup_flags.dart';
 import 'package:kuchie/src/features/settings/presentation/backup/widgets/backup_flags/backup_flags_dialog.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/utils/misc/toast/toast.dart';

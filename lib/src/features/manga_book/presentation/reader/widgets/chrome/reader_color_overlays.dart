@@ -104,12 +104,12 @@ class ReaderColorOverlays extends HookConsumerWidget {
     final inverted = ref.watch(invertedColorsProvider).ifNull(false);
     final brightnessOn = ref.watch(customBrightnessProvider).ifNull(false);
     final brightness = ref.watch(customBrightnessValueProvider) ??
-        DBKeys.customBrightnessValue.initial as int;
+        DBKeys.customBrightnessValue.initial;
     final colorFilterOn = ref.watch(customColorFilterProvider).ifNull(false);
     final color = ref.watch(colorFilterValueProvider) ??
-        DBKeys.colorFilterValue.initial as int;
+        DBKeys.colorFilterValue.initial;
     final blend = ref.watch(colorFilterBlendModeKeyProvider) ??
-        DBKeys.colorFilterBlendMode.initial as ColorFilterBlendMode;
+        DBKeys.colorFilterBlendMode.initial;
 
     final useNativeBrightness = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||

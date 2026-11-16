@@ -16,9 +16,9 @@ import 'package:kuchie/src/features/auth/data/custom_headers_store.dart';
 import 'package:kuchie/src/features/auth/data/pending_tracker_oauth_store.dart';
 import 'package:kuchie/src/features/auth/data/pending_tracker_oauth_store_stub.dart'
     as pending;
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/sign_in/data/sign_in_actions.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/sign_in/data/sign_in_executor.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
+import 'package:kuchie/src/features/settings/data/sign_in/sign_in_actions.dart';
+import 'package:kuchie/src/features/settings/data/sign_in/sign_in_executor.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
 import 'package:material_ui/material_ui.dart';

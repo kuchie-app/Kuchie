@@ -1,52 +1,14 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../constants/db_keys.dart';
 import '../../../../../constants/timeout_constants.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../../widgets/compact_switch.dart';
 import '../../../../../widgets/input_popup/domain/settings_prop_type.dart';
 import '../../../../../widgets/input_popup/settings_prop_tile.dart';
+import '../../../data/server_connection/request_timeout.dart';
 import '../../../search/settings_search_registry.dart';
 import '../../../widgets/settings_group_card/settings_group_card.dart';
-
-part 'timeout_settings_section.g.dart';
-
-@riverpod
-class ServerRequestTimeout extends _$ServerRequestTimeout
-    with SharedPreferenceClientMixin<int> {
-  @override
-  int? build() => initialize(
-    DBKeys.serverRequestTimeout,
-    initial: DBKeys.serverRequestTimeout.initial,
-  );
-
-  void updateSeconds(int seconds) => update(seconds * 1000);
-}
-
-@riverpod
-class AutoRefreshOnTimeout extends _$AutoRefreshOnTimeout
-    with SharedPreferenceClientMixin<bool> {
-  @override
-  bool? build() => initialize(
-    DBKeys.autoRefreshOnTimeout,
-    initial: DBKeys.autoRefreshOnTimeout.initial,
-  );
-}
-
-@riverpod
-class AutoRefreshRetryDelay extends _$AutoRefreshRetryDelay
-    with SharedPreferenceClientMixin<int> {
-  @override
-  int? build() => initialize(
-    DBKeys.autoRefreshRetryDelay,
-    initial: DBKeys.autoRefreshRetryDelay.initial,
-  );
-
-  void updateSeconds(int seconds) => update(seconds * 1000);
-}
 
 class TimeoutSettingsSection extends ConsumerWidget {
   const TimeoutSettingsSection({super.key});

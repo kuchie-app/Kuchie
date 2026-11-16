@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/misc.dart';
 import 'package:kuchie/src/constants/app_distribution.dart';
 import 'package:kuchie/src/constants/app_theme.dart';
 import 'package:kuchie/src/constants/db_keys.dart';
@@ -35,21 +36,25 @@ import 'package:kuchie/src/features/notifications/controller/notification_settin
 import 'package:kuchie/src/features/offline/data/offline_download_providers.dart';
 import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/features/settings/controller/server_controller.dart';
+import 'package:kuchie/src/features/settings/data/backup/backup_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/backup/graphql/__generated__/query.graphql.dart';
+import 'package:kuchie/src/features/settings/data/downloads/delete_chapters_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/downloads/downloads_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/server/graphql/__generated__/web_interface.graphql.dart';
+import 'package:kuchie/src/features/settings/data/server/server_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/server/web_interface_repository.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 import 'package:kuchie/src/features/settings/data/user_settings.dart';
+import 'package:kuchie/src/features/settings/domain/backup/backup_flags.dart';
 import 'package:kuchie/src/features/settings/domain/settings/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/settings/domain/settings/settings.dart';
 import 'package:kuchie/src/features/settings/presentation/advanced/advanced_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/appearance/appearance_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/appearance/widgets/app_theme_selector/app_theme_providers.dart';
 import 'package:kuchie/src/features/settings/presentation/backup/backup_screen.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/data/backup_settings_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/data/graphql/__generated__/query.graphql.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/widgets/backup_flags/backup_flags.dart';
 import 'package:kuchie/src/features/settings/presentation/backup/widgets/backup_flags/backup_flags_dialog.dart';
 import 'package:kuchie/src/features/settings/presentation/browse/browse_settings_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/connection/connection_screen.dart';
-import 'package:kuchie/src/features/settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/downloads/data/downloads_settings_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/downloads/downloads_settings_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/general/general_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
@@ -62,16 +67,12 @@ import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_paged_prefs/reader_paged_prefs.dart';
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_volume_tap_tile/reader_volume_tap_tile.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/graphql/__generated__/web_interface.graphql.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/server_settings_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/web_interface_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_database_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_images_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_logs_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_network_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_opds_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/server/server_web_interface_screen.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
 import 'package:kuchie/src/features/settings/presentation/server/widget/database/data/database_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/server/widget/database/graphql/__generated__/database.graphql.dart';
 import 'package:kuchie/src/features/settings/presentation/server/widget/images/data/images_repository.dart';
@@ -229,7 +230,7 @@ SettingsDto _serverSettings() => Fragment$SettingsDto(
   excludeEntryWithUnreadChapters: false,
 );
 
-Future<ProviderContainer> _container({List<dynamic> extra = const []}) async {
+Future<ProviderContainer> _container({List<Override> extra = const []}) async {
   SharedPreferences.setMockInitialValues({});
   final sp = await SharedPreferences.getInstance();
   final container = ProviderContainer(

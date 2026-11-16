@@ -8,7 +8,7 @@ import '../../auth/data/auth_coordinator.dart';
 import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/auth_state.dart';
 import '../../offline/data/offline_server_identity_repository.dart';
-import '../../settings/presentation/server/widget/credential_popup/login_credentials_popup.dart';
+import '../../settings/data/server_connection/auth_username.dart';
 import '../domain/account_access.dart';
 import 'account_notice.dart';
 import 'account_permission.dart';

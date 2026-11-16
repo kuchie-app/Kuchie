@@ -19,11 +19,11 @@ import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated_
 import 'package:kuchie/src/features/quick_open/presentation/unified_search/desktop_search_field.dart';
 import 'package:kuchie/src/features/quick_open/presentation/unified_search/unified_search_providers.dart';
 import 'package:kuchie/src/features/settings/controller/server_controller.dart';
+import 'package:kuchie/src/features/settings/data/server/web_interface_repository.dart';
 import 'package:kuchie/src/features/settings/domain/settings/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/settings/domain/settings/settings.dart';
 import 'package:kuchie/src/features/settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/koreader_sync/domain/koreader_sync_domain.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/web_interface_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/syncyomi/data/syncyomi_settings_provider.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';

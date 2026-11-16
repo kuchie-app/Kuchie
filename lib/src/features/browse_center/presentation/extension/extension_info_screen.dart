@@ -55,7 +55,7 @@ class ExtensionInfoScreen extends HookConsumerWidget {
           context,
           (items) => Column(
             children: [
-              for (final source in items ?? [])
+              for (final source in items ?? const <SourceDto>[])
                 if (source.$extension.pkgName == pkgName)
                   ListTile(
                     leading: ServerImageWithCpi(

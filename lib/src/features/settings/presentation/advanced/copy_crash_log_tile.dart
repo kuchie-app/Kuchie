@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../global_providers/package_info.dart';
 import '../../../../utils/crash/copy_crash_log.dart';
 import '../../../../utils/crash/crash_log.dart';
 import '../../../../utils/extensions/custom_extensions.dart';

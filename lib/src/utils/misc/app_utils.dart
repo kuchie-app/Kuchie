@@ -66,7 +66,7 @@ abstract class AppUtils {
       List<String Function(Object)> composeList, String param) {
     String resultParam = param;
     final reversedList = composeList.reversed;
-    for (Function f in reversedList) {
+    for (final f in reversedList) {
       resultParam = f(resultParam);
     }
     return resultParam;

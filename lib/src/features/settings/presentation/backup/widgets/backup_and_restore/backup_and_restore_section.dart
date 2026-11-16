@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -10,12 +12,12 @@ import '../../../../../../utils/misc/file_picker_utils.dart';
 import '../../../../../../utils/misc/toast/toast.dart';
 import '../../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../../widgets/desktop/desktop_page_frame.dart';
+import '../../../../data/backup/backup_settings_repository.dart';
+import '../../../../data/server_connection/server_port.dart';
+import '../../../../data/server_connection/server_url.dart';
 import '../../../../domain/settings/settings.dart';
 import '../../../../search/settings_search_registry.dart';
 import '../../../../widgets/settings_group_card/settings_group_card.dart';
-import '../../../server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../../server/widget/client/server_url_tile/server_url_tile.dart';
-import '../../data/backup_settings_repository.dart';
 import '../backup_flags/backup_flags_dialog.dart';
 import 'widgets/backup_missing_dialog.dart';
 import 'widgets/restore_status_progress.dart';
@@ -40,7 +42,7 @@ class BackupAndRestoreSection extends HookConsumerWidget {
       );
       return;
     }
-    launchUrlInWeb(
+    unawaited(launchUrlInWeb(
       context,
       Endpoints.baseApi(
             baseUrl: ref.read(serverUrlProvider),
@@ -50,7 +52,7 @@ class BackupAndRestoreSection extends HookConsumerWidget {
           ) +
           backupUrl.value!,
       toast,
-    );
+    ));
   }
 
   Future<PlatformFile?> getBackupFile(

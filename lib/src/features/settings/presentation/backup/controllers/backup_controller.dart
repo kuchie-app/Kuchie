@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../data/backup/backup_settings_repository.dart';
 import '../../../domain/settings/settings.dart';
-import '../data/backup_settings_repository.dart';
 
 part 'backup_controller.g.dart';
 

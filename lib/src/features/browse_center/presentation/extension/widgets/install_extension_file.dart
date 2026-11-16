@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -28,12 +30,12 @@ class InstallExtensionFile extends ConsumerWidget {
     );
     if (!context.mounted || file == null) return;
     toast?.show(context.l10n.installingExtension);
-    AppUtils.guard(() async {
+    unawaited(AppUtils.guard(() async {
       await ref.read(extensionActionsProvider).installFile(context, file: file);
       if (context.mounted) {
         toast?.show(context.l10n.extensionInstalled, instantShow: true);
       }
-    }, toast);
+    }, toast));
   }
 
   @override

@@ -12,7 +12,7 @@ import 'package:kuchie/src/features/account/domain/account_binding.dart';
 import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter_page/chapter_page_model.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_page_actions_sheet.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/widgets/cover_cache/cover_cache.dart';
@@ -70,6 +70,8 @@ class _Cache extends Fake implements CacheManager {
     return entries[cacheKey] = files.file('/page.png')..writeAsBytesSync([1]);
   }
 
+  // Lives as long as the fake; the test never ends the stream.
+  // ignore: close_sinks
   final stream = StreamController<FileResponse>.broadcast();
   @override
   Stream<FileResponse> getFileStream(

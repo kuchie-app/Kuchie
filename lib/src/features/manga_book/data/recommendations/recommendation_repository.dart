@@ -13,7 +13,7 @@ import '../../../../constants/enum.dart';
 import '../../../../global_providers/global_providers.dart';
 import '../../../auth/data/auth_credentials_store.dart';
 import '../../../offline/data/offline_server_identity_repository.dart';
-import '../../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../../settings/data/server_connection/server_url.dart';
 import '../../../tracking/controller/manga_track_records_controller.dart';
 import '../../../tracking/data/tracker_repository.dart';
 import '../../presentation/manga_details/controller/manga_details_controller.dart';

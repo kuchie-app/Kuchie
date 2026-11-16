@@ -214,7 +214,7 @@ class LocalPreviewPages {
         _bytes += downloaded;
         return file;
       } finally {
-        _inFlight.remove(file.path);
+        unawaited(_inFlight.remove(file.path));
       }
     });
   }

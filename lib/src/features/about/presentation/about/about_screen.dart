@@ -15,6 +15,7 @@ import '../../../../constants/app_distribution.dart';
 import '../../../../constants/app_sizes.dart';
 import '../../../../constants/brand_icons.dart';
 import '../../../../constants/urls.dart';
+import '../../../../global_providers/package_info.dart';
 import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/launch_url_in_web.dart';

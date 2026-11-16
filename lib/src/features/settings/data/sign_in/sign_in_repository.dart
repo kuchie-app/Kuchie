@@ -1,12 +1,12 @@
 import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../../../../../global_providers/global_providers.dart';
-import '../../../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../../../utils/misc/graphql_undefined_field.dart';
-import '../../../../../../account/data/account_permission.dart';
-import '../graphql/__generated__/sign_in.graphql.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/graphql_undefined_field.dart';
+import '../../../account/data/account_permission.dart';
+import 'graphql/__generated__/sign_in.graphql.dart';
 
 class SignInSettingsRepository {
   const SignInSettingsRepository(this.client, {required this.permissions});

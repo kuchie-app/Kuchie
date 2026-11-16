@@ -5,70 +5,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../../../constants/db_keys.dart';
 import '../../../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../../../../widgets/compact_switch.dart';
 import '../../../../../../../widgets/input_popup/domain/settings_prop_type.dart';
 import '../../../../../../../widgets/input_popup/settings_prop_tile.dart';
-import '../../../../../../offline/data/background/background_download_controller_shim.dart';
-import '../server_url_tile/server_url_tile.dart'
-    show clearCredentialsForServerChange;
-
-part 'server_port_tile.g.dart';
-
-@riverpod
-class ServerPort extends _$ServerPort with SharedPreferenceClientMixin<int> {
-  @override
-  int? build() => initialize(DBKeys.serverPort);
-
-  @override
-  Future<void> update(int? value) async {
-    if (value == state) return;
-    final lease = ref.keepAlive();
-    try {
-      await ref.read(backgroundDownloadControllerProvider).changeIdentity(
-        () async {
-          await clearCredentialsForServerChange(ref);
-          super.update(value);
-        },
-      );
-    } finally {
-      lease.close();
-    }
-  }
-}
-
-@riverpod
-class ServerPortToggle extends _$ServerPortToggle
-    with SharedPreferenceClientMixin<bool> {
-  @override
-  bool? build() => initialize(
-    DBKeys.serverPortToggle,
-    initial: kIsWeb ? false : DBKeys.serverPortToggle.initial,
-  );
-
-  @override
-  Future<void> update(bool? value) async {
-    if (value == state) return;
-    final lease = ref.keepAlive();
-    try {
-      await ref.read(backgroundDownloadControllerProvider).changeIdentity(
-        () async {
-          await clearCredentialsForServerChange(ref);
-          super.update(value);
-        },
-      );
-    } finally {
-      lease.close();
-    }
-  }
-}
+import '../../../../../data/server_connection/server_port.dart';
 
 class ServerPortTile extends ConsumerWidget {
   const ServerPortTile({super.key});

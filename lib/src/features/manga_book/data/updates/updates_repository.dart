@@ -16,7 +16,7 @@ import '../../domain/chapter_page/chapter_page_model.dart';
 import '../../domain/manga/manga_model.dart';
 import '../../domain/update_status/update_status_model.dart';
 import '../../domain/updates/updates_filter.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'updates_repository.g.dart';
 

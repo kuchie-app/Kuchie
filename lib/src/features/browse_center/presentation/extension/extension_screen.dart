@@ -157,7 +157,7 @@ class ExtensionScreen extends HookConsumerWidget {
                         updatingAll.value = true;
                         await AppUtils.guard(
                           () => ref.read(extensionActionsProvider).updateAll([
-                            for (final e in update ?? []) e.pkgName,
+                            for (final e in [...?update]) e.pkgName,
                           ]),
                           ref.read(toastProvider),
                         );

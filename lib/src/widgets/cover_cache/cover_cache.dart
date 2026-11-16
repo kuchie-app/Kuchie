@@ -13,9 +13,8 @@ import 'package:uuid/uuid.dart';
 import '../../constants/endpoints.dart';
 import '../../constants/enum.dart';
 import '../../features/auth/data/auth_credentials_store.dart';
-import '../../features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-
+import '../../features/settings/data/server_connection/server_port.dart';
+import '../../features/settings/data/server_connection/server_url.dart';
 import 'cover_cache_manager_stub.dart'
     if (dart.library.io) 'cover_cache_manager_io.dart';
 

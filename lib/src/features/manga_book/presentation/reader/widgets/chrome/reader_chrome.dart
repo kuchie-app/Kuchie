@@ -213,7 +213,7 @@ class ReaderChromeLayout extends HookConsumerWidget {
     // Show OS bars when chrome enters and hide after dismissal; fullscreen off leaves them visible.
     final fullscreen =
         ref.watch(readerFullscreenProvider) ??
-        DBKeys.readerFullscreen.initial as bool;
+        DBKeys.readerFullscreen.initial;
     useEffect(() {
       void onStatus(AnimationStatus status) {
         switch (status) {

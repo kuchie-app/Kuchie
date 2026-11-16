@@ -15,10 +15,10 @@ import '../../../../../../widgets/input_popup/settings_prop_tile.dart';
 import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../account/data/account_providers.dart';
 import '../../../../controller/server_controller.dart';
+import '../../../../data/server/server_settings_repository.dart';
 import '../../../../domain/settings/settings.dart';
 import '../../../../search/settings_search_registry.dart';
 import '../../../../widgets/settings_group_card/settings_group_card.dart';
-import '../../data/server_settings_repository.dart';
 import 'data/misc_logs_repository.dart';
 import 'graphql/__generated__/misc_logs.graphql.dart';
 

@@ -34,7 +34,7 @@ List<int> _positionsFromEntry(Map<String, dynamic> filter, Object? entry) {
   if (position is! int || (group != null && group is! int)) {
     throw FormatException('Invalid saved search filter', entry);
   }
-  return group != null ? [group, position] : [position];
+  return group != null ? [group as int, position] : [position];
 }
 
 bool savedSearchFitsSource(List<Filter> filters, List<FilterChange> changes) {

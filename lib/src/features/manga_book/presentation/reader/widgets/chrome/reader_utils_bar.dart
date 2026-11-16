@@ -47,11 +47,11 @@ class ReaderUtilsBar extends ConsumerWidget {
     if (isScrollMode) {
       interval =
           ref.watch(autoScrollIntervalSecondsProvider) ??
-          DBKeys.autoScrollIntervalSeconds.initial as int;
+          DBKeys.autoScrollIntervalSeconds.initial;
     } else {
       interval =
           ref.watch(autoAdvanceIntervalSecondsProvider) ??
-          DBKeys.autoAdvanceIntervalSeconds.initial as int;
+          DBKeys.autoAdvanceIntervalSeconds.initial;
     }
 
     void setInterval(int value) {

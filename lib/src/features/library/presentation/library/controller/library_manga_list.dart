@@ -8,16 +8,16 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../features/offline/data/offline_cover_warmer.dart';
-import '../../../../../features/offline/data/offline_read_fallback.dart';
-import '../../../../../features/offline/data/offline_repository.dart';
-import '../../../../../features/offline/data/server_reachability.dart';
 import '../../../../../utils/crash/diagnostics.dart';
 import '../../../../../utils/crash/redact_tokens.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/manga_cover/providers/manga_cover_providers.dart';
 import '../../../../auth/data/auth_credentials_store.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
+import '../../../../offline/data/offline_cover_warmer.dart';
+import '../../../../offline/data/offline_read_fallback.dart';
+import '../../../../offline/data/offline_repository.dart';
+import '../../../../offline/data/server_reachability.dart';
 import '../../../data/category_repository.dart';
 
 part 'library_manga_list.g.dart';

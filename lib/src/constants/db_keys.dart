@@ -9,7 +9,8 @@ import 'package:material_ui/material_ui.dart';
 import 'app_theme.dart';
 import 'enum.dart';
 
-enum DBKeys {
+/// Preference keys; each value's type argument is the type of its default.
+enum DBKeys<T> {
   serverUrl('http://127.0.0.1'),
   // External address; serverUrl holds the currently selected endpoint.
   serverExternalUrl(null),
@@ -262,7 +263,7 @@ enum DBKeys {
 
   const DBKeys(this.initial);
 
-  final dynamic initial;
+  final T initial;
 }
 
 enum DBStoreName { settings }

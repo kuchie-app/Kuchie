@@ -298,7 +298,7 @@ class CategoryLibraryMetadata extends _$CategoryLibraryMetadata {
           });
     }
     final metaWithPending = applyPendingWebUiMeta({
-      for (final meta in category?.meta ?? []) meta.key: meta.value,
+      for (final meta in [...?category?.meta]) meta.key: meta.value,
     }, _storedPending);
     return {
       for (final meta in metaWithPending.entries)

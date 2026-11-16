@@ -714,7 +714,7 @@ class SourceMangaListScreen extends HookConsumerWidget {
                       child: Row(
                         spacing: 2,
                         children: [
-                          Icon(displayMode?.icon, size: 20),
+                          Icon(displayMode.icon, size: 20),
                           if (!iconOnly)
                             const Icon(
                               FluentIcons.caret_down_24_filled,

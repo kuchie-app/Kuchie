@@ -19,15 +19,15 @@ import '../../../constants/db_keys.dart';
 import '../../../constants/endpoints.dart';
 import '../../../constants/urls.dart';
 import '../../../global_providers/global_providers.dart';
+import '../../../global_providers/package_info.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/misc/graphql_undefined_field.dart';
 import '../../../utils/mixin/shared_preferences_client_mixin.dart';
-import '../../settings/presentation/server/data/web_interface_repository.dart';
-import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../settings/data/server/web_interface_repository.dart';
+import '../../settings/data/server_connection/server_port.dart';
+import '../../settings/data/server_connection/server_url.dart';
 import '../domain/about/about_dto.dart';
 import '../domain/server_update/server_update.dart';
-import '../presentation/about/controllers/about_controller.dart';
 import 'graphql/__generated__/about_webui.graphql.dart';
 import 'graphql/__generated__/query.graphql.dart';
 import 'hosted_web_update.dart';
@@ -72,14 +72,12 @@ class AboutRepository {
     if (isGooglePlayBuild || releaseApiUrl.isEmpty) return const AsyncData(null);
     if (await isServerHosted?.call() ?? false) return const AsyncData(null);
     final gitResponse = await AsyncValue.guard<Map<String, dynamic>?>(
-      () async => json.decode(
-        (await http.get(
-          Uri.parse(releaseApiUrl),
-        )).body,
-      ),
+      () async =>
+          json.decode((await http.get(Uri.parse(releaseApiUrl))).body)
+              as Map<String, dynamic>?,
     );
     return gitResponse.copyWithData<Version?>((data) {
-      String? tag = data?["tag_name"];
+      final tag = data?["tag_name"] as String?;
       // Release tags are "v0.4.0"; pub_semver can't parse the leading "v".
       Version? latestReleaseBuildNumber = tag != null
           ? Version.parse(tag.startsWith('v') ? tag.substring(1) : tag)

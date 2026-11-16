@@ -50,14 +50,14 @@ abstract final class ReaderSettings {
     scope: ReaderSettingScope.perSeries,
     perSeriesKey: MangaMetaKeys.readerPadding,
     global: readerPaddingKeyProvider,
-    fallback: DBKeys.readerPadding.initial as double,
+    fallback: DBKeys.readerPadding.initial,
   );
 
   /// Global-only today: the reader never reads the per-series invert meta.
   static final invertTap = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: invertTapProvider,
-    fallback: DBKeys.invertTap.initial as bool,
+    fallback: DBKeys.invertTap.initial,
   );
 
   static final readerOrientation = ReaderSetting<ReaderOrientation>(
@@ -79,320 +79,320 @@ abstract final class ReaderSettings {
   static final pinchToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: pinchToZoomProvider,
-    fallback: DBKeys.pinchToZoom.initial as bool,
+    fallback: DBKeys.pinchToZoom.initial,
   );
 
   static final doubleTapToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: doubleTapToZoomProvider,
-    fallback: DBKeys.doubleTapToZoom.initial as bool,
+    fallback: DBKeys.doubleTapToZoom.initial,
   );
 
   static final disableZoomOut = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: disableZoomOutProvider,
-    fallback: DBKeys.disableZoomOut.initial as bool,
+    fallback: DBKeys.disableZoomOut.initial,
   );
 
   static final disableZoomIn = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: disableZoomInProvider,
-    fallback: DBKeys.disableZoomIn.initial as bool,
+    fallback: DBKeys.disableZoomIn.initial,
   );
 
   static final pagedPinchToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: pagedPinchToZoomProvider,
-    fallback: DBKeys.pagedPinchToZoom.initial as bool,
+    fallback: DBKeys.pagedPinchToZoom.initial,
   );
 
   static final pagedDoubleTapToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: pagedDoubleTapToZoomProvider,
-    fallback: DBKeys.pagedDoubleTapToZoom.initial as bool,
+    fallback: DBKeys.pagedDoubleTapToZoom.initial,
   );
 
   static final pagedDisableZoomOut = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: pagedDisableZoomOutProvider,
-    fallback: DBKeys.pagedDisableZoomOut.initial as bool,
+    fallback: DBKeys.pagedDisableZoomOut.initial,
   );
 
   static final longStripPinchToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: longStripPinchToZoomProvider,
-    fallback: DBKeys.longStripPinchToZoom.initial as bool,
+    fallback: DBKeys.longStripPinchToZoom.initial,
   );
 
   static final longStripDoubleTapToZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: longStripDoubleTapToZoomProvider,
-    fallback: DBKeys.longStripDoubleTapToZoom.initial as bool,
+    fallback: DBKeys.longStripDoubleTapToZoom.initial,
   );
 
   static final longStripDisableZoomOut = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: longStripDisableZoomOutProvider,
-    fallback: DBKeys.longStripDisableZoomOut.initial as bool,
+    fallback: DBKeys.longStripDisableZoomOut.initial,
   );
 
   static final imageScaleType = ReaderSetting<ImageScaleType>(
     scope: ReaderSettingScope.global,
     global: imageScaleTypeKeyProvider,
-    fallback: DBKeys.imageScaleType.initial as ImageScaleType,
+    fallback: DBKeys.imageScaleType.initial,
   );
 
   static final zoomStart = ReaderSetting<ZoomStart>(
     scope: ReaderSettingScope.global,
     global: zoomStartKeyProvider,
-    fallback: DBKeys.zoomStart.initial as ZoomStart,
+    fallback: DBKeys.zoomStart.initial,
   );
 
   static final pageLayout = ReaderSetting<PageLayout>(
     scope: ReaderSettingScope.global,
     global: pageLayoutKeyProvider,
-    fallback: DBKeys.pageLayout.initial as PageLayout,
+    fallback: DBKeys.pageLayout.initial,
   );
 
   static final centerMarginType = ReaderSetting<CenterMarginType>(
     scope: ReaderSettingScope.global,
     global: centerMarginTypeKeyProvider,
-    fallback: DBKeys.centerMarginType.initial as CenterMarginType,
+    fallback: DBKeys.centerMarginType.initial,
   );
 
   static final landscapeZoom = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: landscapeZoomProvider,
-    fallback: DBKeys.landscapeZoom.initial as bool,
+    fallback: DBKeys.landscapeZoom.initial,
   );
 
   static final navigateToPan = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: navigateToPanProvider,
-    fallback: DBKeys.navigateToPan.initial as bool,
+    fallback: DBKeys.navigateToPan.initial,
   );
 
   static final invertDoublePages = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: invertDoublePagesProvider,
-    fallback: DBKeys.invertDoublePages.initial as bool,
+    fallback: DBKeys.invertDoublePages.initial,
   );
 
   static final offsetDoublePages = ReaderSetting<bool>(
     scope: ReaderSettingScope.perSeries,
     perSeriesKey: MangaMetaKeys.offsetDoublePages,
     global: offsetDoublePagesProvider,
-    fallback: DBKeys.offsetDoublePages.initial as bool,
+    fallback: DBKeys.offsetDoublePages.initial,
   );
 
   static final cropBorders = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: cropBordersProvider,
-    fallback: DBKeys.cropBorders.initial as bool,
+    fallback: DBKeys.cropBorders.initial,
   );
 
   static final smallerTapZones = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: smallerTapZonesProvider,
-    fallback: DBKeys.smallerTapZones.initial as bool,
+    fallback: DBKeys.smallerTapZones.initial,
   );
 
   static final animatePageTransitions = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: animatePageTransitionsProvider,
-    fallback: DBKeys.animatePageTransitions.initial as bool,
+    fallback: DBKeys.animatePageTransitions.initial,
   );
 
   static final dualPageSplitPaged = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: dualPageSplitPagedProvider,
-    fallback: DBKeys.dualPageSplitPaged.initial as bool,
+    fallback: DBKeys.dualPageSplitPaged.initial,
   );
 
   static final dualPageInvertPaged = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: dualPageInvertPagedProvider,
-    fallback: DBKeys.dualPageInvertPaged.initial as bool,
+    fallback: DBKeys.dualPageInvertPaged.initial,
   );
 
   static final rotateWidePages = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: rotateWidePagesProvider,
-    fallback: DBKeys.rotateWidePages.initial as bool,
+    fallback: DBKeys.rotateWidePages.initial,
   );
 
   static final rotateWideInvert = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: rotateWideInvertProvider,
-    fallback: DBKeys.rotateWideInvert.initial as bool,
+    fallback: DBKeys.rotateWideInvert.initial,
   );
 
   static final trueDualPageSpread = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: trueDualPageSpreadProvider,
-    fallback: DBKeys.trueDualPageSpread.initial as bool,
+    fallback: DBKeys.trueDualPageSpread.initial,
   );
 
   static final webtoonScaleType = ReaderSetting<WebtoonScaleType>(
     scope: ReaderSettingScope.global,
     global: webtoonScaleTypeKeyProvider,
-    fallback: DBKeys.webtoonScaleType.initial as WebtoonScaleType,
+    fallback: DBKeys.webtoonScaleType.initial,
   );
 
   static final longStripWidthLimitUsePixels = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: longStripWidthLimitUsePixelsProvider,
-    fallback: DBKeys.longStripWidthLimitUsePixels.initial as bool,
+    fallback: DBKeys.longStripWidthLimitUsePixels.initial,
   );
 
   static final longStripWidthLimitPercent = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: longStripWidthLimitPercentProvider,
-    fallback: DBKeys.longStripWidthLimitPercent.initial as int,
+    fallback: DBKeys.longStripWidthLimitPercent.initial,
   );
 
   static final longStripWidthLimitPx = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: longStripWidthLimitPxProvider,
-    fallback: DBKeys.longStripWidthLimitPx.initial as int,
+    fallback: DBKeys.longStripWidthLimitPx.initial,
   );
 
   static final cropBordersWebtoon = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: cropBordersWebtoonProvider,
-    fallback: DBKeys.cropBordersWebtoon.initial as bool,
+    fallback: DBKeys.cropBordersWebtoon.initial,
   );
 
   static final smoothAutoScroll = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: smoothAutoScrollProvider,
-    fallback: DBKeys.smoothAutoScroll.initial as bool,
+    fallback: DBKeys.smoothAutoScroll.initial,
   );
 
   static final readerScrollAmount = ReaderSetting<ReaderScrollAmount>(
     scope: ReaderSettingScope.global,
     global: readerScrollAmountKeyProvider,
-    fallback: DBKeys.readerScrollAmount.initial as ReaderScrollAmount,
+    fallback: DBKeys.readerScrollAmount.initial,
   );
 
   static final autoScrollIntervalSeconds = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: autoScrollIntervalSecondsProvider,
-    fallback: DBKeys.autoScrollIntervalSeconds.initial as int,
+    fallback: DBKeys.autoScrollIntervalSeconds.initial,
   );
 
   static final autoAdvanceIntervalSeconds = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: autoAdvanceIntervalSecondsProvider,
-    fallback: DBKeys.autoAdvanceIntervalSeconds.initial as int,
+    fallback: DBKeys.autoAdvanceIntervalSeconds.initial,
   );
 
   static final backgroundColor = ReaderSetting<ReaderBackgroundColor>(
     scope: ReaderSettingScope.global,
     global: readerBackgroundColorKeyProvider,
-    fallback: DBKeys.readerBackgroundColor.initial as ReaderBackgroundColor,
+    fallback: DBKeys.readerBackgroundColor.initial,
   );
 
   static final showPageNumber = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: showPageNumberProvider,
-    fallback: DBKeys.showPageNumber.initial as bool,
+    fallback: DBKeys.showPageNumber.initial,
   );
 
   static final landscapeVerticalSeekbar = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: landscapeVerticalSeekbarProvider,
-    fallback: DBKeys.landscapeVerticalSeekbar.initial as bool,
+    fallback: DBKeys.landscapeVerticalSeekbar.initial,
   );
 
   static final readerFullscreen = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: readerFullscreenProvider,
-    fallback: DBKeys.readerFullscreen.initial as bool,
+    fallback: DBKeys.readerFullscreen.initial,
   );
 
   static final drawUnderCutout = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: drawUnderCutoutProvider,
-    fallback: DBKeys.drawUnderCutout.initial as bool,
+    fallback: DBKeys.drawUnderCutout.initial,
   );
 
   static final readWithLongTap = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: readWithLongTapProvider,
-    fallback: DBKeys.readWithLongTap.initial as bool,
+    fallback: DBKeys.readWithLongTap.initial,
   );
 
   static final alwaysShowChapterTransition = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: alwaysShowChapterTransitionProvider,
-    fallback: DBKeys.alwaysShowChapterTransition.initial as bool,
+    fallback: DBKeys.alwaysShowChapterTransition.initial,
   );
 
   static final flashOnPageChange = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: flashOnPageChangeProvider,
-    fallback: DBKeys.flashOnPageChange.initial as bool,
+    fallback: DBKeys.flashOnPageChange.initial,
   );
 
   static final flashDuration = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: flashDurationProvider,
-    fallback: DBKeys.flashDuration.initial as int,
+    fallback: DBKeys.flashDuration.initial,
   );
 
   static final flashPageInterval = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: flashPageIntervalProvider,
-    fallback: DBKeys.flashPageInterval.initial as int,
+    fallback: DBKeys.flashPageInterval.initial,
   );
 
   static final flashColor = ReaderSetting<FlashColor>(
     scope: ReaderSettingScope.global,
     global: flashColorKeyProvider,
-    fallback: DBKeys.flashColor.initial as FlashColor,
+    fallback: DBKeys.flashColor.initial,
   );
 
   static final customBrightness = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: customBrightnessProvider,
-    fallback: DBKeys.customBrightness.initial as bool,
+    fallback: DBKeys.customBrightness.initial,
   );
 
   static final customBrightnessValue = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: customBrightnessValueProvider,
-    fallback: DBKeys.customBrightnessValue.initial as int,
+    fallback: DBKeys.customBrightnessValue.initial,
   );
 
   static final customColorFilter = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: customColorFilterProvider,
-    fallback: DBKeys.customColorFilter.initial as bool,
+    fallback: DBKeys.customColorFilter.initial,
   );
 
   static final colorFilterValue = ReaderSetting<int>(
     scope: ReaderSettingScope.global,
     global: colorFilterValueProvider,
-    fallback: DBKeys.colorFilterValue.initial as int,
+    fallback: DBKeys.colorFilterValue.initial,
   );
 
   static final colorFilterBlendMode = ReaderSetting<ColorFilterBlendMode>(
     scope: ReaderSettingScope.global,
     global: colorFilterBlendModeKeyProvider,
-    fallback: DBKeys.colorFilterBlendMode.initial as ColorFilterBlendMode,
+    fallback: DBKeys.colorFilterBlendMode.initial,
   );
 
   static final grayscale = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: grayscaleProvider,
-    fallback: DBKeys.grayscale.initial as bool,
+    fallback: DBKeys.grayscale.initial,
   );
 
   static final invertedColors = ReaderSetting<bool>(
     scope: ReaderSettingScope.global,
     global: invertedColorsProvider,
-    fallback: DBKeys.invertedColors.initial as bool,
+    fallback: DBKeys.invertedColors.initial,
   );
 }
 

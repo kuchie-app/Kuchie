@@ -9,8 +9,8 @@ import 'dart:convert';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../../constants/enum.dart';
-import '../../../../features/library/domain/library_search_query.dart';
 import '../../../../utils/webui_meta/webui_meta_codec.dart';
+import '../../../library/domain/library_search_query.dart';
 import 'graphql/__generated__/fragment.graphql.dart';
 
 part 'manga_model.freezed.dart';

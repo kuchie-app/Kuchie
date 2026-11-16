@@ -13,7 +13,7 @@ import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/auth/data/auth_recovery_target.dart';
 import 'package:kuchie/src/features/auth/data/auth_state.dart';
 import 'package:kuchie/src/features/onboarding/data/onboarding_complete.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/utils/network/graphql_errors.dart';
 import 'package:shared_preferences/shared_preferences.dart';

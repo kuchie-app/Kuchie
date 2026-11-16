@@ -14,7 +14,7 @@ import 'package:kuchie/src/features/account/domain/account_binding.dart';
 import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/auth/data/custom_headers_store.dart';
 import 'package:kuchie/src/features/auth/data/secure_credentials_provider.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

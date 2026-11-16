@@ -11,7 +11,7 @@ import 'package:kuchie/src/features/manga_book/data/recommendations/recommendati
 import 'package:kuchie/src/features/manga_book/data/recommendations/recommendation_repository.dart';
 import 'package:kuchie/src/features/manga_book/presentation/manga_details/widgets/recommends_row.dart';
 import 'package:kuchie/src/features/offline/data/server_reachability.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/utils/theme/app_theme_builder.dart';

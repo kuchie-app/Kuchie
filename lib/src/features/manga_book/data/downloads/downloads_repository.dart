@@ -15,7 +15,7 @@ import '../../../auth/data/auth_credentials_store.dart';
 import '../../../offline/data/offline_download_permission.dart';
 import '../../domain/downloads/downloads_model.dart';
 import '../../domain/downloads_queue/downloads_queue_model.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'downloads_repository.g.dart';
 
@@ -143,7 +143,7 @@ Future<void> cancelQueuedDownloadsForManga(
       .query$GetDownloadStatus()
       .getData((data) => data.downloadStatus.queue);
   final ids = <int>[
-    for (final item in queue ?? const [])
+    for (final item in [...?queue])
       if (item.manga.id == mangaId &&
           (item.state == Enum$DownloadState.QUEUED ||
               item.state == Enum$DownloadState.ERROR))

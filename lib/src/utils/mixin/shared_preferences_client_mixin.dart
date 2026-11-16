@@ -6,6 +6,8 @@
 
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -39,7 +41,7 @@ mixin SharedPreferenceClientMixin<T extends Object> {
   }) {
     _client = ref.watch(sharedPreferencesProvider);
     _key = key.name;
-    _initial = initial ?? key.initial;
+    _initial = initial ?? key.initial as T?;
     _toJson = toJson;
     _fromJson = fromJson;
     _persistenceRefreshLogic();
@@ -68,18 +70,18 @@ mixin SharedPreferenceClientMixin<T extends Object> {
   Future<bool> _set(T? value) async {
     if (value == null) return _client.remove(_key);
     if (_toJson != null) {
-      _client.setString(_key, jsonEncode(_toJson(value)));
+      unawaited(_client.setString(_key, jsonEncode(_toJson(value))));
     }
     if (value is bool) {
-      return await _client.setBool(_key, value);
+      return _client.setBool(_key, value);
     } else if (value is double) {
-      return await _client.setDouble(_key, value);
+      return _client.setDouble(_key, value);
     } else if (value is int) {
-      return await _client.setInt(_key, value);
+      return _client.setInt(_key, value);
     } else if (value is String) {
-      return await _client.setString(_key, value);
+      return _client.setString(_key, value);
     } else if (value is List<String>) {
-      return await _client.setStringList(_key, value);
+      return _client.setStringList(_key, value);
     }
     return false;
   }
@@ -103,7 +105,7 @@ mixin SharedPreferenceEnumClientMixin<T extends Enum> {
   T? initialize(DBKeys key, {required List<T> enumList, T? initial}) {
     _client = ref.watch(sharedPreferencesProvider);
     _key = key.name;
-    _initial = initial ?? key.initial;
+    _initial = initial ?? key.initial as T?;
     _enumList = enumList;
     _persistenceRefreshLogic();
     return _get;

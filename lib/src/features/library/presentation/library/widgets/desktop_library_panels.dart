@@ -433,7 +433,7 @@ class _DisplayColumn extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final displayMode = ref.watch(libraryDisplayModeProvider);
     final selectedMode =
-        displayMode ?? DBKeys.libraryDisplayMode.initial as DisplayMode;
+        displayMode ?? DBKeys.libraryDisplayMode.initial;
     final gridStyle =
         ref.watch(libraryGridStyleKeyProvider) ?? LibraryGridStyle.uniform;
     return Column(
@@ -579,13 +579,13 @@ class _GroupColumn extends ConsumerWidget {
         ref.watch(loggedInTrackersProvider).value?.isNotEmpty ?? false;
     final isGrid =
         (ref.watch(libraryDisplayModeProvider) ??
-                DBKeys.libraryDisplayMode.initial as DisplayMode)
+                DBKeys.libraryDisplayMode.initial)
             .isGrid;
     final portraitCols = ref.watch(libraryPortraitColumnsProvider) ?? 0;
     final landscapeCols = ref.watch(libraryLandscapeColumnsProvider) ?? 0;
     final listScale =
         ref.watch(libraryListScaleProvider) ??
-        DBKeys.listScale.initial as double;
+        DBKeys.listScale.initial;
 
     String groupLabel(int type) => switch (type) {
       LibraryGroup.byDefault => context.l10n.groupByDefault,

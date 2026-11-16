@@ -14,10 +14,10 @@
 
 import 'package:hooks_riverpod/misc.dart';
 import 'package:kuchie/src/features/settings/controller/server_controller.dart';
+import 'package:kuchie/src/features/settings/data/server/web_interface_repository.dart';
 import 'package:kuchie/src/features/settings/domain/settings/settings.dart';
 import 'package:kuchie/src/features/settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/koreader_sync/domain/koreader_sync_domain.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/web_interface_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/syncyomi/data/syncyomi_settings_provider.dart';
 
 class NoServerSettings extends Settings {

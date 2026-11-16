@@ -93,7 +93,7 @@ class LibrarySettingsScreen extends ConsumerWidget {
             ];
             final defaultCategory =
                 ref.watch(libraryDefaultCategoryProvider) ??
-                DBKeys.libraryDefaultCategory.initial as int;
+                DBKeys.libraryDefaultCategory.initial;
             final specialCategoryId = ref.watch(
               settledDefaultCategoryIdProvider,
             );
@@ -330,12 +330,10 @@ class LibrarySettingsScreen extends ConsumerWidget {
                         builder: (context) {
                           final swipeLeft =
                               ref.watch(chapterSwipeToLeftProvider) ??
-                              DBKeys.chapterSwipeToLeft.initial
-                                  as ChapterSwipeAction;
+                              DBKeys.chapterSwipeToLeft.initial;
                           final swipeRight =
                               ref.watch(chapterSwipeToRightProvider) ??
-                              DBKeys.chapterSwipeToRight.initial
-                                  as ChapterSwipeAction;
+                              DBKeys.chapterSwipeToRight.initial;
                           void pickSwipe({
                             required String title,
                             required ChapterSwipeAction value,

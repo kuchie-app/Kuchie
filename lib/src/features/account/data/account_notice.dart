@@ -2,8 +2,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../global_providers/global_providers.dart';
 import '../../offline/data/offline_server_identity.dart';
-import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../settings/data/server_connection/server_port.dart';
+import '../../settings/data/server_connection/server_url.dart';
 
 enum AccountNoticeKind { passwordUnconfirmed, passwordSignInRequired }
 

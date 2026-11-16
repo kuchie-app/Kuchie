@@ -10,7 +10,7 @@ import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/notifications/controller/notifications_controller.dart';
 import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

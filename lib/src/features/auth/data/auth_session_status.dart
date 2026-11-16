@@ -2,7 +2,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../constants/enum.dart';
 import '../../../global_providers/global_providers.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
 import 'auth_credentials_store.dart';
 
 final hasStoredCredentialsProvider = Provider<bool>((ref) {

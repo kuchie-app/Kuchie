@@ -15,9 +15,9 @@ import '../../../widgets/server_image.dart';
 import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/custom_headers_store.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
-import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
+import '../../settings/data/server_connection/server_port.dart';
+import '../../settings/data/server_connection/server_url.dart';
 
 part 'offline_cover_warmer.g.dart';
 

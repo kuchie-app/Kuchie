@@ -7,7 +7,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generated__/fragment.graphql.dart';
-import 'package:kuchie/src/features/settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/downloads/delete_chapters_settings_repository.dart';
 
 ChapterDto _ch(int id) => Fragment$ChapterDto(
   id: id,

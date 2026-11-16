@@ -5,9 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/auth/data/secure_credentials_provider.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_port.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

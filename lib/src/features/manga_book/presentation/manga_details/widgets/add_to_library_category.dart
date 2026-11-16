@@ -55,7 +55,7 @@ Future<void> addMangaToLibraryWithCategory(
 
   final pref =
       container.read(libraryDefaultCategoryProvider) ??
-      DBKeys.libraryDefaultCategory.initial as int;
+      DBKeys.libraryDefaultCategory.initial;
   final defaultId = await container.read(defaultCategoryIdProvider.future);
   if (defaultId == null) throw StateError('Default category unavailable');
   final categories =

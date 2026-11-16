@@ -20,7 +20,7 @@ import '../../domain/chapter_batch/chapter_batch_model.dart';
 import '../../domain/chapter_page/chapter_page_model.dart';
 import '../../domain/manga/manga_model.dart';
 import '../downloads/downloads_repository.dart';
-import './__generated__/query.graphql.dart';
+import '__generated__/query.graphql.dart';
 
 part 'manga_book_repository.g.dart';
 
@@ -247,14 +247,14 @@ class MangaBookRepository {
                   meta: Input$MangaMetaTypeInput(
                     key: key,
                     mangaId: mangaId,
-                    value: value,
+                    value: value as String,
                   ),
                 ),
               ),
             ),
           )
           .getData((data) {});
-    await mirrorMangaMeta(readOfflineDb, mangaId, key, '$value');
+    await mirrorMangaMeta(readOfflineDb, mangaId, key, value);
   }
 
   Future<void> setCustomCover({

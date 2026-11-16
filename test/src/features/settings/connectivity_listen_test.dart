@@ -13,13 +13,14 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 
 void main() {
   test(
     'a connectivity stream failure never crashes and the stream survives',
     () async {
       final controller = StreamController<List<ConnectivityResult>>();
+      addTearDown(controller.close);
       final zoneErrors = <Object>[];
       var changes = 0;
       late StreamSubscription<List<ConnectivityResult>> sub;

@@ -49,13 +49,7 @@ class LoggerLink extends Link {
       GraphQLRequestStats.record(name);
       logger.i('GQL#${GraphQLRequestStats.total} $name');
     }
-    Stream<Response> response = forward!(request)
-        .map((Response fetchResult) => fetchResult)
-        .handleError((error) {
-          throw error;
-        });
-
-    return response;
+    return forward!(request);
   }
 
   LoggerLink();

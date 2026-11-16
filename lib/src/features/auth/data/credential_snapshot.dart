@@ -114,7 +114,7 @@ class CredentialSnapshot {
             baseUrl: prefs.getString(DBKeys.serverUrl.name),
             port:
                 prefs.getInt(DBKeys.serverPort.name) ??
-                DBKeys.serverPort.initial as int,
+                DBKeys.serverPort.initial,
             addPort: prefs.getBool(DBKeys.serverPortToggle.name) ?? true,
           ),
           username: prefs.getString(DBKeys.authUsername.name) ?? '',

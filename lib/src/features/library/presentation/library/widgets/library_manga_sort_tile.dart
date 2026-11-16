@@ -35,7 +35,7 @@ class LibraryMangaSortTile extends ConsumerWidget {
     // Selecting Random again re-rolls; its comparator ignores sort direction.
     if (sortType == MangaSort.random) {
       final seed = ref.watch(librarySortRandomSeedProvider) ??
-          DBKeys.librarySortRandomSeed.initial as int;
+          DBKeys.librarySortRandomSeed.initial;
       return _CompactSortRow(
         label: sortType.toLocale(context),
         leading: isSelected

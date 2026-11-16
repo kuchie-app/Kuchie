@@ -8,9 +8,9 @@ import '../../../../../../utils/misc/toast/toast.dart';
 import '../../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../../widgets/popup_widgets/pop_button.dart';
+import '../../../../data/backup/backup_settings_repository.dart';
+import '../../../../domain/backup/backup_flags.dart';
 import '../../../../search/settings_search_registry.dart';
-import '../../data/backup_settings_repository.dart';
-import 'backup_flags.dart';
 
 Future<BackupFlags?> showBackupFlagsDialog(
   BuildContext context, {

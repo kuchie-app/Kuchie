@@ -101,7 +101,7 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
     final autoAdvanceActive = ref.watch(autoScrollActiveProvider);
     final autoAdvanceInterval =
         ref.watch(autoAdvanceIntervalSecondsProvider) ??
-        DBKeys.autoAdvanceIntervalSeconds.initial as int;
+        DBKeys.autoAdvanceIntervalSeconds.initial;
     useEffect(() {
       if (!routeIsCurrent || !autoAdvanceActive) return null;
       final timer = Timer.periodic(Duration(seconds: autoAdvanceInterval), (_) {
@@ -808,7 +808,7 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
       onAutoScrollFaster: () {
         final cur =
             ref.read(autoAdvanceIntervalSecondsProvider) ??
-            DBKeys.autoAdvanceIntervalSeconds.initial as int;
+            DBKeys.autoAdvanceIntervalSeconds.initial;
         ref
             .read(autoAdvanceIntervalSecondsProvider.notifier)
             .update((cur - 1).clamp(1, 30));
@@ -816,7 +816,7 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
       onAutoScrollSlower: () {
         final cur =
             ref.read(autoAdvanceIntervalSecondsProvider) ??
-            DBKeys.autoAdvanceIntervalSeconds.initial as int;
+            DBKeys.autoAdvanceIntervalSeconds.initial;
         ref
             .read(autoAdvanceIntervalSecondsProvider.notifier)
             .update((cur + 1).clamp(1, 30));

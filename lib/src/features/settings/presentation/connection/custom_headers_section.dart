@@ -10,11 +10,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../constants/app_sizes.dart';
-import '../../../../features/auth/data/custom_headers_store.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/motion/reduce_motion.dart';
 import '../../../../widgets/fluent_expansion_tile.dart';
 import '../../../../widgets/popup_widgets/app_dialog.dart';
+import '../../../auth/data/custom_headers_store.dart';
 import '../../search/settings_search_registry.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
 

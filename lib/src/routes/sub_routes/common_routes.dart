@@ -118,7 +118,7 @@ class _ReaderRouteTransition extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final background =
         ref.watch(readerBackgroundColorKeyProvider) ??
-        DBKeys.readerBackgroundColor.initial as ReaderBackgroundColor;
+        DBKeys.readerBackgroundColor.initial;
     return ColoredBox(
       color: background.color(context),
       child: ClipRect(child: child),

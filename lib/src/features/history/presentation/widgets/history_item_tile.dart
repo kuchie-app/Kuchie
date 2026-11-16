@@ -94,14 +94,14 @@ Future<void> navigateToNextHistoryChapterAfterLoading(
       .read(mangaChapterListProvider(mangaId: item.mangaId).notifier)
       .refresh();
 
-  Future.any([
+  unawaited(Future.any([
     completer.future,
     Future.delayed(const Duration(seconds: 10)).then((_) {
       if (!completer.isCompleted) {
         navigateAndCleanup(item.id);
       }
     }),
-  ]);
+  ]));
 }
 
 class HistoryItemTile extends StatelessWidget {

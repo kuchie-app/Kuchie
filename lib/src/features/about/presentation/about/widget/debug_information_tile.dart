@@ -9,11 +9,11 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../../global_providers/package_info.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/misc/toast/toast.dart';
 import '../../../../../utils/platform/current_platform_description.dart';
 import '../../../domain/about/about_dto.dart';
-import '../controllers/about_controller.dart';
 
 String buildDebugInfoText({
   required String clientName,

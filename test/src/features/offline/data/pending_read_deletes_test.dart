@@ -11,7 +11,7 @@ import 'package:kuchie/src/features/manga_book/domain/chapter/graphql/__generate
 import 'package:kuchie/src/features/manga_book/presentation/manga_details/controller/manga_details_controller.dart';
 import 'package:kuchie/src/features/offline/data/offline_download_providers.dart';
 import 'package:kuchie/src/features/offline/data/offline_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/downloads/delete_chapters_settings_repository.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';

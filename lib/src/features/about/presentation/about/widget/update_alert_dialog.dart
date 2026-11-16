@@ -8,8 +8,8 @@ import '../../../../../utils/launch_url_in_web.dart';
 import '../../../../../utils/misc/toast/toast.dart';
 import '../../../../../widgets/ios/apple_glass_popup_button.dart';
 import '../../../../../widgets/popup_widgets/app_dialog.dart';
-import '../../../../settings/presentation/server/data/web_interface_installer.dart';
-import '../../../../settings/presentation/server/data/web_interface_repository.dart';
+import '../../../../settings/data/server/web_interface_installer.dart';
+import '../../../../settings/data/server/web_interface_repository.dart';
 import '../../../data/about_repository.dart';
 
 class UpdateAlertDialog extends ConsumerStatefulWidget {

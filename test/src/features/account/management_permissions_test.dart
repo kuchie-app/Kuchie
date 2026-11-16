@@ -5,9 +5,9 @@ import 'package:kuchie/src/features/account/domain/account_access.dart';
 import 'package:kuchie/src/features/browse_center/data/extension_repository/extension_repository.dart';
 import 'package:kuchie/src/features/browse_center/data/extension_store_repository/extension_store_repository.dart';
 import 'package:kuchie/src/features/browse_center/data/source_repository/source_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/backup/data/backup_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/backup/backup_settings_repository.dart';
+import 'package:kuchie/src/features/settings/data/server/server_settings_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/browse/data/browse_settings_repository.dart';
-import 'package:kuchie/src/features/settings/presentation/server/data/server_settings_repository.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
 import 'package:material_ui/material_ui.dart';
 

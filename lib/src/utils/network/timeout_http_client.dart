@@ -76,6 +76,8 @@ class TimeoutHttpClient extends http.BaseClient {
       _release();
     }
 
+    // Cancelled by the body's onCancel below, which the lint cannot follow.
+    // ignore: cancel_subscriptions
     StreamSubscription<List<int>>? subscription;
     final body = StreamController<List<int>>(sync: true);
     body

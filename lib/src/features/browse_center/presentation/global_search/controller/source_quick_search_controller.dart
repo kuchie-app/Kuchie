@@ -13,7 +13,7 @@ import '../../../../../global_providers/global_providers.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
-import '../../../../settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
+import '../../../../settings/data/downloads/delete_chapters_settings_repository.dart';
 import '../../../data/source_repository/source_repository.dart';
 import '../../../domain/source/source_model.dart';
 import '../../source/controller/source_controller.dart';
@@ -44,7 +44,7 @@ class GlobalSearchScope extends _$GlobalSearchScope
           .read(deleteChaptersSettingsRepositoryProvider)
           .getGlobalMetas();
       String? raw;
-      for (final m in metas ?? const []) {
+      for (final m in [...?metas]) {
         if (m.key == kGlobalSearchScopeMetaKey) raw = m.value;
       }
       final server = GlobalSearchSourceFilter.values

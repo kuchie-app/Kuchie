@@ -12,8 +12,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../../constants/db_keys.dart';
 import '../../../../../constants/enum.dart';
-import '../../../../../features/offline/data/offline_download_providers.dart';
-import '../../../../../features/offline/data/server_reachability.dart';
 import '../../../../../global_providers/global_providers.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
@@ -22,6 +20,8 @@ import '../../../../../utils/webui_meta/webui_settings.dart';
 import '../../../../browse_center/domain/content_rating.dart';
 import '../../../../manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
+import '../../../../offline/data/offline_download_providers.dart';
+import '../../../../offline/data/server_reachability.dart';
 import '../../../../tracking/data/tracker_repository.dart';
 import '../../../data/default_category.dart';
 import '../../../domain/category/category_model.dart';
@@ -342,7 +342,7 @@ class CategoryMangaListWithQueryAndFilter
     final sortedDirection = options.ascending!;
     final seed =
         ref.watch(librarySortRandomSeedProvider) ??
-        DBKeys.librarySortRandomSeed.initial as int;
+        DBKeys.librarySortRandomSeed.initial;
 
     return mangaList.map<AsyncValue<List<MangaDto>?>>(
       data: (e) => AsyncData(
@@ -790,7 +790,7 @@ class GroupedMangaListWithQueryAndFilter
         .ifNull(true);
     final seed =
         ref.watch(librarySortRandomSeedProvider) ??
-        DBKeys.librarySortRandomSeed.initial as int;
+        DBKeys.librarySortRandomSeed.initial;
 
     return allAsync.map<AsyncValue<List<MangaDto>?>>(
       data: (e) => AsyncData(

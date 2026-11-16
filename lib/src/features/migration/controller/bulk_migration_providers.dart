@@ -30,8 +30,8 @@ import '../../offline/data/offline_download_providers.dart';
 import '../../offline/data/offline_repository.dart';
 import '../../offline/data/offline_runtime_storage.dart';
 import '../../offline/data/offline_server_identity_repository.dart';
-import '../../settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
-import '../../settings/presentation/general/timeout_settings/timeout_settings_section.dart';
+import '../../settings/data/downloads/delete_chapters_settings_repository.dart';
+import '../../settings/data/server_connection/request_timeout.dart';
 import '../data/bulk_migration_runner.dart';
 import '../data/migration_journal.dart';
 import '../data/migration_repository.dart';
@@ -320,7 +320,7 @@ BulkMigrationRunner buildBulkMigrationRunner({
   final searchTimeout = Duration(
     milliseconds:
         container.read(serverRequestTimeoutProvider) ??
-        DBKeys.serverRequestTimeout.initial as int,
+        DBKeys.serverRequestTimeout.initial,
   );
   final rateLimiter = RateLimiter(
     minInterval: const Duration(milliseconds: 250),

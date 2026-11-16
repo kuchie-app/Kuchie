@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:graphql/client.dart';
 
-import '../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
 import 'graphql/__generated__/web_interface.graphql.dart';
 import 'web_interface_repository.dart';
 

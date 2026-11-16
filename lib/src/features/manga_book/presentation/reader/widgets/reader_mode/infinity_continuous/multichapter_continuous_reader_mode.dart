@@ -515,11 +515,11 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
     // must not collapse the layout.
     final int widthLimitPercent =
         (ref.watch(longStripWidthLimitPercentProvider) ??
-                DBKeys.longStripWidthLimitPercent.initial as int)
+                DBKeys.longStripWidthLimitPercent.initial)
             .clamp(10, 100);
     final int widthLimitPx =
         (ref.watch(longStripWidthLimitPxProvider) ??
-                DBKeys.longStripWidthLimitPx.initial as int)
+                DBKeys.longStripWidthLimitPx.initial)
             .clamp(200, 2000);
     // 100% is the off position; a px cap wider than the window is naturally
     // inert through the min() below.
@@ -559,15 +559,15 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
             lifecycle.value == AppLifecycleState.resumed);
     final ReaderScrollAmount scrollAmount =
         ref.watch(readerScrollAmountKeyProvider) ??
-        DBKeys.readerScrollAmount.initial as ReaderScrollAmount;
+        DBKeys.readerScrollAmount.initial;
 
     final bool autoScrollActive = ref.watch(autoScrollActiveProvider);
     final bool smoothAutoScroll =
         ref.watch(smoothAutoScrollProvider) ??
-        DBKeys.smoothAutoScroll.initial as bool;
+        DBKeys.smoothAutoScroll.initial;
     final int autoScrollIntervalSeconds =
         ref.watch(autoScrollIntervalSecondsProvider) ??
-        DBKeys.autoScrollIntervalSeconds.initial as int;
+        DBKeys.autoScrollIntervalSeconds.initial;
     // Set around every auto-scroll-driven jump so the manual-scroll listener
     // below doesn't mistake the engine's own motion for a user drag.
     final programmaticScroll = useRef<bool>(false);
@@ -585,7 +585,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
           final path = await serverPageFilePath(ref, url);
           return (path: path, size: await dimensions.read(key, path));
         } finally {
-          pageProbes.value.remove(key);
+          unawaited(pageProbes.value.remove(key));
         }
       });
     }
@@ -1156,7 +1156,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
         final pos = scrollOffsetController.position;
         final interval =
             ref.read(autoScrollIntervalSecondsProvider) ??
-            DBKeys.autoScrollIntervalSeconds.initial as int;
+            DBKeys.autoScrollIntervalSeconds.initial;
         final delta = autoScrollDelta(
           viewport: pos.viewportDimension,
           intervalSeconds: interval,
@@ -1305,7 +1305,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
 
     final spinnerColor =
         (ref.read(readerBackgroundColorKeyProvider) ??
-                DBKeys.readerBackgroundColor.initial as ReaderBackgroundColor)
+                DBKeys.readerBackgroundColor.initial)
             .onColor(context);
 
     Widget buildItem(BuildContext context, int index) {
@@ -1644,7 +1644,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
         onAutoScrollFaster: () {
           final cur =
               ref.read(autoScrollIntervalSecondsProvider) ??
-              DBKeys.autoScrollIntervalSeconds.initial as int;
+              DBKeys.autoScrollIntervalSeconds.initial;
           ref
               .read(autoScrollIntervalSecondsProvider.notifier)
               .update((cur - 1).clamp(1, 30));
@@ -1652,7 +1652,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
         onAutoScrollSlower: () {
           final cur =
               ref.read(autoScrollIntervalSecondsProvider) ??
-              DBKeys.autoScrollIntervalSeconds.initial as int;
+              DBKeys.autoScrollIntervalSeconds.initial;
           ref
               .read(autoScrollIntervalSecondsProvider.notifier)
               .update((cur + 1).clamp(1, 30));

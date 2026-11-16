@@ -30,7 +30,7 @@ import '../../offline/data/offline_repository.dart';
 import '../../offline/data/offline_runtime_storage.dart';
 import '../../offline/data/offline_server_identity_repository.dart';
 import '../../offline/data/server_reachability.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../settings/data/server_connection/server_url.dart';
 import '../domain/account_access.dart';
 import 'account_bootstrap.dart';
 import 'account_providers.dart';

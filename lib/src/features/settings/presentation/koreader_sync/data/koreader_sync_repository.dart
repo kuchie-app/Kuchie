@@ -8,7 +8,7 @@ import '../../../../../utils/misc/graphql_undefined_field.dart';
 import '../../../data/account_or_legacy_settings.dart';
 import '../../../data/user_settings.dart';
 import '../domain/koreader_sync_domain.dart';
-import './graphql/__generated__/koreader_sync.graphql.dart';
+import 'graphql/__generated__/koreader_sync.graphql.dart';
 
 part 'koreader_sync_repository.g.dart';
 

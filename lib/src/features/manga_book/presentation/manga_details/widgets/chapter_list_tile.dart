@@ -156,10 +156,10 @@ class ChapterListTile extends HookConsumerWidget {
     final downloaded = chapter.user.isDownloaded.ifNull();
     final swipeLeft =
         ref.watch(chapterSwipeToLeftProvider) ??
-        DBKeys.chapterSwipeToLeft.initial as ChapterSwipeAction;
+        DBKeys.chapterSwipeToLeft.initial;
     final swipeRight =
         ref.watch(chapterSwipeToRightProvider) ??
-        DBKeys.chapterSwipeToRight.initial as ChapterSwipeAction;
+        DBKeys.chapterSwipeToRight.initial;
     final queueEntry = ref.watch(downloadsFromIdProvider(chapter.id));
     final canDownload = canDownloadChapters(ref);
     final readerLocation = ReaderRoute(
@@ -644,7 +644,7 @@ class _ChapterSwipeRowState extends State<_ChapterSwipeRow>
     final toLeft = _offset < 0;
     final icon = toLeft ? widget.leftIcon : widget.rightIcon;
     final past = _offset.abs() >= _threshold && icon != null;
-    return Container(
+    return ColoredBox(
       color: past ? cs.primaryContainer : cs.surfaceContainerLowest,
       child: _offset == 0 || !past
           ? null

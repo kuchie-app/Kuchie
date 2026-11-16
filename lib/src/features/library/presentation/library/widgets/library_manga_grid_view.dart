@@ -105,10 +105,10 @@ class LibraryMangaSliver extends ConsumerWidget {
     final limitTitleLines = ref.watch(limitTitleLinesProvider).ifNull(true);
     final listScale =
         ref.watch(libraryListScaleProvider) ??
-        DBKeys.listScale.initial as double;
+        DBKeys.listScale.initial;
     final gridWidth =
         ref.watch(gridMinWidthProvider) ??
-        DBKeys.gridMangaCoverMinWidth.initial as double;
+        DBKeys.gridMangaCoverMinWidth.initial;
     final isLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
     final iosCoverGrid = !isLandscape && supportsAppleGlass(context);
@@ -142,7 +142,7 @@ class LibraryMangaSliver extends ConsumerWidget {
             () => ref.read(mangaChapterListProvider(mangaId: manga.id).future),
           );
           if (!context.mounted) return;
-          ReaderRoute(mangaId: manga.id, chapterId: chapter.id).push(context);
+          unawaited(ReaderRoute(mangaId: manga.id, chapterId: chapter.id).push(context));
         }());
       };
     }

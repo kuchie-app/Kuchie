@@ -14,9 +14,9 @@ import '../../../constants/enum.dart';
 import '../../../global_providers/global_providers.dart';
 import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/pending_tracker_oauth_store.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/hosted_base_uri.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import '../../settings/presentation/server/widget/credential_popup/login_credentials_popup.dart';
+import '../../settings/data/server_connection/auth_username.dart';
+import '../../settings/data/server_connection/hosted_base_uri.dart';
+import '../../settings/data/server_connection/server_url.dart';
 import '../domain/tracker_oauth_helpers.dart';
 import '../domain/tracker_oauth_origin.dart';
 import 'tracker_repository.dart';
@@ -73,12 +73,12 @@ class _Pending {
         return null;
       }
       return _Pending(
-        nonce: value['nonce'],
-        trackerId: value['trackerId'],
-        redirect: value['redirectUrl'],
-        issuedAt: value['issuedAt'],
-        expiresAt: value['expiresAt'],
-        origin: value['origin'],
+        nonce: value['nonce'] as String,
+        trackerId: value['trackerId'] as int,
+        redirect: value['redirectUrl'] as String,
+        issuedAt: value['issuedAt'] as int,
+        expiresAt: value['expiresAt'] as int,
+        origin: value['origin'] as String,
       );
     } catch (_) {
       return null;

@@ -2,12 +2,12 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../global_providers/global_providers.dart';
-import '../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/misc/graphql_undefined_field.dart';
-import '../../../../account/data/account_permission.dart';
-import '../../../domain/settings/settings.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/graphql_undefined_field.dart';
+import '../../../account/data/account_permission.dart';
+import '../../domain/settings/settings.dart';
 import 'graphql/__generated__/query.graphql.dart';
 
 part 'server_settings_repository.g.dart';

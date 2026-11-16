@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -76,7 +78,7 @@ class EditMangaCategoryDialog extends HookConsumerWidget {
                                 }
                                 // The caller refreshes on close if the dialog was dismissed.
                                 if (!context.mounted) return;
-                                ref.read(provider.notifier).refresh();
+                                unawaited(ref.read(provider.notifier).refresh());
                                 ref.invalidate(categoryControllerProvider);
                                 ref.invalidate(libraryMangaListProvider);
                               },

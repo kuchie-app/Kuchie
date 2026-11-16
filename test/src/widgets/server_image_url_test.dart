@@ -5,7 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/web_default_server_url.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/web_default_server_url.dart';
 import 'package:kuchie/src/utils/texture_limit.dart';
 import 'package:kuchie/src/widgets/server_image.dart';
 

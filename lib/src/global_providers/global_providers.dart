@@ -28,10 +28,10 @@ import '../features/auth/data/custom_headers_store.dart';
 import '../features/auth/data/jwt_utils.dart';
 import '../features/auth/data/suwayomi_auth_link.dart';
 import '../features/offline/data/server_reachability.dart';
-import '../features/settings/presentation/general/timeout_settings/timeout_settings_section.dart';
-import '../features/settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import '../features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../features/settings/data/server_connection/basic_auth_credentials.dart';
+import '../features/settings/data/server_connection/request_timeout.dart';
+import '../features/settings/data/server_connection/server_port.dart';
+import '../features/settings/data/server_connection/server_url.dart';
 import '../utils/crash/diagnostics.dart';
 import '../utils/extensions/custom_extensions.dart';
 import '../utils/graphql/legacy_user_fields_link.dart';
@@ -58,7 +58,7 @@ bool _isGraphQlRead(http.BaseRequest request) {
 final unauthenticatedGraphQlClientProvider = Provider<GraphQLClient>((ref) {
   final timeoutMs =
       ref.watch(serverRequestTimeoutProvider) ??
-      DBKeys.serverRequestTimeout.initial as int;
+      DBKeys.serverRequestTimeout.initial;
   final client = TimeoutHttpClient(Duration(milliseconds: timeoutMs));
   ref.onDispose(client.close);
   return GraphQLClient(
@@ -112,11 +112,11 @@ GraphQLClient graphQlClient(Ref ref) {
 
   final timeoutMs =
       ref.watch(serverRequestTimeoutProvider) ??
-      DBKeys.serverRequestTimeout.initial as int;
+      DBKeys.serverRequestTimeout.initial;
   final autoRetry = ref.watch(autoRefreshOnTimeoutProvider).ifNull();
   final retryDelayMs =
       ref.watch(autoRefreshRetryDelayProvider) ??
-      DBKeys.autoRefreshRetryDelay.initial as int;
+      DBKeys.autoRefreshRetryDelay.initial;
 
   // Client aborts leave server fetches running, so each retry gets the full timeout.
   final effectiveTimeoutMs = timeoutMs;
@@ -509,7 +509,7 @@ GraphQLClient graphQlSubscriptionClient(Ref ref) {
   );
   final timeoutMs =
       ref.watch(serverRequestTimeoutProvider) ??
-      DBKeys.serverRequestTimeout.initial as int;
+      DBKeys.serverRequestTimeout.initial;
   return GraphQLClient(
     link: _sessionLink(isCurrentSession).concat(loggerLink).concat(wsLink),
     defaultPolicies: DefaultPolicies(

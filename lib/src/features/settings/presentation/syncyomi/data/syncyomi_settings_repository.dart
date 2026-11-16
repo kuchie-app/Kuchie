@@ -5,8 +5,8 @@ import '../../../../../global_providers/global_providers.dart';
 import '../../../../../graphql/__generated__/schema.graphql.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../data/user_settings.dart';
-import './graphql/__generated__/query.graphql.dart';
-import './syncyomi_settings_provider.dart';
+import 'graphql/__generated__/query.graphql.dart';
+import 'syncyomi_settings_provider.dart';
 
 part 'syncyomi_settings_repository.g.dart';
 

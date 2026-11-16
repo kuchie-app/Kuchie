@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -188,7 +190,7 @@ class SourceMangaDisplayView extends HookConsumerWidget {
               break; // migrate added the candidate + removed the source
             case BulkDupAction.openStop:
               final target = toOpen;
-              if (target != null) MangaRoute(mangaId: target.id).push(context);
+              if (target != null) unawaited(MangaRoute(mangaId: target.id).push(context));
               stop = true;
             case BulkDupAction.cancelStop:
               stop = true;

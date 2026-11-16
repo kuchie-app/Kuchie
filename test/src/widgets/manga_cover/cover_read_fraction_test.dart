@@ -15,7 +15,7 @@ import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/auth/data/custom_headers_store.dart';
 import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/basic_auth_credentials.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';

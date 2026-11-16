@@ -503,7 +503,7 @@ class _TopBarSlotState extends ConsumerState<TopBarSlot> {
 
   void _syncRouteWatch(List<ModalRoute> chain) {
     if (chain.length == _watchedRoutes.length &&
-        Iterable.generate(
+        Iterable<int>.generate(
           chain.length,
         ).every((i) => identical(chain[i], _watchedRoutes[i]))) {
       return;

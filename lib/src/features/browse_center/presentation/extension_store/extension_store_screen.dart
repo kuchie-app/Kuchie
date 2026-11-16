@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -64,7 +66,7 @@ class ExtensionStoreScreen extends ConsumerWidget {
           .removeStore(store.indexUrl);
       if (!context.mounted) return;
       // ignore: unused_result
-      ref.refresh(extensionStoreListProvider.future);
+      unawaited(ref.refresh(extensionStoreListProvider.future));
     }, ref.read(toastProvider));
 
     final topBar = showsMergedTopBar(context);

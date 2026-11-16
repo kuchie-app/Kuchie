@@ -1,13 +1,13 @@
 import 'package:graphql/client.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../constants/db_keys.dart';
-import '../../../../../global_providers/global_providers.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/mixin/shared_preferences_client_mixin.dart';
-import '../../../../../utils/webui_meta/webui_meta_repository.dart';
-import '../../../../manga_book/domain/chapter/chapter_model.dart';
-import './graphql/__generated__/global_meta.graphql.dart';
+import '../../../../constants/db_keys.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/mixin/shared_preferences_client_mixin.dart';
+import '../../../../utils/webui_meta/webui_meta_repository.dart';
+import '../../../manga_book/domain/chapter/chapter_model.dart';
+import 'graphql/__generated__/global_meta.graphql.dart';
 
 part 'delete_chapters_settings_repository.g.dart';
 

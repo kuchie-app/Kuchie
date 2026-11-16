@@ -42,10 +42,10 @@ import '../../manga_book/presentation/manga_details/controller/scanlator_dedup.d
 import '../../manga_book/presentation/manga_details/controller/scanlator_propagation.dart';
 import '../../manga_book/presentation/reader/utils/reader_progress_queue.dart';
 import '../../notifications/controller/notifications_controller.dart';
-import '../../settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
-import '../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../settings/data/downloads/delete_chapters_settings_repository.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
+import '../../settings/data/server_connection/server_port.dart';
+import '../../settings/data/server_connection/server_url.dart';
 import '../../tracking/controller/manga_track_records_controller.dart';
 import '../../tracking/data/tracker_repository.dart';
 import '../../tracking/domain/track_progress_gate.dart';
@@ -131,7 +131,7 @@ Future<void> setOfflineDownloadsPaused(WidgetRef ref, bool paused) async {
     if (paused) {
       coordinator?.pause();
     } else {
-      coordinator?.resume();
+      unawaited(coordinator?.resume());
     }
   }
   if (isAndroidNative) {

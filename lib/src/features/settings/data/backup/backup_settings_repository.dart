@@ -10,14 +10,14 @@ import 'package:http/http.dart' show MultipartFile;
 import 'package:material_ui/material_ui.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../global_providers/global_providers.dart';
-import '../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/misc/graphql_undefined_field.dart';
-import '../../../../account/data/account_permission.dart';
-import '../../../domain/settings/settings.dart';
-import '../widgets/backup_flags/backup_flags.dart';
-import './graphql/__generated__/query.graphql.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/graphql_undefined_field.dart';
+import '../../../account/data/account_permission.dart';
+import '../../domain/backup/backup_flags.dart';
+import '../../domain/settings/settings.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'backup_settings_repository.g.dart';
 

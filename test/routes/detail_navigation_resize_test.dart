@@ -21,7 +21,6 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/about/data/about_repository.dart';
-import 'package:kuchie/src/features/about/presentation/about/controllers/about_controller.dart';
 import 'package:kuchie/src/features/account/domain/account_binding.dart';
 import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/browse_center/presentation/extension/controller/extension_update_badge.dart';
@@ -41,6 +40,7 @@ import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
 import 'package:kuchie/src/features/settings/presentation/settings/settings_window.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/global_providers/package_info.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/routes/router_config.dart';
@@ -246,7 +246,7 @@ void main() {
       targetSourceIds: const [],
       options: MigrationOption(),
     );
-    router.push(MigrationBulkRunRoute($extra: data).location, extra: data);
+    unawaited(router.push(MigrationBulkRunRoute($extra: data).location, extra: data));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(MigrationBulkRunScreen), findsOneWidget);
@@ -302,7 +302,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     final previousLocation = router.state.uri;
-    router.push(const BackupRoute().location);
+    unawaited(router.push(const BackupRoute().location));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(SettingsWindowPageList), findsNothing);
@@ -325,7 +325,7 @@ void main() {
   ) async {
     final router = await _pumpRouter(tester, withDesktopScaffold: true);
     tester.view.physicalSize = const Size(1000, 720);
-    router.push(const SettingsRoute().location);
+    unawaited(router.push(const SettingsRoute().location));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -358,10 +358,10 @@ void main() {
       final previousRoute = ModalRoute.of(previous);
       final previousLocation = router.state.uri;
       for (final escape in [false, true]) {
-        router.push(const LibrarySettingsRoute().location);
+        unawaited(router.push(const LibrarySettingsRoute().location));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
-        router.push(const EditCategoriesRoute().location);
+        unawaited(router.push(const EditCategoriesRoute().location));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.byType(SettingsWindowPageList), findsOneWidget);

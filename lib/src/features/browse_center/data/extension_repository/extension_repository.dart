@@ -16,9 +16,9 @@ import '../../../../graphql/__generated__/schema.graphql.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../account/data/account_permission.dart';
 import '../../domain/extension/extension_model.dart';
-import './graphql/__generated__/query.graphql.dart';
-import './graphql/__generated__/store_query.graphql.dart';
-import './store_extension_mapper.dart';
+import 'graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/store_query.graphql.dart';
+import 'store_extension_mapper.dart';
 
 part 'extension_repository.g.dart';
 

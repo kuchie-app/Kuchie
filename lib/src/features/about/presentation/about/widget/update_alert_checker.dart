@@ -12,7 +12,7 @@ import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/logger/logger.dart';
 import '../../../../../utils/motion/reduce_motion.dart';
 import '../../../../account/data/account_providers.dart';
-import '../../../../settings/presentation/server/data/web_interface_repository.dart';
+import '../../../../settings/data/server/web_interface_repository.dart';
 import '../../../data/about_repository.dart';
 import '../../../data/server_update_alerts_repository.dart';
 import '../../../domain/server_update/server_update.dart';

@@ -1,5 +1,5 @@
-import '../../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../domain/settings/settings.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../settings/settings.dart';
 
 class BackupFlags {
   const BackupFlags({

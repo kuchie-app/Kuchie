@@ -239,7 +239,7 @@ class ReaderSettingsScreen extends ConsumerWidget {
                           title: context.l10n.flashDuration,
                           value:
                               ref.watch(flashDurationProvider) ??
-                              (DBKeys.flashDuration.initial as int),
+                              DBKeys.flashDuration.initial,
                           min: 1,
                           max: 15,
                           labelOf: (v) =>
@@ -255,7 +255,7 @@ class ReaderSettingsScreen extends ConsumerWidget {
                           title: context.l10n.flashEvery,
                           value:
                               ref.watch(flashPageIntervalProvider) ??
-                              (DBKeys.flashPageInterval.initial as int),
+                              DBKeys.flashPageInterval.initial,
                           min: 1,
                           max: 10,
                           labelOf: (v) => context.l10n.flashEveryPages(v),
@@ -575,10 +575,10 @@ class ReaderSettingsScreen extends ConsumerWidget {
                             .ifNull(),
                         percent:
                             ref.watch(longStripWidthLimitPercentProvider) ??
-                            DBKeys.longStripWidthLimitPercent.initial as int,
+                            DBKeys.longStripWidthLimitPercent.initial,
                         px:
                             ref.watch(longStripWidthLimitPxProvider) ??
-                            DBKeys.longStripWidthLimitPx.initial as int,
+                            DBKeys.longStripWidthLimitPx.initial,
                         onUnitChanged: ref
                             .read(longStripWidthLimitUsePixelsProvider.notifier)
                             .update,

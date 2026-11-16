@@ -244,7 +244,7 @@ class ReaderScreen extends HookConsumerWidget {
     useEffect(() {
       final fullscreen =
           ref.read(readerFullscreenProvider) ??
-          DBKeys.readerFullscreen.initial as bool;
+          DBKeys.readerFullscreen.initial;
       SystemChrome.setEnabledSystemUIMode(
         hiddenChromeUiMode(fullscreen: fullscreen),
       );
@@ -254,7 +254,7 @@ class ReaderScreen extends HookConsumerWidget {
 
     final underCutout =
         ref.watch(drawUnderCutoutProvider) ??
-        DBKeys.drawUnderCutout.initial as bool;
+        DBKeys.drawUnderCutout.initial;
     useEffect(() {
       setDrawUnderCutout(underCutout);
       return () => setDrawUnderCutout(false);
@@ -302,10 +302,10 @@ class ReaderScreen extends HookConsumerWidget {
     return PopScope(
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) {
-          SystemChrome.setEnabledSystemUIMode(
+          unawaited(SystemChrome.setEnabledSystemUIMode(
             SystemUiMode.manual,
             overlays: SystemUiOverlay.values,
-          );
+          ));
           // Await the progress flush before invalidating lists so they refetch the saved read state.
           debounce.value?.cancel();
           try {

@@ -9,17 +9,12 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../../../constants/db_keys.dart';
 import '../../../../../../constants/endpoints.dart';
 import '../../../../../../constants/enum.dart';
-import '../../../../../../features/auth/data/auth_coordinator.dart';
-import '../../../../../../features/auth/presentation/auth_failure_text.dart';
-import '../../../../../../features/auth/presentation/sign_in_action.dart';
 import '../../../../../../global_providers/global_providers.dart';
 import '../../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../../utils/mixin/shared_preferences_client_mixin.dart';
 import '../../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../../utils/platform/web_auth_mode.dart';
 import '../../../../../../widgets/ios/apple_glass_dropdown.dart';
@@ -30,17 +25,12 @@ import '../../../../../account/data/account_providers.dart';
 import '../../../../../account/data/server_account_capability.dart';
 import '../../../../../account/domain/account_access.dart';
 import '../../../../../account/presentation/account_code_dialog.dart';
-import '../client/server_port_tile/server_port_tile.dart';
-import '../client/server_url_tile/server_url_tile.dart';
-
-part 'login_credentials_popup.g.dart';
-
-@riverpod
-class AuthUsername extends _$AuthUsername
-    with SharedPreferenceClientMixin<String> {
-  @override
-  String? build() => initialize(DBKeys.authUsername);
-}
+import '../../../../../auth/data/auth_coordinator.dart';
+import '../../../../../auth/presentation/auth_failure_text.dart';
+import '../../../../../auth/presentation/sign_in_action.dart';
+import '../../../../data/server_connection/auth_username.dart';
+import '../../../../data/server_connection/server_port.dart';
+import '../../../../data/server_connection/server_url.dart';
 
 class LoginCredentialsPopup extends HookConsumerWidget {
   const LoginCredentialsPopup({

@@ -646,8 +646,7 @@ class ReaderWrapper extends HookConsumerWidget {
       child: Scaffold(
         backgroundColor:
             (ref.watch(readerBackgroundColorKeyProvider) ??
-                    DBKeys.readerBackgroundColor.initial
-                        as ReaderBackgroundColor)
+                    DBKeys.readerBackgroundColor.initial)
                 .color(context),
         extendBodyBehindAppBar: true,
         extendBody: true,

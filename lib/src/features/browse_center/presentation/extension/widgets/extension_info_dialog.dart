@@ -201,7 +201,7 @@ class _DialogBody extends HookConsumerWidget {
             (items) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final source in items ?? [])
+                for (final source in items ?? const <SourceDto>[])
                   if (source.$extension.pkgName == pkgName)
                     _SourceRow(source: source),
               ],

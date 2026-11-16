@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -90,7 +92,7 @@ void main() {
       const MangaRoute(mangaId: 1).location,
     );
     expect(find.byType(BigScreenNavigationBar), findsOneWidget);
-    router.push(const ReaderRoute(mangaId: 1, chapterId: 2).location);
+    unawaited(router.push(const ReaderRoute(mangaId: 1, chapterId: 2).location));
     await tester.pumpAndSettle();
     expect(find.text('Reader'), findsOneWidget);
     expect(find.byType(BigScreenNavigationBar), findsNothing);

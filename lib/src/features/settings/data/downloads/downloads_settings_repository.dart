@@ -2,15 +2,15 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../global_providers/global_providers.dart';
-import '../../../../../graphql/__generated__/schema.graphql.dart';
-import '../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../utils/misc/graphql_undefined_field.dart';
-import '../../../../account/data/account_providers.dart';
-import '../../../../account/domain/account_access.dart';
-import '../../../data/user_settings.dart';
-import '../../../domain/settings/settings.dart';
-import './graphql/__generated__/query.graphql.dart';
+import '../../../../global_providers/global_providers.dart';
+import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/graphql_undefined_field.dart';
+import '../../../account/data/account_providers.dart';
+import '../../../account/domain/account_access.dart';
+import '../../domain/settings/settings.dart';
+import '../user_settings.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'downloads_settings_repository.g.dart';
 

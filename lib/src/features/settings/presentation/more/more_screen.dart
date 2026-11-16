@@ -29,12 +29,12 @@ import '../../../onboarding/presentation/collection_mode_picker.dart';
 import '../../../quick_open/presentation/unified_search/desktop_search_field.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../quick_open/presentation/unified_search/unified_search_providers.dart';
+import '../../data/server_connection/server_port.dart';
+import '../../data/server_connection/server_url.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
 import '../connection/connection_status.dart';
 import '../incognito/incognito_mode.dart';
 import '../library/widgets/persistent_search_bar/persistent_search_bar.dart';
-import '../server/widget/client/server_port_tile/server_port_tile.dart';
-import '../server/widget/client/server_url_tile/server_url_tile.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});

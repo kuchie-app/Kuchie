@@ -6,7 +6,7 @@ import '../../../../../utils/misc/graphql_undefined_field.dart';
 import '../../../../account/data/graphql/__generated__/account.graphql.dart';
 import '../../../data/account_or_legacy_settings.dart';
 import '../../../domain/settings/graphql/__generated__/fragment.graphql.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 class SyncYomiSettings {
   const SyncYomiSettings({

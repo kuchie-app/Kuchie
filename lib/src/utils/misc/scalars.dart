@@ -15,7 +15,7 @@ dynamic dateTimeToJson(DateTime data) {
 }
 
 DateTime dateTimeFromJson(dynamic data) {
-  return DateTime.fromMillisecondsSinceEpoch(data * 1000);
+  return DateTime.fromMillisecondsSinceEpoch((data as int) * 1000);
 }
 
 dynamic longStringToJson(String data) {
@@ -32,5 +32,5 @@ dynamic cursorToJson(int data) {
 }
 
 int cursorFromJson(dynamic data) {
-  return int.tryParse(data) ?? 0;
+  return int.tryParse(data as String) ?? 0;
 }

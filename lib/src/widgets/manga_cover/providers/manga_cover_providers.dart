@@ -105,7 +105,7 @@ typedef BadgePlacement = ({LibraryBadge badge, BadgeSide side});
 List<BadgePlacement> libraryBadgeLayout(Ref ref) {
   final savedOrder = ref.watch(badgeOrderProvider) ?? const <String>[];
   final rightIds = (ref.watch(badgeRightSideProvider) ??
-          DBKeys.badgeRightSide.initial as List<String>)
+          DBKeys.badgeRightSide.initial)
       .toSet();
 
   final ordered = <LibraryBadge>[

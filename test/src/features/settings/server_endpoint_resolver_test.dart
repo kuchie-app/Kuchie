@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 
 void main() {
   group('selectServerUrl', () {

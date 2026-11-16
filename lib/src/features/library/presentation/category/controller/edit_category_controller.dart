@@ -8,11 +8,11 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../../features/offline/data/offline_read_fallback.dart';
-import '../../../../../features/offline/data/offline_repository.dart';
-import '../../../../../features/offline/data/server_reachability.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/network/graphql_errors.dart';
+import '../../../../offline/data/offline_read_fallback.dart';
+import '../../../../offline/data/offline_repository.dart';
+import '../../../../offline/data/server_reachability.dart';
 import '../../../data/category_repository.dart';
 import '../../../data/default_category.dart';
 import '../../../domain/category/category_model.dart';

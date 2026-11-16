@@ -15,8 +15,8 @@ import '../../../../../../../constants/db_keys.dart';
 import '../../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../../utils/misc/toast/toast.dart';
 import '../../../../../../../widgets/async_buttons/async_text_button.dart';
-import '../server_port_tile/server_port_tile.dart';
-import 'server_url_tile.dart';
+import '../../../../../data/server_connection/server_port.dart';
+import '../../../../../data/server_connection/server_url.dart';
 
 class ServerSearchButton extends ConsumerWidget {
   const ServerSearchButton({super.key, this.text});

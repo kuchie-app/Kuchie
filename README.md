@@ -31,6 +31,8 @@ Run `flutter run -d <simulator-id>` to start an interactive session. For a physi
 | `design/kiri/` and `design/icons/` | Editable animation and icon sources. |
 | `test/`, `ios/ReaderGestureTests/` and `tool/qa/` | Dart regression tests, Reader touch tests and a disposable QA catalog. |
 
+Data, domain and controller code must not import `presentation/`; `test/architecture/layer_boundaries_test.dart` enforces this. Providers that data code reads, such as the server address, port, credentials and timeouts, live in `lib/src/features/settings/data/server_connection/`. Startup preference upgrades are listed in order in `lib/src/features/settings/data/preference_migrations.dart`.
+
 Android and web launch projects can be added to the shared Flutter source when those platforms are scheduled. The checked-in build target is iOS.
 
 ### Home Screen icon

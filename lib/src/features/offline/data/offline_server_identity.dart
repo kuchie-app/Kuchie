@@ -17,7 +17,7 @@ String serverAddress({
   required bool addPort,
 }) {
   final raw = Endpoints.baseApi(
-    baseUrl: baseUrl ?? DBKeys.serverUrl.initial as String,
+    baseUrl: baseUrl ?? DBKeys.serverUrl.initial,
     port: port,
     addPort: addPort,
     appendApiToUrl: false,

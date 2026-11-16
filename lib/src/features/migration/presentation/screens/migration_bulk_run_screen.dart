@@ -101,7 +101,7 @@ class MigrationBulkRunBody extends HookConsumerWidget {
     final hideUnmatched = useState(data.hideUnmatched);
     final hideWithoutUpdates = useState(data.hideWithoutUpdates);
 
-    final sourceById = {for (final m in library.value ?? const []) m.id: m};
+    final sourceById = {for (final m in [...?library.value]) m.id: m};
     // Resolve outside useEffect; hook initialization cannot look up inherited widgets.
     final container = ProviderScope.containerOf(context, listen: false);
 

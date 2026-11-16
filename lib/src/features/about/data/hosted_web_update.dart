@@ -1,4 +1,4 @@
-import '../../settings/presentation/server/widget/client/server_url_tile/web_default_server_url.dart';
+import '../../settings/data/server_connection/web_default_server_url.dart';
 
 bool isServerHostedWeb({
   required bool isWeb,

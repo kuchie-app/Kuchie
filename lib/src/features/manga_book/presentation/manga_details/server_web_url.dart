@@ -8,8 +8,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../constants/endpoints.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
-import '../../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../../settings/data/server_connection/server_port.dart';
+import '../../../settings/data/server_connection/server_url.dart';
 
 /// Uses the server web root without /api; returns null when no server is configured.
 String? serverMangaWebUrl(WidgetRef ref, int mangaId) {

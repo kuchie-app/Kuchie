@@ -2601,7 +2601,7 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
           preparePage: session.prepare,
         );
       } catch (_) {
-        _requests.remove(id);
+        unawaited(_requests.remove(id));
         rethrow;
       }
     });

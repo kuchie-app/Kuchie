@@ -14,12 +14,12 @@ import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../../widgets/popup_widgets/radio_list_popup.dart';
 import '../../../../../account/data/account_providers.dart';
 import '../../../../../account/domain/account_access.dart';
+import '../../../../data/sign_in/sign_in_actions.dart';
+import '../../../../data/sign_in/sign_in_executor.dart';
+import '../../../../data/sign_in/sign_in_repository.dart';
+import '../../../../data/sign_in/sign_in_transition.dart';
 import '../../../../search/settings_search_registry.dart';
 import '../../../../widgets/settings_group_card/settings_group_card.dart';
-import 'data/sign_in_actions.dart';
-import 'data/sign_in_executor.dart';
-import 'data/sign_in_repository.dart';
-import 'data/sign_in_transition.dart';
 
 final signInAccountsCapabilityProvider =
     FutureProvider.autoDispose<AccountCapability>(

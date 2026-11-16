@@ -4,7 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -44,9 +43,9 @@ class SourceMangaDisplayIconPopup extends ConsumerWidget {
         DBKeys.sourceDisplayMode.initial;
     return AppleGlassToolbarButton(
       id: 'source-display',
-      symbol: displayMode?.isGrid == false ? 'list.bullet' : 'square.grid.2x2',
+      symbol: displayMode.isGrid == false ? 'list.bullet' : 'square.grid.2x2',
       label: context.l10n.displayMode,
-      fallbackIcon: displayMode?.icon ?? FluentIcons.grid_24_regular,
+      fallbackIcon: displayMode.icon,
       onPressed: () => show(context, ref),
     );
   }

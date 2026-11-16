@@ -6,7 +6,7 @@ import '../../../../../graphql/__generated__/schema.graphql.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../account/data/account_permission.dart';
 import '../../../domain/settings/settings.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'browse_settings_repository.g.dart';
 

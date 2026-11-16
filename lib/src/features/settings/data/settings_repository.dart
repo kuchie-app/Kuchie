@@ -4,7 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../global_providers/global_providers.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../domain/settings/settings.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'settings_repository.g.dart';
 

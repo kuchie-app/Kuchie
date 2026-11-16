@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -276,7 +278,7 @@ void main() {
     await _openSeriesFromLibrary(tester);
 
     // In-app back from recommends returns to the series.
-    router.push(const RecommendsRoute(mangaId: 1).location);
+    unawaited(router.push(const RecommendsRoute(mangaId: 1).location));
     await tester.pumpAndSettle();
     expect(find.byType(RecommendsScreen), findsOneWidget);
     await tester.tap(find.byType(BackButton));
@@ -285,7 +287,7 @@ void main() {
     expect(find.text('LIBRARY'), findsNothing);
 
     // In-app back from global search returns to the series.
-    router.push(const GlobalSearchRoute().location);
+    unawaited(router.push(const GlobalSearchRoute().location));
     await tester.pumpAndSettle();
     expect(find.byType(GlobalSearchScreen), findsOneWidget);
     await tester.tap(find.byType(BackButton));

@@ -1,5 +1,5 @@
-import '../../../../../../../constants/enum.dart';
-import '../../../../../../../utils/platform/web_auth_mode.dart';
+import '../../../../constants/enum.dart';
+import '../../../../utils/platform/web_auth_mode.dart';
 
 enum SignInFollowUp {
   keepSession,

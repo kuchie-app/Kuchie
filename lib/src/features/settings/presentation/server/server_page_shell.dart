@@ -15,14 +15,14 @@ import '../../../../widgets/server_unreachable_view.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../../account/data/account_providers.dart';
 import '../../controller/server_controller.dart';
+import '../../data/server/web_interface_repository.dart';
+import '../../data/sign_in/sign_in_repository.dart';
 import '../../domain/settings/settings.dart';
 import '../../search/settings_search_registry.dart';
-import 'data/web_interface_repository.dart';
 import 'widget/database/data/database_repository.dart';
 import 'widget/images/data/images_repository.dart';
 import 'widget/misc_settings/data/misc_logs_repository.dart';
 import 'widget/opds/data/opds_repository.dart';
-import 'widget/sign_in/data/sign_in_repository.dart';
 import 'widget/sign_in/sign_in_section.dart';
 import 'widget/webview/data/webview_repository.dart';
 

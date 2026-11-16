@@ -153,7 +153,7 @@ class _ProviderSection extends ConsumerWidget {
                     gridDelegate: MangaCoverGridDelegate(
                       minCrossAxisExtent:
                           ref.watch(gridMinWidthProvider) ??
-                          DBKeys.gridMangaCoverMinWidth.initial as double,
+                          DBKeys.gridMangaCoverMinWidth.initial,
                       titleExtent: kRecommendsTitleExtent,
                       coverInset: 0,
                       mainAxisSpacing: 12,

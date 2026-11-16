@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -44,7 +46,7 @@ class RecommendationCard extends HookConsumerWidget {
     }
     if (!context.mounted) return;
     if (match != null) {
-      MangaRoute(mangaId: match.id).push(context);
+      unawaited(MangaRoute(mangaId: match.id).push(context));
     } else {
       openGlobalSearch(context, query: rec.title, fromSuggestion: true);
     }

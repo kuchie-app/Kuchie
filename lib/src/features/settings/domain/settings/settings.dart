@@ -1,5 +1,5 @@
 import '../../../../graphql/__generated__/schema.graphql.dart';
-import '../../presentation/backup/data/graphql/__generated__/query.graphql.dart';
+import '../../data/backup/graphql/__generated__/query.graphql.dart';
 import 'graphql/__generated__/fragment.graphql.dart';
 
 typedef SettingsDto = Fragment$SettingsDto;

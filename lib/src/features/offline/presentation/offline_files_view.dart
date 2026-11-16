@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -567,7 +569,7 @@ class OfflineFilesView extends HookConsumerWidget {
     if (!context.mounted || picked == null) return;
     switch (picked) {
       case 'view':
-        MangaRoute(mangaId: manga.id).push(context);
+        unawaited(MangaRoute(mangaId: manga.id).push(context));
       case 'select':
         onSelect();
       case 'stop':

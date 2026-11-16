@@ -11,7 +11,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../global_providers/global_providers.dart';
 import '../../account/domain/account_binding.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
 import 'auth_session_transition.dart';
 import 'basic_auth_migration.dart';
 import 'credential_snapshot.dart';

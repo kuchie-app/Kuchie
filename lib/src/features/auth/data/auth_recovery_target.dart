@@ -8,8 +8,8 @@ import '../../../utils/extensions/custom_extensions.dart';
 import '../../account/data/account_providers.dart';
 import '../../offline/data/offline_server_identity_repository.dart';
 import '../../onboarding/data/onboarding_complete.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
-import '../../settings/presentation/server/widget/sign_in/graphql/__generated__/sign_in.graphql.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
+import '../../settings/data/sign_in/graphql/__generated__/sign_in.graphql.dart';
 import 'auth_credentials_store.dart';
 import 'auth_state.dart';
 

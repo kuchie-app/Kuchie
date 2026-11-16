@@ -19,8 +19,8 @@ import '../../../../../widgets/in_app_web_view.dart';
 import '../../../../../widgets/ios/apple_glass_popover.dart';
 import '../../../../manga_book/presentation/manga_details/widgets/chapter_context_menu.dart'
     show ChapterMenuRow;
-import '../../../../settings/presentation/server/widget/client/server_port_tile/server_port_tile.dart';
-import '../../../../settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import '../../../../settings/data/server_connection/server_port.dart';
+import '../../../../settings/data/server_connection/server_url.dart';
 import '../../../data/source_repository/source_repository.dart';
 import '../../../domain/source/source_model.dart';
 import '../../extension/widgets/extension_info_dialog.dart';

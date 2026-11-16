@@ -25,11 +25,11 @@ class ReaderFlashOverlay extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final enabled = ref.watch(flashOnPageChangeProvider).ifNull(false);
     final durationTicks = ref.watch(flashDurationProvider) ??
-        DBKeys.flashDuration.initial as int;
+        DBKeys.flashDuration.initial;
     final interval = ref.watch(flashPageIntervalProvider) ??
-        DBKeys.flashPageInterval.initial as int;
+        DBKeys.flashPageInterval.initial;
     final flashColor = ref.watch(flashColorKeyProvider) ??
-        DBKeys.flashColor.initial as FlashColor;
+        DBKeys.flashColor.initial;
 
     final color = useState<Color?>(null);
     final prevIndex = useRef<int?>(null);

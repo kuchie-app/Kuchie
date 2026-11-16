@@ -21,7 +21,7 @@ class SourceLanguageFilter extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final languageCodesMap = ref.watch(sourceFilterLangMapProvider);
-    final languageCodes = useState([]);
+    final languageCodes = useState(<String>[]);
 
     useEffect(() {
       final languageList = languageCodesMap.keys.toList();

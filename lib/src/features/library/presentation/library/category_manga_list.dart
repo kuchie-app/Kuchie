@@ -135,7 +135,7 @@ class CategoryMangaList extends HookConsumerWidget {
         List<int> cids;
         try {
           final chapters = await repo.getChapterList(id);
-          cids = <int>[for (final c in chapters ?? const []) c.id];
+          cids = <int>[for (final c in chapters ?? const <ChapterDto>[]) c.id];
         } catch (_) {
           if (offlineDb == null) {
             allOk = false;

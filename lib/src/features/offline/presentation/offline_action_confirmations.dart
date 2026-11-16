@@ -3,7 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../widgets/popup_widgets/confirm_action.dart';
 import '../../auth/data/auth_credentials_store.dart';
-import '../../settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
+import '../../settings/data/downloads/delete_chapters_settings_repository.dart';
 import '../data/offline_database.dart';
 import '../data/offline_download_providers.dart';
 import '../data/offline_repository.dart';

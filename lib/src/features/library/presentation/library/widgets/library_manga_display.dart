@@ -29,7 +29,7 @@ class LibraryMangaDisplay extends ConsumerWidget {
         MediaQuery.orientationOf(context) == Orientation.landscape;
 
     final selectedMode =
-        displayMode ?? DBKeys.libraryDisplayMode.initial as DisplayMode;
+        displayMode ?? DBKeys.libraryDisplayMode.initial;
     final isGridMode = selectedMode.isGrid;
 
     final currentCols =
@@ -42,7 +42,7 @@ class LibraryMangaDisplay extends ConsumerWidget {
         ref.watch(libraryGridStyleKeyProvider) ?? LibraryGridStyle.uniform;
     final listScale =
         ref.watch(libraryListScaleProvider) ??
-        DBKeys.listScale.initial as double;
+        DBKeys.listScale.initial;
 
     return ListView(
       shrinkWrap: true,

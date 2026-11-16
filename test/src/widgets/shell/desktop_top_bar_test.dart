@@ -4,11 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/misc.dart';
 import 'package:kuchie/src/features/browse_center/presentation/extension/controller/extension_update_badge.dart';
 import 'package:kuchie/src/features/library/domain/category/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/library/presentation/category/controller/edit_category_controller.dart';
@@ -53,7 +56,7 @@ void _mockWindowManager() {
   );
 }
 
-List<dynamic> _overrides(SharedPreferences prefs) => [
+List<Override> _overrides(SharedPreferences prefs) => [
   sharedPreferencesProvider.overrideWithValue(prefs),
   downloadsPausedBadgeProvider.overrideWith((ref) => false),
   extensionUpdateBadgeCountProvider.overrideWith((ref) async => 0),
@@ -355,7 +358,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    router.push<void>('/source/6247824327199706550/p-o-p-u-l-a-r');
+    unawaited(router.push<void>('/source/6247824327199706550/p-o-p-u-l-a-r'));
     await tester.pumpAndSettle();
     final catalogueHint = find.descendant(
       of: find.byType(DesktopTopBar),
@@ -522,7 +525,7 @@ void main() {
       matching: find.text('Library toolbar'),
     );
     expect(barText, findsOneWidget);
-    router.push<void>('/upcoming');
+    unawaited(router.push<void>('/upcoming'));
     await tester.pumpAndSettle();
     expect(barText, findsOneWidget);
     router.pop();
@@ -833,7 +836,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    router.push<void>('/source/1');
+    unawaited(router.push<void>('/source/1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     loaded.value = true;

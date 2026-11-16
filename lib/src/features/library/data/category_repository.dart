@@ -17,7 +17,7 @@ import '../../../utils/webui_meta/webui_meta_repository.dart';
 import '../../account/data/graphql/__generated__/account.graphql.dart';
 import '../../manga_book/domain/manga/manga_model.dart';
 import '../domain/category/category_model.dart';
-import './graphql/__generated__/query.graphql.dart';
+import 'graphql/__generated__/query.graphql.dart';
 
 part 'category_repository.g.dart';
 

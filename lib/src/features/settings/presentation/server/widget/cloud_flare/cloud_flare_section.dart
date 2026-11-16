@@ -12,10 +12,10 @@ import '../../../../../../widgets/input_popup/domain/settings_prop_type.dart';
 import '../../../../../../widgets/input_popup/settings_prop_tile.dart';
 import '../../../../../account/data/account_providers.dart';
 import '../../../../controller/server_controller.dart';
+import '../../../../data/server/server_settings_repository.dart';
 import '../../../../domain/settings/settings.dart';
 import '../../../../search/settings_search_registry.dart';
 import '../../../../widgets/settings_group_card/settings_group_card.dart';
-import '../../data/server_settings_repository.dart';
 
 class CloudFlareSection extends ConsumerWidget {
   const CloudFlareSection({super.key, required this.cloudFlareDto});

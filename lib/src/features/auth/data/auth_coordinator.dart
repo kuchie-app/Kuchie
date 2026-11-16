@@ -27,8 +27,8 @@ import '../../offline/data/offline_server_identity_repository.dart';
 import '../../onboarding/data/collection_mode.dart';
 import '../../onboarding/data/server_resolver.dart'
     show authProbeAuthorized, authProbeExplicitlyRejects, basicAuthConfirms;
-import '../../settings/presentation/general/timeout_settings/timeout_settings_section.dart';
-import '../../settings/presentation/server/widget/credential_popup/credentials_popup.dart';
+import '../../settings/data/server_connection/basic_auth_credentials.dart';
+import '../../settings/data/server_connection/request_timeout.dart';
 import 'auth_credentials_store.dart';
 import 'auth_state.dart';
 import 'basic_credentials_rejected.dart';
@@ -337,7 +337,7 @@ class AuthCoordinator extends _$AuthCoordinator {
       timeout: Duration(
         milliseconds:
             ref.read(serverRequestTimeoutProvider) ??
-            DBKeys.serverRequestTimeout.initial as int,
+            DBKeys.serverRequestTimeout.initial,
       ),
     );
     try {

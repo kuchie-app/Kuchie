@@ -21,7 +21,7 @@ import '../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../auth/data/auth_credentials_store.dart';
 import '../../notifications/controller/notification_settings_providers.dart';
 import '../../notifications/controller/notifications_controller.dart';
-import '../../settings/presentation/downloads/data/delete_chapters_settings_repository.dart';
+import '../../settings/data/downloads/delete_chapters_settings_repository.dart';
 import '../../settings/search/settings_search_registry.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../data/background/catchup_settings.dart';

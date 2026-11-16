@@ -19,12 +19,12 @@ import '../../../library/domain/category/category_model.dart';
 import '../../../library/presentation/category/controller/edit_category_controller.dart';
 import '../../../offline/presentation/offline_settings_screen.dart';
 import '../../controller/server_controller.dart';
+import '../../data/downloads/delete_chapters_settings_repository.dart';
+import '../../data/downloads/downloads_settings_repository.dart';
 import '../../data/user_settings.dart';
 import '../../domain/settings/settings.dart';
 import '../../search/settings_search_registry.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
-import 'data/delete_chapters_settings_repository.dart';
-import 'data/downloads_settings_repository.dart';
 import 'widgets/auto_download_categories_dialog.dart';
 
 /// [initialTab]: 0 for Server, 1 for On device; out-of-range values select Server.

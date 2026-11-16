@@ -15,7 +15,6 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/about/data/about_repository.dart';
-import 'package:kuchie/src/features/about/presentation/about/controllers/about_controller.dart';
 import 'package:kuchie/src/features/account/data/account_providers.dart';
 import 'package:kuchie/src/features/account/data/account_repository.dart';
 import 'package:kuchie/src/features/account/presentation/account_codes_screen.dart';
@@ -23,6 +22,7 @@ import 'package:kuchie/src/features/browse_center/presentation/extension/control
 import 'package:kuchie/src/features/offline/data/offline_nav_status.dart';
 import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
+import 'package:kuchie/src/global_providers/package_info.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/routes/router_config.dart';
 import 'package:kuchie/src/utils/misc/toast/toast.dart';

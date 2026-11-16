@@ -19,7 +19,7 @@ import 'package:kuchie/src/features/auth/data/auth_credentials_store.dart';
 import 'package:kuchie/src/features/auth/data/pending_tracker_oauth_store.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
 import 'package:kuchie/src/features/onboarding/presentation/onboarding_screen.dart';
-import 'package:kuchie/src/features/settings/presentation/server/widget/client/server_url_tile/server_url_tile.dart';
+import 'package:kuchie/src/features/settings/data/server_connection/server_url.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/utils/platform/web_auth_mode.dart';
