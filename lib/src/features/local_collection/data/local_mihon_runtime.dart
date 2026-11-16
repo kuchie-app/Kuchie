@@ -195,7 +195,13 @@ class MihonRuntimeClient {
       source: source,
       arguments: {'mangaData': _mangaPayload(manga)},
     );
-    return _parseManga(_object(response.result), response.endpoint);
+    // Like Mihon, details refine the entry the reader opened: an extension
+    // that leaves the URL or title empty keeps the ones from the listing.
+    return _parseManga(
+      _object(response.result),
+      response.endpoint,
+      listed: manga,
+    );
   }
 
   Future<List<MihonRuntimeChapter>> chapters(
@@ -440,10 +446,15 @@ class MihonRuntimeClient {
 
   static MihonRuntimeManga _parseManga(
     Map<String, Object?> data,
-    Uri endpoint,
-  ) => MihonRuntimeManga(
-    locator: _text(data['url'], max: 16384),
-    title: _text(data['title'], max: 1024),
+    Uri endpoint, {
+    MihonRuntimeManga? listed,
+  }) => MihonRuntimeManga(
+    locator: switch (_locator(data['url'])) {
+      '' when listed != null => listed.locator,
+      final locator => locator,
+    },
+    title:
+        _labelOrNull(data['title'], max: 1024) ?? listed?.title ?? 'Untitled',
     description: _optionalText(data['description'], max: 16000),
     cover: _imageUrl(data['thumbnail_url'], endpoint),
     author: _optionalText(data['author'], max: 2048),
@@ -466,20 +477,27 @@ class MihonRuntimeClient {
     if (manga.description.isNotEmpty) 'description': manga.description,
   };
 
-  static MihonRuntimeChapter _parseChapter(Map<String, Object?> data) =>
-      MihonRuntimeChapter(
-        locator: _text(data['url'], max: 16384),
-        title: _text(data['name'], max: 1024),
-        uploadDate: switch (data['date_upload']) {
-          final int millis when millis > 0 && millis <= 8640000000000000 =>
-            DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true),
-          _ => null,
+  static MihonRuntimeChapter _parseChapter(
+    Map<String, Object?> data,
+  ) => MihonRuntimeChapter(
+    locator: _locator(data['url']),
+    title:
+        _labelOrNull(data['name'], max: 1024) ??
+        switch (data['chapter_number']) {
+          final num value when value.isFinite && value >= 0 =>
+            'Chapter ${value == value.roundToDouble() ? value.toInt() : value}',
+          _ => 'Chapter',
         },
-        number: switch (data['chapter_number']) {
-          final num value when value.isFinite && value >= 0 => value.toDouble(),
-          _ => null,
-        },
-      );
+    uploadDate: switch (data['date_upload']) {
+      final int millis when millis > 0 && millis <= 8640000000000000 =>
+        DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true),
+      _ => null,
+    },
+    number: switch (data['chapter_number']) {
+      final num value when value.isFinite && value >= 0 => value.toDouble(),
+      _ => null,
+    },
+  );
 
   static MihonRuntimePage _parsePage(Map<String, Object?> data, Uri endpoint) {
     final url =
@@ -562,6 +580,18 @@ class MihonRuntimeClient {
       return value;
     }
     throw const MihonRuntimeException('The extension returned invalid text.');
+  }
+
+  /// A manga or chapter URL as the extension stores it. Mihon allows an empty
+  /// one: single-series sources use the site's front page.
+  static String _locator(Object? value) {
+    if (value is String && value.length <= 16384) return value;
+    throw const MihonRuntimeException('The extension returned invalid text.');
+  }
+
+  static String? _labelOrNull(Object? value, {required int max}) {
+    if (value is! String || value.trim().isEmpty) return null;
+    return value.length <= max ? value : value.substring(0, max);
   }
 
   static String _optionalText(Object? value, {required int max}) =>

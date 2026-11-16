@@ -33,7 +33,7 @@ fetch java_bundle-device.zip 15369b9bb9dfdd400c18c56b30e2f6cf316b81d4e0bae5ddd6b
 fetch OpenJDK-LICENSE.txt 4b9abebc4338048a7c2dc184e9f800deb349366bdf28eb23c2677a77b4c87726 \
   'https://raw.githubusercontent.com/openjdk/mobile/fc10224720ee1c109b1207daeba8878822bb5363/LICENSE'
 fetch MExtensionServer-LICENSE.txt 3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04 \
-  'https://raw.githubusercontent.com/1Selxo/M-Extension-Server/a8149c743c8b31a8e080adcef93be6e71e290fde/LICENSE'
+  'https://raw.githubusercontent.com/1Selxo/M-Extension-Server/6a11ad771bc1c59303ce5d1e2b6f610211dcb819/LICENSE'
 "$source_dir/fetch_server.sh" "$archives/MExtensionServer-ios.jar"
 unzip -q "$archives/OpenJDK.xcframework.zip" -d "$work"
 unzip -q "$archives/java_bundle-device.zip" -d "$work"

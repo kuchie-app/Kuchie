@@ -125,7 +125,10 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ## Known limitations
 
-- **Mihon APK extensions**: stores, browsing the catalogue, signature checks and installs work, but many current extensions fail when they run, because the embedded M-Extension-Server runtime mistranslates constructors of R8-optimised classes into JVM bytecode that the verifier rejects. Kuchie keeps strict bytecode verification on, so those sources show *Could not load manga* instead of running unverified code. Server mode, Kuchie repositories and file imports are not affected.
+- **Mihon APK extensions** run in an embedded JVM, not on Android. In a random sample of 44 extensions from Keiyoushi, Yūzōnō and Suwayomi, 30 browsed, opened details, listed chapters and loaded pages end to end. The rest need features Kuchie does not have yet or fail outside Kuchie:
+  - sites behind Cloudflare challenges, which Mihon solves in a WebView (Kuchie has no WebView bridge yet);
+  - extensions that need their own settings first, such as the Suwayomi extension's server address;
+  - a few extensions the runtime still translates incorrectly, and sites that are offline.
 - Android and web launch projects can be added to the shared Flutter source later; the checked-in target is iOS.
 
 ## Contributing

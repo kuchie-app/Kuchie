@@ -25,7 +25,14 @@ First public release.
 - Library category filters could notify listeners while a widget was building, which Riverpod forbids.
 - Release logging, HTTP client leaks and startup crash handling.
 
+### Extension runtime
+- The embedded runtime is M-Extension-Server v1.0.8.1 (built for iOS from 1Selxo/M-Extension-Server@6a11ad7), which repairs constructors of R8-optimised classes. Release IPAs now include the runtime.
+- Accept the empty URLs and blank titles that single-series sources return, as Mihon does.
+- In a random sample of 44 extensions, 30 work end to end (browse, details, chapters, pages).
+
 ### Known limitations
-- Many current Mihon APK extensions fail when they run in the embedded M-Extension-Server runtime, which mistranslates constructors of R8-optimised classes; strict bytecode verification stays on, so those sources show *Could not load manga*.
+- No WebView bridge yet, so sources behind Cloudflare challenges fail.
+- No extension settings screen yet, so extensions that must be configured first (such as Suwayomi's server address) fail.
+- A few extensions still fail in the runtime's dex-to-JVM translation.
 
 [1.0.0]: https://github.com/kuchie-app/Kuchie/releases/tag/v1.0.0

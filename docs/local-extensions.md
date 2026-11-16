@@ -13,7 +13,7 @@ Kuchie reads the same extension stores as [Mihon](https://github.com/mihonapp/mi
 | Legacy `index.min.json` with `repo.json` | `https://raw.githubusercontent.com/suwayomi/tachiyomi-extension/repo/index.min.json` |
 | `mihon://` or `tachiyomi://add-repo?url=…` links | opened from a store website |
 
-Gzipped indexes and stores that keep their list behind `extensionListUrl` work as well. Install a package, then choose a source and language from **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses. Shinigami (Indonesia) also has a built-in adapter for existing Keiyoushi installations.
+Gzipped indexes and stores that keep their list behind `extensionListUrl` work as well. Install a package, then choose a source and language from **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses: sources behind Cloudflare challenges and sources that must be configured in their own settings do not work yet. Shinigami (Indonesia) also has a built-in adapter for existing Keiyoushi installations.
 
 ### How Kuchie decides an APK is safe
 

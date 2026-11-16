@@ -230,4 +230,78 @@ void main() {
     );
     expect(result.items, isEmpty);
   });
+
+  test('accepts empty URLs and blank names the way Mihon does', () async {
+    final apk = Uint8List.fromList([4, 2]);
+    final client = MockClient((request) async {
+      if (request.url.path == '/capabilities') {
+        return http.Response(_capabilities, 200);
+      }
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      return switch (body['method']) {
+        'extensionInfo' when body['data'] == null => http.Response(
+          '{"error":"Extension not loaded","code":409}',
+          409,
+        ),
+        'extensionInfo' => http.Response(
+          jsonEncode({
+            'packageName': 'example.webcomic',
+            'itemType': 'manga',
+            'sources': [
+              {'id': _source.id, 'name': _source.name, 'lang': 'en'},
+            ],
+          }),
+          200,
+        ),
+        // A single-series source lists its comic at the site's front page.
+        'getPopularManga' => http.Response(
+          jsonEncode({
+            'mangas': [
+              {'url': '', 'title': 'Patch Friday'},
+            ],
+            'hasNextPage': false,
+          }),
+          200,
+        ),
+        // Details that leave the URL and title empty keep the listed ones.
+        'getDetailsManga' => http.Response(
+          jsonEncode({'url': '', 'title': ' ', 'description': 'Webcomic'}),
+          200,
+        ),
+        'getChapterList' => http.Response(
+          jsonEncode([
+            {'url': '', 'name': '', 'chapter_number': 3.0},
+            {'url': '/2', 'name': ' '},
+          ]),
+          200,
+        ),
+        _ => http.Response('{"error":"unexpected"}', 500),
+      };
+    });
+    final runtime = MihonRuntimeClient(
+      client: client,
+      resolveEndpoint: () async => _endpoint,
+    );
+    addTearDown(runtime.close);
+    await runtime.inspect(apk, packageName: 'example.webcomic');
+
+    final listed = (await runtime.browse(
+      apk,
+      _source,
+      query: '',
+      latest: false,
+      page: 1,
+    )).items.single;
+    expect(listed.locator, '');
+    expect(listed.title, 'Patch Friday');
+
+    final details = await runtime.details(apk, _source, listed);
+    expect(details.locator, '');
+    expect(details.title, 'Patch Friday');
+    expect(details.description, 'Webcomic');
+
+    final chapters = await runtime.chapters(apk, _source, details);
+    expect(chapters.map((chapter) => chapter.locator), ['', '/2']);
+    expect(chapters.map((chapter) => chapter.title), ['Chapter 3', 'Chapter']);
+  });
 }

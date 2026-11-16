@@ -50,8 +50,23 @@ jobs:
       - name: Generate code
         run: tool/bootstrap
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Embeds the OpenJDK runtime that runs Mihon APK extensions on iPhone.
+      # Every archive it fetches is pinned by SHA-256.
+      - name: Prepare the extension runtime
+        run: ios/MihonRuntime/prepare.sh
+
       - name: Build the app (release, unsigned)
         run: flutter build ios --release --no-codesign
+
+      - name: Verify the extension runtime is in the app
+        run: |
+          test -f build/ios/iphoneos/Runner.app/Frameworks/OpenJDKRuntime.framework/OpenJDKRuntime
+          test -f build/ios/iphoneos/Runner.app/KuchieMihonRuntime/KuchieExtensionRuntime.jar
 
       - name: Package the IPA
         run: |

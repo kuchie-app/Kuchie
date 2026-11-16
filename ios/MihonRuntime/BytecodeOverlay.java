@@ -60,8 +60,9 @@ public final class BytecodeOverlay {
     }
 
     private static byte[] fixDexAnalysis(ClassReader input) {
-        // DEX translation can undercount the operand stack slots. Compute limits before
-        // upstream's allocation repair so it reaches the entire method.
+        // DEX translation can undercount the operand stack slots. Upstream routes every
+        // analysis through one helper that retries with a larger bound; computing the
+        // exact limits first lets the allocation repair reach the method on the first pass.
         int[] replaced = {0};
         var writer = new ClassWriter(0);
         input.accept(new ClassVisitor(Opcodes.ASM9, writer) {
@@ -83,8 +84,8 @@ public final class BytecodeOverlay {
                 };
             }
         }, 0);
-        if (replaced[0] != 5) {
-            throw new IllegalArgumentException("Expected 5 runtime ASM analysis calls. Found " + replaced[0]);
+        if (replaced[0] != 1) {
+            throw new IllegalArgumentException("Expected 1 runtime ASM analysis call. Found " + replaced[0]);
         }
         return writer.toByteArray();
     }
