@@ -151,6 +151,14 @@ void main() {
     await tapWelcome(tester, 'Local');
     await tapWelcome(tester, 'Start reading');
 
+    // Local lands on All set too, then opens the library.
+    expect(find.text("You're all set"), findsOneWidget);
+    expect(find.text('Connect your server'), findsNothing);
+    await tapWelcome(tester, 'Back');
+    expect(find.text('How would you like to read?'), findsOneWidget);
+    await tapWelcome(tester, 'Start reading');
+    await tapWelcome(tester, 'Start reading');
+
     expect(find.text('Local destination'), findsOneWidget);
     expect(find.text('Connect your server'), findsNothing);
     expect(readCollectionMode(prefs), CollectionMode.local);

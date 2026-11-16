@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../../utils/theme/brand.dart';
 import '../../../../../../widgets/ios/apple_glass_capability.dart';
 
 const _viewType = 'kuchie/apple_liquid_glass/reader_slider';
@@ -79,7 +80,20 @@ class _NativeReaderSliderState extends State<_NativeReaderSlider> {
     'reversed': widget.reversed,
     'locale': widget.locale,
     'pageLabel': context.l10n.page(0).replaceFirst('0', '%@'),
+    'tint': _trackColor(Theme.of(context).colorScheme).toARGB32(),
   };
+
+  // The slider sits on dark glass; lift light-theme accents so the track reads.
+  static Color _trackColor(ColorScheme scheme) =>
+      scheme.brightness == Brightness.dark
+      ? scheme.primary
+      : Color.lerp(scheme.primary, OnImage.text, .45)!;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _update();
+  }
 
   void _created(int id) {
     if (!mounted) return;

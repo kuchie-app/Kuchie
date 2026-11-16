@@ -286,7 +286,13 @@ class GlobalSearchScreen extends HookConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                        // The back button carries its own edge inset.
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          0,
+                          4,
+                          kAppleGlassBarInset,
+                          4,
+                        ),
                         child: Row(
                           children: [
                             ?detailNavigationBackButton(context),

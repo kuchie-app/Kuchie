@@ -328,7 +328,11 @@ void main() {
                 .where(
                   (entry) =>
                       platform == TargetPlatform.iOS ||
-                      !const {'appIcon', 'downloadIsland'}.contains(entry.id),
+                      !const {
+                        'appIcon',
+                        'downloadIsland',
+                        'liquidGlass',
+                      }.contains(entry.id),
                 )
                 .toList(),
           );

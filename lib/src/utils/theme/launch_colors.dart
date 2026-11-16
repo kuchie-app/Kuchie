@@ -9,4 +9,6 @@ import 'dart:ui';
 /// Matches the backgroundColor in ios/Runner/Base.lproj/LaunchScreen.storyboard
 /// so the Flutter splash continues the native launch screen without a flash.
 /// The splash draws before any app theme exists, so it cannot use a scheme role.
-const kLaunchScreenBackground = Color(0xFF0B0D1A);
+/// Black matches the default first-run surface (Indigo Night with pure black on
+/// iOS 26), so launch, onboarding and the app share one background.
+const kLaunchScreenBackground = Color(0xFF000000);

@@ -23,6 +23,7 @@ import 'widgets/download_island/download_island_preference.dart';
 import 'widgets/download_island/download_island_settings_tile.dart';
 import 'widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
 import 'widgets/is_true_black/is_true_black_tile.dart';
+import 'widgets/liquid_glass/liquid_glass_tile.dart';
 import 'widgets/manga_thumbnail_backdrop/manga_thumbnail_backdrop_tile.dart';
 import 'widgets/show_recommendations/show_recommendations_tile.dart';
 
@@ -74,6 +75,11 @@ class AppearanceScreen extends ConsumerWidget {
                 SettingsGroupHeading(label: context.l10n.display),
                 SettingsGroupCard(
                   children: [
+                    if (LiquidGlassTile.isIOS)
+                      const SettingsHighlightTarget(
+                        id: 'liquidGlass',
+                        child: LiquidGlassTile(),
+                      ),
                     if (AppleAppIcon.isIOS)
                       const SettingsHighlightTarget(
                         id: 'appIcon',

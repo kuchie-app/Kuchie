@@ -418,4 +418,159 @@ void main() {
       expect(await saved.chapters.single.pages.last.readAsBytes(), [2]);
     },
   );
+  test(
+    'records chapters read online as history without adding them to the catalog',
+    () async {
+      const source = LocalSeriesSource(
+        sourceId: 'shinigami',
+        mangaId: 'crazy-demon',
+        locator: '/series/crazy-demon',
+        cover: null,
+      );
+      final series = LocalSeries(
+        id: 'shinigami:crazy-demon',
+        title: 'Crazy Demon',
+        chapters: const [],
+        inLibrary: false,
+        source: source,
+      );
+      await catalog.recordRemoteRead(
+        series: series,
+        chapterId: 'c165',
+        chapterTitle: 'Chapter 165',
+        progress: 2,
+      );
+      await catalog.recordRemoteRead(
+        series: series,
+        chapterId: 'c166',
+        chapterTitle: 'Chapter 166',
+        progress: 0,
+      );
+      // Reading 165 again moves it to the top and keeps the latest page.
+      await catalog.recordRemoteRead(
+        series: series,
+        chapterId: 'c165',
+        chapterTitle: 'Chapter 165',
+        progress: 5,
+      );
+      expect(await catalog.list(), isEmpty);
+      await catalog.close();
+      catalog = LocalCatalog(Directory(p.join(workspace.path, 'catalog')));
+      final history = await catalog.remoteHistory();
+      expect([for (final read in history) read.chapterId], ['c165', 'c166']);
+      final latest = history.first;
+      expect(latest.seriesId, 'shinigami:crazy-demon');
+      expect(latest.seriesTitle, 'Crazy Demon');
+      expect(latest.chapterTitle, 'Chapter 165');
+      expect(latest.progress, 5);
+      expect(latest.source?.locator, '/series/crazy-demon');
+      expect(await catalog.remoteProgress('shinigami:crazy-demon', 'c165'), 5);
+      expect(await catalog.remoteProgress('shinigami:crazy-demon', 'x'), 0);
+    },
+  );
+
+  test('adds online history to a catalog from before it existed', () async {
+    await catalog.setInLibrary(
+      seriesId: 'existing',
+      title: 'Existing',
+      inLibrary: true,
+    );
+    await catalog.close();
+    final path = p.join(workspace.path, 'catalog', 'catalog.sqlite');
+    final db = sqlite3.open(path);
+    try {
+      db.execute(
+        'DROP TABLE IF EXISTS remote_history; PRAGMA user_version = 3',
+      );
+    } finally {
+      db.close();
+    }
+    catalog = LocalCatalog(Directory(p.join(workspace.path, 'catalog')));
+    await catalog.recordRemoteRead(
+      series: LocalSeries(id: 's', title: 'S', chapters: const []),
+      chapterId: 'c',
+      chapterTitle: 'C',
+      progress: 1,
+    );
+    expect((await catalog.remoteHistory()).single.progress, 1);
+    expect((await catalog.find('existing'))?.inLibrary, isTrue);
+  });
+  test(
+    'keeps rating and notes for any series, including unsaved ones',
+    () async {
+      expect((await catalog.seriesMeta('s')).rating, 0);
+      expect((await catalog.seriesMeta('s')).notes, '');
+      await catalog.setRating('s', 4);
+      await catalog.setNotes('s', 'Reread arc 2');
+      await catalog.setRating('s', 9);
+      expect(await catalog.list(), isEmpty);
+      await catalog.close();
+      catalog = LocalCatalog(Directory(p.join(workspace.path, 'catalog')));
+      final meta = await catalog.seriesMeta('s');
+      expect(meta.rating, 5);
+      expect(meta.notes, 'Reread arc 2');
+      await catalog.setRating('s', 0);
+      expect((await catalog.seriesMeta('s')).rating, 0);
+      await catalog.setTags('s', [' Isekai ', 'isekai', '', 'Favorite']);
+      final tagged = await catalog.seriesMeta('s');
+      expect(tagged.tags, ['Isekai', 'Favorite']);
+      expect(tagged.notes, 'Reread arc 2');
+    },
+  );
+  test(
+    'marks chapters read and bookmarked whether or not they are saved',
+    () async {
+      final file = await archive('Saved', {
+        '1.jpg': [1],
+      });
+      final saved = await catalog.importArchive(file);
+      final savedId = saved.chapters.single.id;
+      expect(await catalog.chapterMarks(saved.id), isEmpty);
+
+      await catalog.setChapterMarks(saved.id, [
+        savedId,
+        'online-2',
+      ], read: true);
+      await catalog.setChapterMarks(saved.id, ['online-2'], bookmarked: true);
+      await catalog.setChapterMarks(saved.id, [savedId], bookmarked: true);
+      await catalog.close();
+      catalog = LocalCatalog(Directory(p.join(workspace.path, 'catalog')));
+
+      final marks = await catalog.chapterMarks(saved.id);
+      expect(marks['online-2'], (read: true, bookmarked: true));
+      expect(marks[savedId], (read: true, bookmarked: true));
+      // A saved chapter's own bookmark stays in sync for backups.
+      expect(
+        (await catalog.find(saved.id))!.chapters.single.bookmarked,
+        isTrue,
+      );
+
+      await catalog.setChapterMarks(saved.id, ['online-2'], read: false);
+      expect((await catalog.chapterMarks(saved.id))['online-2'], (
+        read: false,
+        bookmarked: true,
+      ));
+    },
+  );
+
+  test('a custom cover replaces the first page and can be cleared', () async {
+    final file = await archive('Covered', {
+      '1.jpg': [1],
+    });
+    final series = await catalog.importArchive(file);
+    expect((await catalog.find(series.id))!.customCover, isNull);
+
+    final picked = await File(
+      p.join(workspace.path, 'pick.png'),
+    ).writeAsBytes([9, 9, 9]);
+    await catalog.setCover(series.id, picked);
+    await picked.delete();
+    final covered = (await catalog.find(series.id))!.customCover!;
+    expect(await covered.readAsBytes(), [9, 9, 9]);
+    expect((await catalog.seriesMeta(series.id)).cover?.path, covered.path);
+
+    await catalog.setCover(series.id, null);
+    expect((await catalog.find(series.id))!.customCover, isNull);
+    expect(await covered.exists(), isFalse);
+  });
 }

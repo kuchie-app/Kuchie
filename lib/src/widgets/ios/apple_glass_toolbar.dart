@@ -281,6 +281,23 @@ class AppleGlassToolbarButton extends StatelessWidget {
   );
 }
 
+/// Space between a bar's glass buttons and the screen edge.
+///
+/// Glass buttons draw 2pt inside their 48pt box, so 14 lines their visible
+/// edge up with the 16pt title and content margin on both sides.
+const kAppleGlassBarInset = 14.0;
+
+/// Leading slot that holds one glass button at [kAppleGlassBarInset].
+const kAppleGlassLeadingWidth = kAppleGlassBarInset + 48;
+
+/// Applies the glass bar margins to every AppBar below [context].
+ThemeData appleGlassBarTheme(ThemeData theme) => theme.copyWith(
+  appBarTheme: theme.appBarTheme.copyWith(
+    actionsPadding: const EdgeInsetsDirectional.only(end: kAppleGlassBarInset),
+    leadingWidth: kAppleGlassLeadingWidth,
+  ),
+);
+
 class AppleGlassToolbar extends StatelessWidget {
   const AppleGlassToolbar({
     super.key,

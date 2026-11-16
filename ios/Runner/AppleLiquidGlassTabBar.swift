@@ -7,6 +7,20 @@
 import Flutter
 import UIKit
 
+extension UIColor {
+  /// Decodes a Flutter `Color.toARGB32()` value; nil keeps the system tint.
+  static func kuchieARGB(_ value: Any?) -> UIColor? {
+    guard let number = value as? NSNumber else { return nil }
+    let argb = number.uint32Value
+    return UIColor(
+      red: CGFloat((argb >> 16) & 255) / 255,
+      green: CGFloat((argb >> 8) & 255) / 255,
+      blue: CGFloat(argb & 255) / 255,
+      alpha: CGFloat((argb >> 24) & 255) / 255
+    )
+  }
+}
+
 final class AppleLiquidGlassTabBarFactory: NSObject, FlutterPlatformViewFactory {
   private static let channelName = "kuchie/apple_liquid_glass"
   private static let viewType = channelName + "/tab_bar"
@@ -20,19 +34,31 @@ final class AppleLiquidGlassTabBarFactory: NSObject, FlutterPlatformViewFactory 
     let messenger = registrar.messenger()
     let channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "isSupported" else {
+      switch call.method {
+      case "isSupported":
+        if #available(iOS 26.0, *) {
+          result(true)
+        } else {
+          result(false)
+        }
+      case "physicalMemory":
+        // Dart decides whether the glass effects suit this device.
+        result(NSNumber(value: ProcessInfo.processInfo.physicalMemory))
+      default:
         result(FlutterMethodNotImplemented)
-        return
-      }
-      if #available(iOS 26.0, *) {
-        result(true)
-      } else {
-        result(false)
       }
     }
 
     if #available(iOS 26.0, *) {
-      registrar.register(AppleLiquidGlassTabBarFactory(messenger: messenger), withId: viewType)
+      // The Dart side always claims these touches, so waiting on Flutter's
+      // gesture arena only cancels quick taps whenever the UI thread is busy
+      // (launch, building a heavy tab), leaving the tab unselected.
+      registrar.register(
+        AppleLiquidGlassTabBarFactory(messenger: messenger),
+        withId: viewType,
+        gestureRecognizersBlockingPolicy:
+          FlutterPlatformViewGestureRecognizersBlockingPolicyDoNotBlockGesture
+      )
     }
   }
 
@@ -104,6 +130,8 @@ private final class AppleLiquidGlassTabBar: NSObject, FlutterPlatformView, UITab
 
     let tabBar = container.tabBar
     tabBar.overrideUserInterfaceStyle = configuration["dark"] as? Bool == true ? .dark : .light
+    // The selected tab follows the app theme's accent instead of system blue.
+    tabBar.tintColor = UIColor.kuchieARGB(configuration["tint"])
     tabBar.semanticContentAttribute =
       configuration["rtl"] as? Bool == true ? .forceRightToLeft : .forceLeftToRight
 

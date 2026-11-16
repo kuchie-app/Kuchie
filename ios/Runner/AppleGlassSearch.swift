@@ -125,6 +125,8 @@ private final class AppleGlassSearchView: NSObject, FlutterPlatformView, UITextF
     applyingUpdate = true
     defer { applyingUpdate = false }
     host.overrideUserInterfaceStyle = config["dark"] as? Bool == true ? .dark : .light
+    // Caret and selection follow the app theme's accent.
+    host.tintColor = UIColor.kuchieARGB(config["tint"])
     host.semanticContentAttribute = config["rtl"] as? Bool == true
       ? .forceRightToLeft : .forceLeftToRight
     let placeholder = config["placeholder"] as? String ?? ""

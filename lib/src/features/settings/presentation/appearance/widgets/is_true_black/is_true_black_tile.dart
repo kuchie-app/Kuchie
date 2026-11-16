@@ -24,6 +24,15 @@ class IsTrueBlack extends _$IsTrueBlack with SharedPreferenceClientMixin<bool> {
   bool? build() => initialize(DBKeys.isTrueBlack);
 }
 
+/// Pure black stays on until chosen otherwise for Indigo Night with Liquid Glass.
+///
+/// The only source of the default, so the switch and every theme agree.
+bool effectiveTrueBlack({
+  required bool? saved,
+  required AppTheme theme,
+  required bool appleGlass,
+}) => saved ?? (appleGlass && theme == AppTheme.indigoNight);
+
 class IsTrueBlackTile extends HookConsumerWidget {
   const IsTrueBlackTile({super.key});
   @override
@@ -32,11 +41,11 @@ class IsTrueBlackTile extends HookConsumerWidget {
       controlAffinity: ListTileControlAffinity.trailing,
       title: Text(context.l10n.pureBlackAmoled),
       onChanged: ref.read(isTrueBlackProvider.notifier).update,
-      value:
-          ref.watch(isTrueBlackProvider) ??
-          (appleGlassEnabled(context) &&
-              (ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight) ==
-                  AppTheme.indigoNight),
+      value: effectiveTrueBlack(
+        saved: ref.watch(isTrueBlackProvider),
+        theme: ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight,
+        appleGlass: appleGlassEnabled(context),
+      ),
     );
   }
 }

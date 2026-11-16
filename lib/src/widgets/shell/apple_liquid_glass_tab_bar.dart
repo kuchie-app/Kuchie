@@ -56,6 +56,7 @@ class AppleLiquidGlassTabBar extends StatelessWidget {
     ],
     selectedIndex: selectedIndex,
     dark: Theme.of(context).brightness == Brightness.dark,
+    tint: Theme.of(context).colorScheme.primary,
     direction: Directionality.of(context),
     reduceMotion: MediaQuery.disableAnimationsOf(context),
     onDestinationSelected: onDestinationSelected,
@@ -67,6 +68,7 @@ class _NativeTabBar extends StatefulWidget {
     required this.tabs,
     required this.selectedIndex,
     required this.dark,
+    required this.tint,
     required this.direction,
     required this.reduceMotion,
     required this.onDestinationSelected,
@@ -75,6 +77,7 @@ class _NativeTabBar extends StatefulWidget {
   final List<_Tab> tabs;
   final int selectedIndex;
   final bool dark;
+  final Color tint;
   final TextDirection direction;
   final bool reduceMotion;
   final ValueChanged<int> onDestinationSelected;
@@ -90,6 +93,7 @@ class _NativeTabBar extends StatefulWidget {
     ],
     'selectedIndex': selectedIndex,
     'dark': dark,
+    'tint': tint.toARGB32(),
     'rtl': direction == TextDirection.rtl,
     'reduceMotion': reduceMotion,
   };
@@ -125,6 +129,7 @@ class _NativeTabBarState extends State<_NativeTabBar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedIndex != widget.selectedIndex ||
         oldWidget.dark != widget.dark ||
+        oldWidget.tint != widget.tint ||
         oldWidget.direction != widget.direction ||
         oldWidget.reduceMotion != widget.reduceMotion ||
         !listEquals(oldWidget.tabs, widget.tabs)) {

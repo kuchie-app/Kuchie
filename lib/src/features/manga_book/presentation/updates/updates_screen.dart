@@ -23,7 +23,6 @@ import '../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../widgets/desktop/desktop_top_bar.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/inline_retry_row.dart';
-import '../../../../widgets/ios/apple_glass_capability.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../widgets/ios/apple_page_title.dart';
 import '../../../library/presentation/library/controller/library_controller.dart';
@@ -943,9 +942,6 @@ class UpdatesScreen extends HookConsumerWidget {
         !(desktop && selecting) &&
         (int.tryParse(lastUpdated) ?? 0) > 0;
     final scaffold = Scaffold(
-      floatingActionButton: selecting || desktop
-          ? null
-          : const AppleGlassDockClearance(child: UpdateStatusFab()),
       appBar: selecting && !desktop
           ? (topBar
                 ? null

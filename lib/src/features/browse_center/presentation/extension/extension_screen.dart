@@ -143,7 +143,8 @@ class ExtensionScreen extends HookConsumerWidget {
             SliverToBoxAdapter(child: searchField),
           ],
           if (empty != null)
-            SliverFillRemaining(hasScrollBody: false, child: empty),
+            // Emoticons sizes with a LayoutBuilder, which cannot report intrinsics.
+            SliverFillRemaining(child: empty),
           if (update.isNotBlank)
             ...extensionSet(
               key: const ValueKey("update"),
@@ -192,7 +193,7 @@ class ExtensionScreen extends HookConsumerWidget {
       );
       return RefreshIndicator(
         onRefresh: refresh,
-          edgeOffset: headerInset,
+        edgeOffset: headerInset,
         child: desktop
             ? Padding(
                 padding: const EdgeInsets.only(bottom: 16),

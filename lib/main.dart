@@ -123,7 +123,7 @@ Future<void> _startApp() async {
       ),
     );
   }
-  final appleGlassSupport = appleGlassAvailable();
+  final appleGlassSupport = appleGlassCapability();
   if (kIsWeb) {
     await BrowserContextMenu.disableContextMenu();
   }
@@ -347,7 +347,7 @@ Future<void> _startApp() async {
     startServerServices(retained);
   }
 
-  final appleGlass = await appleGlassSupport;
+  final glassCapability = await appleGlassSupport;
   _logBoot('runApp');
   final app = AccountSessionHost(
     initialContainer: container,
@@ -367,8 +367,8 @@ Future<void> _startApp() async {
       );
     },
     builder: (changing) =>
-        KuchieApp(appleGlass: appleGlass, sessionChanging: changing),
-    loading: const AccountSessionLoading(),
+        KuchieApp(glassCapability: glassCapability, sessionChanging: changing),
+    loading: AccountSessionLoading(glassCapability: glassCapability),
     errorBuilder: (error) =>
         AppErrorApp(message: redactTokens('$error'), logPath: _crashLogPath),
   );

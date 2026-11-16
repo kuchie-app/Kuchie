@@ -113,6 +113,7 @@ class LocalSeries {
     List<String> categories = const [],
     this.inLibrary = true,
     this.source,
+    this.customCover,
   }) : chapters = List.unmodifiable(chapters),
        categories = List.unmodifiable(categories);
 
@@ -122,7 +123,13 @@ class LocalSeries {
   final List<String> categories;
   final bool inLibrary;
   final LocalSeriesSource? source;
+
+  /// A cover the user picked; shown before the source cover and pages.
+  final File? customCover;
 }
+
+/// Read and bookmark state for a chapter, saved on this iPhone or not.
+typedef LocalChapterMarks = ({bool read, bool bookmarked});
 
 class LocalChapter {
   LocalChapter({
@@ -142,6 +149,45 @@ class LocalChapter {
   final DateTime? lastReadAt;
 }
 
+/// Personal details for a series, kept even when nothing of it is saved.
+class LocalSeriesMeta {
+  const LocalSeriesMeta({
+    this.rating = 0,
+    this.notes = '',
+    this.tags = const [],
+    this.cover,
+  });
+
+  /// 0 means unrated; otherwise 1–5 stars.
+  final int rating;
+  final String notes;
+  final List<String> tags;
+
+  /// A cover the user picked, stored with the catalog.
+  final File? cover;
+}
+
+/// A chapter read straight from a source, kept for History without its pages.
+class LocalRemoteRead {
+  const LocalRemoteRead({
+    required this.seriesId,
+    required this.seriesTitle,
+    required this.chapterId,
+    required this.chapterTitle,
+    required this.progress,
+    required this.lastReadAt,
+    this.source,
+  });
+
+  final String seriesId;
+  final String seriesTitle;
+  final LocalSeriesSource? source;
+  final String chapterId;
+  final String chapterTitle;
+  final int progress;
+  final DateTime lastReadAt;
+}
+
 class LocalTransferCancelled implements Exception {
   const LocalTransferCancelled();
 }
@@ -156,6 +202,7 @@ class LocalPreviewPages {
     required List<Map<String, String>> headers,
     required http.Client client,
     required bool Function() isCancelled,
+    int progress = 0,
   }) : _urls = List.unmodifiable(urls),
        _headers = headers
            .map(Map<String, String>.unmodifiable)
@@ -169,6 +216,7 @@ class LocalPreviewPages {
            urls.length,
            (index) => File(p.join(directory.path, _pageName(index, '.image'))),
          ),
+         progress: progress,
        ) {
     _validatePageList(_urls);
     _validatePageHeaders(_urls, _headers);
@@ -236,6 +284,7 @@ class LocalCatalog {
   Directory get _pages => Directory(p.join(_root.path, 'pages'));
   Directory get _imports => Directory(p.join(_root.path, 'imports'));
   Directory get _downloads => Directory(p.join(_root.path, 'downloads'));
+  Directory get _covers => Directory(p.join(_root.path, 'covers'));
 
   Future<_CatalogDatabase> _open() async {
     await _pages.create(recursive: true);
@@ -339,8 +388,11 @@ class LocalCatalog {
     final rows = await db
         .customSelect(
           '''
-      SELECT s.id AS catalog_series_id, s.title AS series_title, s.in_library, s.source, c.*
-      FROM series s LEFT JOIN chapters c ON c.series_id = s.id AND c.ready = 1
+      SELECT s.id AS catalog_series_id, s.title AS series_title, s.in_library, s.source,
+        m.cover AS custom_cover, c.*
+      FROM series s
+      LEFT JOIN series_meta m ON m.series_id = s.id
+      LEFT JOIN chapters c ON c.series_id = s.id AND c.ready = 1
       ${seriesId == null ? '' : 'WHERE s.id = ?'}
       ORDER BY s.title COLLATE NOCASE, s.id, c.position
       ''',
@@ -354,6 +406,7 @@ class LocalCatalog {
             String title,
             bool inLibrary,
             LocalSeriesSource? source,
+            String? cover,
             List<LocalChapter> chapters,
           })
         >{};
@@ -365,6 +418,7 @@ class LocalCatalog {
           title: row.read<String>('series_title'),
           inLibrary: row.readNullable<int>('in_library') != 0,
           source: _decodeSeriesSource(row.readNullable<String>('source')),
+          cover: row.readNullable<String>('custom_cover'),
           chapters: [],
         ),
       );
@@ -412,6 +466,10 @@ class LocalCatalog {
           categories: bySeries[row.key] ?? const [],
           inLibrary: row.value.inLibrary,
           source: row.value.source,
+          customCover: switch (row.value.cover) {
+            final name? => File(p.join(_covers.path, name)),
+            null => null,
+          },
         ),
     ];
   }
@@ -660,6 +718,237 @@ class LocalCatalog {
       [page, DateTime.now().millisecondsSinceEpoch, seriesId, chapterId],
     );
   });
+
+  /// Kept apart from [setProgress] so online reads never touch saved files.
+  Future<void> recordRemoteRead({
+    required LocalSeries series,
+    required String chapterId,
+    required String chapterTitle,
+    required int progress,
+  }) => _metadata.run(() async {
+    final db = await _database;
+    await db.customStatement(
+      '''
+      INSERT INTO remote_history
+        (series_id, series_title, source, chapter_id, chapter_title, progress, last_read_at)
+      -- Reads within one millisecond still order newest first in History.
+      VALUES (?, ?, ?, ?, ?, ?,
+        MAX(?, COALESCE((SELECT MAX(last_read_at) FROM remote_history), 0) + 1))
+      ON CONFLICT(series_id, chapter_id) DO UPDATE SET
+        series_title = excluded.series_title,
+        source = COALESCE(excluded.source, remote_history.source),
+        chapter_title = excluded.chapter_title,
+        progress = excluded.progress,
+        last_read_at = excluded.last_read_at
+      ''',
+      [
+        series.id,
+        _nonEmptyName(series.title, 'title'),
+        _encodeSeriesSource(series.source),
+        chapterId,
+        _nonEmptyName(chapterTitle, 'chapterTitle'),
+        progress < 0 ? 0 : progress,
+        DateTime.now().millisecondsSinceEpoch,
+      ],
+    );
+  });
+
+  /// Newest first.
+  Future<List<LocalRemoteRead>> remoteHistory() => _metadata.run(() async {
+    final db = await _database;
+    final rows = await db
+        .customSelect(
+          'SELECT * FROM remote_history ORDER BY last_read_at DESC LIMIT 500',
+        )
+        .get();
+    return [
+      for (final row in rows)
+        LocalRemoteRead(
+          seriesId: row.read<String>('series_id'),
+          seriesTitle: row.read<String>('series_title'),
+          source: _decodeSeriesSource(row.readNullable<String>('source')),
+          chapterId: row.read<String>('chapter_id'),
+          chapterTitle: row.read<String>('chapter_title'),
+          progress: row.read<int>('progress'),
+          lastReadAt: DateTime.fromMillisecondsSinceEpoch(
+            row.read<int>('last_read_at'),
+          ),
+        ),
+    ];
+  });
+
+  Future<int> remoteProgress(
+    String seriesId,
+    String chapterId,
+  ) => _metadata.run(() async {
+    final db = await _database;
+    final row = await db
+        .customSelect(
+          'SELECT progress FROM remote_history WHERE series_id = ? AND chapter_id = ?',
+          variables: [
+            Variable.withString(seriesId),
+            Variable.withString(chapterId),
+          ],
+        )
+        .getSingleOrNull();
+    return row?.read<int>('progress') ?? 0;
+  });
+
+  Future<LocalSeriesMeta> seriesMeta(String seriesId) =>
+      _metadata.run(() async {
+        final db = await _database;
+        final row = await db
+            .customSelect(
+              'SELECT * FROM series_meta WHERE series_id = ?',
+              variables: [Variable.withString(seriesId)],
+            )
+            .getSingleOrNull();
+        if (row == null) return const LocalSeriesMeta();
+        final cover = row.readNullable<String>('cover');
+        return LocalSeriesMeta(
+          rating: row.read<int>('rating'),
+          notes: row.read<String>('notes'),
+          tags: _decodeTags(row.read<String>('tags')),
+          cover: cover == null ? null : File(p.join(_covers.path, cover)),
+        );
+      });
+
+  Future<void> setRating(String seriesId, int rating) =>
+      _updateMeta(seriesId, 'rating', rating.clamp(0, 5));
+
+  Future<void> setNotes(String seriesId, String notes) => _updateMeta(
+    seriesId,
+    'notes',
+    notes.length > _maxNotesLength
+        ? notes.substring(0, _maxNotesLength)
+        : notes,
+  );
+
+  /// Trims, drops blanks and duplicates (case-insensitive), keeps the order.
+  Future<void> setTags(String seriesId, List<String> tags) {
+    final seen = <String>{};
+    final cleaned = [
+      for (final tag in tags.map((tag) => tag.trim()))
+        if (tag.isNotEmpty && tag.length <= 64 && seen.add(tag.toLowerCase()))
+          tag,
+    ].take(64).toList();
+    return _updateMeta(seriesId, 'tags', jsonEncode(cleaned));
+  }
+
+  // [column] is always a literal from this file, never user input.
+  Future<void> _updateMeta(String seriesId, String column, Object value) =>
+      _metadata.run(() async {
+        final db = await _database;
+        await db.customStatement(
+          '''
+          INSERT INTO series_meta (series_id, $column) VALUES (?, ?)
+          ON CONFLICT(series_id) DO UPDATE SET $column = excluded.$column
+          ''',
+          [seriesId, value],
+        );
+      });
+
+  /// Saved chapters report their own bookmark; marks cover the rest.
+  Future<Map<String, LocalChapterMarks>> chapterMarks(
+    String seriesId,
+  ) => _metadata.run(() async {
+    final db = await _database;
+    final marks = <String, LocalChapterMarks>{
+      for (final row
+          in await db
+              .customSelect(
+                'SELECT chapter_id, read, bookmarked FROM chapter_marks WHERE series_id = ?',
+                variables: [Variable.withString(seriesId)],
+              )
+              .get())
+        row.read<String>('chapter_id'): (
+          read: row.read<int>('read') != 0,
+          bookmarked: row.read<int>('bookmarked') != 0,
+        ),
+    };
+    for (final row
+        in await db
+            .customSelect(
+              'SELECT id, bookmarked FROM chapters WHERE series_id = ? AND ready = 1 AND bookmarked = 1',
+              variables: [Variable.withString(seriesId)],
+            )
+            .get()) {
+      final id = row.read<String>('id');
+      marks[id] = (read: marks[id]?.read ?? false, bookmarked: true);
+    }
+    return marks;
+  });
+
+  /// Leaves a field unchanged when it is null.
+  Future<void> setChapterMarks(
+    String seriesId,
+    Iterable<String> chapterIds, {
+    bool? read,
+    bool? bookmarked,
+  }) => _metadata.run(() async {
+    if (read == null && bookmarked == null) return;
+    final db = await _database;
+    await db.transaction(() async {
+      for (final id in chapterIds.toSet()) {
+        await db.customStatement(
+          '''
+          INSERT INTO chapter_marks (series_id, chapter_id, read, bookmarked)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(series_id, chapter_id) DO UPDATE SET
+            read = COALESCE(?, chapter_marks.read),
+            bookmarked = COALESCE(?, chapter_marks.bookmarked)
+          ''',
+          [
+            seriesId,
+            id,
+            read == true ? 1 : 0,
+            bookmarked == true ? 1 : 0,
+            read == null ? null : (read ? 1 : 0),
+            bookmarked == null ? null : (bookmarked ? 1 : 0),
+          ],
+        );
+        if (bookmarked != null) {
+          await db.customStatement(
+            'UPDATE chapters SET bookmarked = ? WHERE series_id = ? AND id = ? AND ready = 1',
+            [bookmarked ? 1 : 0, seriesId, id],
+          );
+        }
+      }
+    });
+  });
+
+  /// Copies [image] into the catalog, or removes the custom cover when null.
+  Future<void> setCover(String seriesId, File? image) =>
+      _metadata.run(() async {
+        final db = await _database;
+        final previous = await db
+            .customSelect(
+              'SELECT cover FROM series_meta WHERE series_id = ?',
+              variables: [Variable.withString(seriesId)],
+            )
+            .getSingleOrNull();
+        String? name;
+        if (image != null) {
+          final length = await image.length();
+          if (length == 0 || length > _maxCoverBytes) {
+            throw const FormatException('The image is empty or too large.');
+          }
+          await _covers.create(recursive: true);
+          name = '${const Uuid().v4()}${_coverExtension(image.path)}';
+          await image.copy(p.join(_covers.path, name));
+        }
+        await db.customStatement(
+          '''
+          INSERT INTO series_meta (series_id, cover) VALUES (?, ?)
+          ON CONFLICT(series_id) DO UPDATE SET cover = excluded.cover
+          ''',
+          [seriesId, name],
+        );
+        if (previous?.readNullable<String>('cover') case final old?) {
+          final file = File(p.join(_covers.path, old));
+          if (await file.exists()) await file.delete();
+        }
+      });
 
   Future<void> setBookmark(
     String seriesId,
@@ -1042,7 +1331,7 @@ class _CatalogDatabase extends GeneratedDatabase {
   _CatalogDatabase(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 6;
 
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
@@ -1073,6 +1362,9 @@ class _CatalogDatabase extends GeneratedDatabase {
         'CREATE INDEX chapters_import_fingerprint ON chapters(fingerprint)',
       );
       await _createCategories();
+      await _createRemoteHistory();
+      await _createSeriesMeta();
+      await _createChapterMarks();
     },
     onUpgrade: (_, from, to) async {
       await transaction(() async {
@@ -1093,12 +1385,55 @@ class _CatalogDatabase extends GeneratedDatabase {
             await customStatement('ALTER TABLE series ADD COLUMN source TEXT');
           }
         }
+        if (from < 4) await _createRemoteHistory();
+        if (from < 5) await _createSeriesMeta();
+        if (from < 6) await _createChapterMarks();
       });
     },
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  // No foreign key: ratings and notes also apply to series that aren't saved.
+  Future<void> _createChapterMarks() => customStatement('''
+    CREATE TABLE IF NOT EXISTS chapter_marks (
+      series_id TEXT NOT NULL,
+      chapter_id TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      bookmarked INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (series_id, chapter_id)
+    )
+    ''');
+
+  Future<void> _createSeriesMeta() => customStatement('''
+    CREATE TABLE IF NOT EXISTS series_meta (
+      series_id TEXT PRIMARY KEY,
+      rating INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      tags TEXT NOT NULL DEFAULT '[]',
+      cover TEXT
+    )
+    ''');
+
+  // No foreign key: History outlives the series row and its saved chapters.
+  Future<void> _createRemoteHistory() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS remote_history (
+        series_id TEXT NOT NULL,
+        series_title TEXT NOT NULL,
+        source TEXT,
+        chapter_id TEXT NOT NULL,
+        chapter_title TEXT NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        last_read_at INTEGER NOT NULL,
+        PRIMARY KEY (series_id, chapter_id)
+      )
+      ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS remote_history_read_at ON remote_history(last_read_at)',
+    );
+  }
 
   Future<void> _createCategories() async {
     await customStatement('CREATE TABLE categories (name TEXT PRIMARY KEY)');
@@ -1125,6 +1460,34 @@ class _SerialOperations {
     final result = _tail.then((_) => operation()).whenComplete(() => _size--);
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result;
+  }
+}
+
+const _maxNotesLength = 20000;
+const _maxCoverBytes = 20 * 1024 * 1024;
+
+String _coverExtension(String path) {
+  final extension = p.extension(path).toLowerCase();
+  return const {
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.webp',
+        '.heic',
+        '.gif',
+      }.contains(extension)
+      ? extension
+      : '.image';
+}
+
+List<String> _decodeTags(String value) {
+  try {
+    final decoded = jsonDecode(value);
+    return decoded is List
+        ? List.unmodifiable(decoded.whereType<String>().take(64))
+        : const [];
+  } on FormatException {
+    return const [];
   }
 }
 

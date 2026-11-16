@@ -24,6 +24,7 @@ import 'features/offline/data/download_live_activity.dart';
 import 'features/onboarding/data/collection_mode.dart';
 import 'features/settings/presentation/appearance/widgets/app_theme_selector/app_theme_providers.dart';
 import 'features/settings/presentation/appearance/widgets/is_true_black/is_true_black_tile.dart';
+import 'features/settings/presentation/appearance/widgets/liquid_glass/liquid_glass_tile.dart';
 import 'features/settings/presentation/general/widgets/force_portrait_tile.dart';
 import 'features/settings/presentation/incognito/incognito_mode.dart';
 import 'features/settings/widgets/app_theme_mode_tile/app_theme_mode_tile.dart';
@@ -38,21 +39,26 @@ import 'utils/theme/app_theme_builder.dart';
 import 'widgets/desktop/desktop_page_frame.dart';
 import 'widgets/desktop/desktop_window_scaffold.dart';
 import 'widgets/ios/apple_glass_capability.dart';
+import 'widgets/ios/apple_glass_toolbar.dart';
 import 'widgets/kuchie_character_motion.dart';
 import 'widgets/web_page_title.dart';
 
 class KuchieApp extends HookConsumerWidget {
   const KuchieApp({
     super.key,
-    required this.appleGlass,
+    required this.glassCapability,
     this.sessionChanging = false,
   });
 
-  final bool appleGlass;
+  final AppleGlassCapability glassCapability;
   final bool sessionChanging;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final appleGlass = effectiveAppleGlass(
+      capability: glassCapability,
+      saved: ref.watch(liquidGlassPreferenceProvider),
+    );
     final routes = ref.watch(routerConfigProvider);
     final serverEnabled = ref.watch(serverCollectionRuntimeEnabledProvider);
 
@@ -116,52 +122,62 @@ class KuchieApp extends HookConsumerWidget {
     final appLocale = ref.watch(l10nProvider);
     final appTheme = ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight;
     final customSeed = ref.watch(customThemeColorProvider);
-    final isTrueBlack =
-        ref.watch(isTrueBlackProvider) ??
-        (appleGlass && appTheme == AppTheme.indigoNight);
+    final isTrueBlack = effectiveTrueBlack(
+      saved: ref.watch(isTrueBlackProvider),
+      theme: appTheme,
+      appleGlass: appleGlass,
+    );
     applyForcePortrait(ref.watch(forcePortraitProvider).ifNull());
     return MaterialApp.router(
       builder: (context, child) {
         final toastWrapped = FToastBuilder()(context, child);
+        final glassBars =
+            appleGlass && context.windowSizeClass == WindowSizeClass.compact;
         return AppleGlassScope(
           available: appleGlass,
-          child: ScrollbarTheme(
-            data: context.windowSizeClass >= WindowSizeClass.medium
-                ? wideScreenScrollbarTheme(Theme.of(context).colorScheme)
-                : const ScrollbarThemeData(),
-            child: ReduceMotionScope(
-              child: DesktopWindowScaffold(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    DownloadLiveActivityHost(
-                      enabled: !sessionChanging,
-                      serverEnabled: serverEnabled,
-                    ),
-                    Offstage(
-                      offstage: sessionChanging,
-                      child: TickerMode(
+          capability: glassCapability,
+          child: Theme(
+            data: glassBars
+                ? appleGlassBarTheme(Theme.of(context))
+                : Theme.of(context),
+            child: ScrollbarTheme(
+              data: context.windowSizeClass >= WindowSizeClass.medium
+                  ? wideScreenScrollbarTheme(Theme.of(context).colorScheme)
+                  : const ScrollbarThemeData(),
+              child: ReduceMotionScope(
+                child: DesktopWindowScaffold(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      DownloadLiveActivityHost(
                         enabled: !sessionChanging,
-                        child: ReauthBannerHost(
-                          enabled: serverEnabled,
-                          child: kIsWeb
-                              ? _WebTitleBridge(
-                                  routes: routes,
-                                  child: _IncognitoNotificationBridge(
+                        serverEnabled: serverEnabled,
+                      ),
+                      Offstage(
+                        offstage: sessionChanging,
+                        child: TickerMode(
+                          enabled: !sessionChanging,
+                          child: ReauthBannerHost(
+                            enabled: serverEnabled,
+                            child: kIsWeb
+                                ? _WebTitleBridge(
+                                    routes: routes,
+                                    child: _IncognitoNotificationBridge(
+                                      child: toastWrapped,
+                                    ),
+                                  )
+                                : _IncognitoNotificationBridge(
                                     child: toastWrapped,
                                   ),
-                                )
-                              : _IncognitoNotificationBridge(
-                                  child: toastWrapped,
-                                ),
+                          ),
                         ),
                       ),
-                    ),
-                    if (sessionChanging)
-                      const Scaffold(
-                        body: Center(child: CircularProgressIndicator()),
-                      ),
-                  ],
+                      if (sessionChanging)
+                        const Scaffold(
+                          body: Center(child: CircularProgressIndicator()),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -197,7 +213,12 @@ class KuchieApp extends HookConsumerWidget {
 }
 
 class AccountSessionLoading extends ConsumerWidget {
-  const AccountSessionLoading({super.key});
+  const AccountSessionLoading({
+    super.key,
+    this.glassCapability = AppleGlassCapability.unsupported,
+  });
+
+  final AppleGlassCapability glassCapability;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -212,7 +233,15 @@ class AccountSessionLoading extends ConsumerWidget {
         theme: ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight,
         brightness: brightness,
         customSeed: Color(ref.watch(customThemeColorProvider) ?? 0xFF7C7BFF),
-        amoled: ref.watch(isTrueBlackProvider).ifNull(),
+        // Matches the app theme so the loading screen does not flash a lighter shade.
+        amoled: effectiveTrueBlack(
+          saved: ref.watch(isTrueBlackProvider),
+          theme: ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight,
+          appleGlass: effectiveAppleGlass(
+            capability: glassCapability,
+            saved: ref.watch(liquidGlassPreferenceProvider),
+          ),
+        ),
       ),
       child: const Directionality(
         textDirection: TextDirection.ltr,

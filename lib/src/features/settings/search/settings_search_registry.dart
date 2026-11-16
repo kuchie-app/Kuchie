@@ -35,6 +35,7 @@ import '../data/server_connection/server_url.dart';
 import '../data/sign_in/sign_in_repository.dart';
 import '../presentation/appearance/widgets/app_theme_selector/app_theme_providers.dart';
 import '../presentation/appearance/widgets/download_island/download_island_preference.dart';
+import '../presentation/appearance/widgets/liquid_glass/liquid_glass_tile.dart';
 import '../presentation/appearance/widgets/show_recommendations/show_recommendations_tile.dart';
 import '../presentation/backup/widgets/backup_flags/backup_flags_dialog.dart';
 import '../presentation/general/widgets/force_portrait_tile.dart';
@@ -109,6 +110,14 @@ List<SettingsSearchEntry> get appearanceSettingsSearchEntries => [
     breadcrumb: (l) => '${l.appearance} › ${l.display}',
     open: (c) => const AppearanceSettingsRoute(highlight: 'appIcon').push(c),
     visible: (_, _) => AppleAppIcon.isIOS,
+  ),
+  SettingsSearchEntry(
+    id: 'liquidGlass',
+    title: (l) => l.liquidGlass,
+    breadcrumb: (l) => '${l.appearance} › ${l.display}',
+    open: (c) =>
+        const AppearanceSettingsRoute(highlight: 'liquidGlass').push(c),
+    visible: (_, _) => LiquidGlassTile.isIOS,
   ),
   SettingsSearchEntry(
     id: 'downloadIsland',

@@ -2,11 +2,31 @@
 
 From **Browse → Extensions**, open **Extension stores** and add the store URL. You can also import a `.kuchie-source` or `.json` package from Files. Install the extension and open it from **Browse → Sources**. Choose **Save to device** on a chapter to keep its pages locally.
 
-## Keiyoushi
+## Mihon extension stores
 
-Paste the [official Keiyoushi index URL](https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json) or the store link copied from the [Keiyoushi website](https://keiyoushi.github.io/extensions/). The store starts empty until you add a repository. Search the catalog, install a package, and choose a source and language from its details or **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses. Shinigami (Indonesia) also has a built-in adapter for existing installations.
+Kuchie reads the same extension stores as [Mihon](https://github.com/mihonapp/mihon). Paste any store link Mihon accepts:
 
-The iPhone device build uses the embedded OpenJDK Zero runtime. Run `ios/MihonRuntime/prepare.sh` before building for a device that needs Keiyoushi APK support. For simulator development, `tool/qa/extension_runtime_host.sh` runs the backend on the Mac's loopback address and the Kuchie debug build connects to it. See the [XCUITest setup](../ios/ReaderGestureTests/README.md) for launch variables.
+| Store format | Example link |
+| --- | --- |
+| v2 index (protobuf `index.pb` or JSON) | `https://github.com/keiyoushi/extensions/raw/repo/index.pb` |
+| `repo.json` that points at a v2 index | `https://raw.githubusercontent.com/yuzono/cursed-manga-repo/repo/repo.json` |
+| Legacy `index.min.json` with `repo.json` | `https://raw.githubusercontent.com/suwayomi/tachiyomi-extension/repo/index.min.json` |
+| `mihon://` or `tachiyomi://add-repo?url=…` links | opened from a store website |
+
+Gzipped indexes and stores that keep their list behind `extensionListUrl` work as well. Install a package, then choose a source and language from **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses. Shinigami (Indonesia) also has a built-in adapter for existing Keiyoushi installations.
+
+### How Kuchie decides an APK is safe
+
+Kuchie follows Mihon's trust model and checks it before any extension code runs:
+
+- Store indexes, APKs and icons load over HTTPS only. Plain HTTP is accepted for `127.0.0.1` in debug builds, for the QA fixtures.
+- Every store publishes a signing key, the SHA-256 of the certificate it signs APKs with. A store without a valid key is refused.
+- Kuchie verifies each APK's Android signature (APK Signature Scheme v2 or v3): the signature over the signed data, the certificate's key, and the digest of the whole archive. A modified APK, or one signed by anyone other than the store, is refused. APKs signed only with the legacy v1 scheme are not supported.
+- A store that starts signing with a different key is treated as a different store; refreshing it fails until you remove it and add it again.
+- An extension ID installed from one store cannot be replaced by a package from another store.
+- Downloads have size limits, redirects are HTTPS-only and limited to five, and the installed APK is re-hashed before each use.
+
+The iPhone device build uses the embedded OpenJDK Zero runtime. Run `ios/MihonRuntime/prepare.sh` before building for a device that needs APK support. For simulator development, `tool/qa/extension_runtime_host.sh` runs the backend on the Mac's loopback address and the Kuchie debug build connects to it. See the [XCUITest setup](../ios/ReaderGestureTests/README.md) for launch variables.
 
 ## Kuchie feeds
 

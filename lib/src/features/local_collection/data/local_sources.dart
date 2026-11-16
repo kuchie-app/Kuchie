@@ -8,10 +8,22 @@ import 'package:http/http.dart' as http;
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pub_semver/pub_semver.dart';
 
+import 'apk_signature.dart';
 import 'local_catalog.dart';
 import 'local_mihon_runtime.dart';
 
+part 'local_mihon_store.dart';
 part 'local_shinigami_source.dart';
+
+/// A repository, package or download that breaks a transport or integrity
+/// rule: plain HTTP, a foreign origin, a missing or wrong checksum, or a
+/// package that disagrees with its index entry.
+class LocalSourceSecurityException extends FormatException {
+  const LocalSourceSecurityException(super.message, {this.insecureUrl = false});
+
+  /// The URL itself was refused (not HTTPS, or carried credentials).
+  final bool insecureUrl;
+}
 
 class LocalSourceRepository {
   LocalSourceRepository._(
@@ -19,12 +31,16 @@ class LocalSourceRepository {
     this.name,
     List<LocalSourcePackage> packages, {
     this.hasNativeAdapters = false,
+    this.signingKey,
   }) : packages = List.unmodifiable(packages);
 
   final Uri url;
   final String name;
   final List<LocalSourcePackage> packages;
   final bool hasNativeAdapters;
+
+  /// SHA-256 of the certificate a Mihon store signs its APKs with.
+  final String? signingKey;
 }
 
 class LocalSourcePackage {
@@ -39,6 +55,7 @@ class LocalSourcePackage {
     required this.catalogOrigin,
     this.icon,
     this.isNsfw = false,
+    this.signingKey,
     bool native = false,
     bool mihon = false,
   }) : _native = native,
@@ -50,6 +67,9 @@ class LocalSourcePackage {
   final String language;
   final Uri url;
   final String? sha256;
+
+  /// The store signing key an APK must be signed with to install.
+  final String? signingKey;
   final Uri repository;
   final Uri catalogOrigin;
   final Uri? icon;
@@ -176,7 +196,6 @@ class LocalSources {
   static const _networkTimeout = Duration(seconds: 20);
   static const _maxManifestBytes = 128 * 1024;
   static const _maxFeedBytes = 2 * 1024 * 1024;
-  static const _maxKeiyoushiBytes = 4 * 1024 * 1024;
   static const _maxApkBytes = 16 * 1024 * 1024;
   static const _maxStateBytes = 12 * 1024 * 1024;
   static const _maxRepositories = 32;
@@ -258,26 +277,156 @@ class LocalSources {
     Uri index, {
     bool refresh = false,
   }) async {
-    final url = _repositoryUrl(index);
+    final (url, indexData) = await _fetchRepository(_repositoryUrl(index));
     final key = url.toString();
-    final isKeiyoushi = url == _keiyoushiIndex;
-    final bytes = await _download(
-      url,
-      isKeiyoushi ? _maxKeiyoushiBytes : _maxFeedBytes,
-    );
-    final indexData = isKeiyoushi
-        ? await _decodeKeiyoushiIndex(bytes)
-        : _decode(bytes);
     final repository = _parseRepository(url, indexData);
     return _change((state) {
-      final existing = state.repositories.containsKey(key);
+      final saved = state.repositories[key];
+      final existing = saved != null;
       if (refresh && !existing) throw StateError('Repository is not saved.');
       if (!existing && state.repositories.length >= _maxRepositories) {
         throw StateError('This device has too many local repositories.');
       }
+      // Like a pinned key: a store that starts signing with another
+      // certificate is a different store, not an update.
+      if (existing) {
+        final previous = _parseRepository(url, _object(saved)).signingKey;
+        if (previous != null && previous != repository.signingKey) {
+          throw const LocalSourceSecurityException(
+            'The extension store changed its signing key. Remove it and add '
+            'it again if you trust the new key.',
+          );
+        }
+      }
       state.repositories[key] = _repositoryJson(repository);
       return repository;
     });
+  }
+
+  /// Downloads a repository index. Kuchie repositories are JSON with the
+  /// `kuchie.repository.v1` format on a URL that answers directly; anything
+  /// else is read as a Mihon store, which may redirect and may point at
+  /// further documents, exactly as Mihon follows them.
+  Future<(Uri, Map<String, Object?>)> _fetchRepository(Uri url) async {
+    if (url == _keiyoushiIndex) return (url, await _fetchMihonStore(url));
+    final (:bytes, :redirected) = await _fetch(
+      url,
+      _maxMihonStoreBytes,
+      redirects: _Redirects.https,
+    );
+    final document = await _decodeMihonDocumentInBackground(bytes);
+    if (document is Map<String, Object?> &&
+        document['format'] == 'kuchie.repository.v1') {
+      if (redirected || bytes.length > _maxFeedBytes) {
+        throw const LocalSourceSecurityException(
+          'Use a v1 extension package on the repository origin.',
+        );
+      }
+      return (url, document);
+    }
+    return _readMihonStore(url, document);
+  }
+
+  Future<Map<String, Object?>> _fetchMihonStore(Uri url) async {
+    final (_, data) = await _readMihonStore(url, await _mihonDocument(url));
+    return data;
+  }
+
+  Future<Object?> _mihonDocument(Uri url) async {
+    final (:bytes, redirected: _) = await _fetch(
+      url,
+      _maxMihonStoreBytes,
+      redirects: _Redirects.https,
+    );
+    return _decodeMihonDocumentInBackground(bytes);
+  }
+
+  /// Mirrors Mihon's ExtensionStoreService.fetchStore.
+  Future<(Uri, Map<String, Object?>)> _readMihonStore(
+    Uri url,
+    Object? document, {
+    int depth = 0,
+  }) async {
+    if (depth > 3) {
+      throw const FormatException('The extension store redirects too often.');
+    }
+    var indexUrl = url;
+    ({String name, String signingKey, Uri? indexV2})? legacy;
+    if (document is List<Object?>) {
+      if (!url.path.endsWith('/index.min.json')) {
+        throw const FormatException('Use the store index.min.json URL.');
+      }
+      indexUrl = url.replace(
+        path: '${url.path.substring(0, url.path.length - 15)}/repo.json',
+      );
+      legacy = _mihonLegacyMeta(await _mihonDocument(indexUrl));
+      if (legacy == null) {
+        throw const FormatException('The extension store has no repo.json.');
+      }
+    } else {
+      legacy = _mihonLegacyMeta(document);
+    }
+    if (legacy != null) {
+      if (legacy.indexV2 case final v2?) {
+        final next = _repositoryUrl(v2);
+        if (next == _keiyoushiIndex && url != _keiyoushiIndex) {
+          return (next, await _fetchMihonStore(next));
+        }
+        return _readMihonStore(next, await _mihonDocument(next), depth: depth + 1);
+      }
+      final base = _mihonBase(indexUrl);
+      final list = document is List<Object?>
+          ? document
+          : await _mihonDocument(base.resolve('index.min.json'));
+      if (list is! List<Object?>) {
+        throw const FormatException('Invalid extension store index.');
+      }
+      return (
+        url,
+        {
+          'format': 'kuchie.mihon-store.v1',
+          'name': legacy.name,
+          'signingKey': legacy.signingKey,
+          'extensions': _mihonLegacyPackages(list, base),
+        },
+      );
+    }
+    if (document is! Map<String, Object?>) {
+      throw const FormatException('Invalid extension store index.');
+    }
+    var list = document['extensionList'];
+    final listUrl = document['extensionListUrl'];
+    if (list == null && listUrl is String) {
+      final target = _secureArtifactUri(listUrl);
+      if (target == null) {
+        throw const LocalSourceSecurityException(
+          'Use an HTTPS URL without credentials or fragments.',
+          insecureUrl: true,
+        );
+      }
+      final fetched = await _mihonDocument(target);
+      // A separate list is the ExtensionList message on its own.
+      list = fetched is Map<String, Object?> && fetched['extensions'] != null
+          ? fetched
+          : fetched is Map<String, Object?>
+          ? fetched['extensionList']
+          : null;
+    }
+    if (list is! Map) {
+      throw const FormatException('Invalid extension store index.');
+    }
+    return (
+      url,
+      {
+        'format': 'kuchie.mihon-store.v1',
+        'name': _string(document, 'name', max: 160),
+        'signingKey': _mihonSigningKey(document['signingKey']),
+        'extensions': _mihonV2Packages(
+          _list(_object(list), 'extensions', 20000),
+          keiyoushi: url == _keiyoushiIndex,
+        ),
+      },
+    );
   }
 
   Future<void> removeRepository(Uri index) => _change<void>((state) {
@@ -295,7 +444,9 @@ class LocalSources {
     if (package._mihon) return _installMihon(package);
     final bytes = await _download(package.url, _maxManifestBytes);
     if (_sha256(bytes) != package.sha256) {
-      throw const FormatException('Extension package checksum does not match.');
+      throw const LocalSourceSecurityException(
+        'Extension package checksum does not match.',
+      );
     }
     final manifest = _parseManifest(_decode(bytes), base: package.url);
     if (manifest.id != package.id ||
@@ -303,7 +454,7 @@ class LocalSources {
         manifest.name != package.name ||
         manifest.language != package.language ||
         manifest.catalog.origin != package.catalogOrigin.toString()) {
-      throw const FormatException(
+      throw const LocalSourceSecurityException(
         'Extension package does not match the repository.',
       );
     }
@@ -311,12 +462,27 @@ class LocalSources {
   }
 
   Future<LocalExtension> _installMihon(LocalSourcePackage package) async {
+    final signingKey = package.signingKey;
+    if (signingKey == null) {
+      throw StateError('Refresh the extension list and try again.');
+    }
     final apk = await _download(
       package.url,
       _maxApkBytes,
       accept: 'application/vnd.android.package-archive',
-      allowApkRedirects: true,
+      redirects: _Redirects.https,
     );
+    final List<String> signers;
+    try {
+      signers = await _verifyApkSignersInBackground(apk);
+    } on ApkSignatureException catch (error) {
+      throw LocalSourceSecurityException(error.message);
+    }
+    if (!signers.contains(signingKey)) {
+      throw const LocalSourceSecurityException(
+        'The extension is not signed by its store.',
+      );
+    }
     final sources = await _runtime.inspect(apk, packageName: package.id);
     if (sources.isEmpty || sources.length > 256) {
       throw const FormatException('The extension has no manga sources.');
@@ -333,7 +499,7 @@ class LocalSources {
       name: package.name,
       version: package.version,
       language: package.language,
-      catalog: _keiyoushiIndex,
+      catalog: package.repository,
       mediaOrigins: const {},
       nativeIcon: package.icon,
       isNsfw: package.isNsfw,
@@ -926,6 +1092,7 @@ class LocalSources {
           package.catalogOrigin == requested.catalogOrigin &&
           package._native == requested._native &&
           package._mihon == requested._mihon &&
+          package.signingKey == requested.signingKey &&
           package.icon == requested.icon &&
           package.isNsfw == requested.isNsfw,
     );
@@ -934,10 +1101,25 @@ class LocalSources {
 
   LocalSourceRepository _parseRepository(Uri url, Map<String, Object?> data) {
     if (url == _keiyoushiIndex && data['format'] == 'kuchie.keiyoushi.v2') {
+      // Saved before stores carried their key; Keiyoushi publishes this one.
+      const key = _keiyoushiSigningKey;
       return LocalSourceRepository._(url, 'Keiyoushi', [
-        for (final entry in _list(data, 'extensions', 10000))
-          _parseKeiyoushiPackage(url, _object(entry)),
-      ], hasNativeAdapters: true);
+        for (final entry in _list(data, 'extensions', 20000))
+          _parseMihonPackage(url, _object(entry), signingKey: key),
+      ], hasNativeAdapters: true, signingKey: key);
+    }
+    if (data['format'] == 'kuchie.mihon-store.v1') {
+      final key = _mihonSigningKey(data['signingKey']);
+      return LocalSourceRepository._(
+        url,
+        _string(data, 'name', max: 160),
+        [
+          for (final entry in _list(data, 'extensions', 20000))
+            _parseMihonPackage(url, _object(entry), signingKey: key),
+        ],
+        hasNativeAdapters: url == _keiyoushiIndex,
+        signingKey: key,
+      );
     }
     if (url == _keiyoushiIndex && data['format'] == 'kuchie.keiyoushi.v1') {
       final entry = data['shinigami'];
@@ -959,7 +1141,7 @@ class LocalSources {
     }
     if (data['format'] != 'kuchie.repository.v1') {
       throw const FormatException(
-        'Use a Kuchie repository or the official Keiyoushi store URL.',
+        'Use a Kuchie repository or a Mihon extension store URL.',
       );
     }
     final packages = <LocalSourcePackage>[];
@@ -970,13 +1152,13 @@ class LocalSources {
       if (!seen.add(id)) throw const FormatException('Duplicate extension ID.');
       final packageUrl = _url(_string(details, 'url'), base: url);
       if (packageUrl.origin != url.origin || !_isPackagePath(packageUrl.path)) {
-        throw const FormatException(
+        throw const LocalSourceSecurityException(
           'Use a v1 extension package on the repository origin.',
         );
       }
-      final digest = _string(details, 'sha256');
-      if (!_digestPattern.hasMatch(digest)) {
-        throw const FormatException(
+      final digest = details['sha256'];
+      if (digest is! String || !_digestPattern.hasMatch(digest)) {
+        throw const LocalSourceSecurityException(
           'A package is missing its SHA-256 checksum.',
         );
       }
@@ -1002,16 +1184,18 @@ class LocalSources {
     );
   }
 
-  LocalSourcePackage _parseKeiyoushiPackage(
+  LocalSourcePackage _parseMihonPackage(
     Uri index,
-    Map<String, Object?> data,
-  ) {
+    Map<String, Object?> data, {
+    required String signingKey,
+  }) {
     final id = _id(data, 'id');
     final rawApk = data['apk'];
-    final builtIn = rawApk == null && id == _ShinigamiSource.id;
-    final uri = rawApk is String ? _keiyoushiApkUri(rawApk) : null;
-    if (!builtIn && (uri == null || !_keiyoushiPackagePattern.hasMatch(id))) {
-      throw const FormatException('Invalid Keiyoushi package.');
+    final builtIn =
+        rawApk == null && index == _keiyoushiIndex && id == _ShinigamiSource.id;
+    final uri = rawApk is String ? _artifactUri(rawApk) : null;
+    if (!builtIn && (uri == null || !_mihonPackagePattern.hasMatch(id))) {
+      throw const FormatException('Invalid extension store package.');
     }
     final rawIcon = data['icon'];
     return LocalSourcePackage._(
@@ -1026,13 +1210,14 @@ class LocalSources {
           ? _ShinigamiSource.origin
           : Uri.parse(index.origin),
       icon: rawIcon is String
-          ? _keiyoushiIconUri(rawIcon)
+          ? _secureArtifactUri(rawIcon)
           : builtIn
           ? _ShinigamiSource.icon
           : null,
       native: builtIn,
       mihon: !builtIn,
       isNsfw: data['nsfw'] == true,
+      signingKey: builtIn ? null : signingKey,
     );
   }
 
@@ -1069,18 +1254,17 @@ class LocalSources {
         : _url(_string(data, 'repository'));
     final manifest = _object(data['manifest']);
     final _Manifest parsed;
-    if (repository == _keiyoushiIndex) {
-      parsed = switch (manifest['format']) {
-        'kuchie.native-shinigami.v1' => _ShinigamiSource.manifest(
+    parsed = switch (manifest['format']) {
+      'kuchie.native-shinigami.v1' when repository == _keiyoushiIndex =>
+        _ShinigamiSource.manifest(
           _version(manifest),
           icon: _ShinigamiSource.icon,
         ),
-        'kuchie.mihon.v1' => _parseRuntimeManifest(manifest),
-        _ => _parseManifest(manifest),
-      };
-    } else {
-      parsed = _parseManifest(manifest);
-    }
+      'kuchie.mihon.v1' when repository != null => _parseRuntimeManifest(
+        manifest,
+      ),
+      _ => _parseManifest(manifest),
+    };
     return LocalExtension._(
       parsed,
       data['enabled'] == true,
@@ -1092,7 +1276,7 @@ class LocalSources {
   _Manifest _parseRuntimeManifest(Map<String, Object?> manifest) {
     final id = _id(manifest, 'id');
     final fingerprint = _string(manifest, 'apkFingerprint', max: 64);
-    if (!_keiyoushiPackagePattern.hasMatch(id) ||
+    if (!_mihonPackagePattern.hasMatch(id) ||
         !_digestPattern.hasMatch(fingerprint)) {
       throw const FormatException('Invalid installed extension APK.');
     }
@@ -1109,9 +1293,11 @@ class LocalSources {
       name: _string(manifest, 'name', max: 160),
       version: _version(manifest),
       language: _string(manifest, 'language', max: 32),
-      catalog: _keiyoushiIndex,
+      catalog: manifest['catalog'] is String
+          ? _url(_string(manifest, 'catalog'))
+          : _keiyoushiIndex,
       mediaOrigins: const {},
-      nativeIcon: rawIcon is String ? _keiyoushiIconUri(rawIcon) : null,
+      nativeIcon: rawIcon is String ? _secureArtifactUri(rawIcon) : null,
       isNsfw: manifest['nsfw'] == true,
       apkFingerprint: fingerprint,
       runtimeSources: sources,
@@ -1164,8 +1350,9 @@ class LocalSources {
         url.host.isEmpty ||
         url.userInfo.isNotEmpty ||
         url.hasFragment) {
-      throw const FormatException(
+      throw const LocalSourceSecurityException(
         'Use an HTTPS URL without credentials or fragments.',
+        insecureUrl: true,
       );
     }
     return url;
@@ -1175,12 +1362,21 @@ class LocalSources {
     if ((index.scheme == 'mihon' && index.host == 'extension-store') ||
         (index.scheme == 'tachiyomi' && index.host == 'add-repo')) {
       final candidate = Uri.tryParse(index.queryParameters['url'] ?? '');
-      if (candidate != null && _isKeiyoushiUrl(candidate)) {
-        return _keiyoushiIndex;
+      if (candidate != null && candidate.scheme == 'https') {
+        return _repositoryUrl(candidate);
       }
     }
     final url = _url(index.toString());
     return _isKeiyoushiUrl(url) ? _keiyoushiIndex : url;
+  }
+
+  /// An APK or icon link: HTTPS, or loopback HTTP in debug builds.
+  Uri? _artifactUri(String raw) {
+    try {
+      return _url(raw);
+    } on FormatException {
+      return null;
+    }
   }
 
   Uri _parseOrigin(String input) {
@@ -1197,30 +1393,43 @@ class LocalSources {
     Uri url,
     int maxBytes, {
     String accept = 'application/json',
-    bool allowApkRedirects = false,
+    _Redirects redirects = _Redirects.none,
+  }) async => (await _fetch(
+    url,
+    maxBytes,
+    accept: accept,
+    redirects: redirects,
+  )).bytes;
+
+  Future<({Uint8List bytes, bool redirected})> _fetch(
+    Uri url,
+    int maxBytes, {
+    String accept = 'application/json',
+    _Redirects redirects = _Redirects.none,
   }) async {
     final abort = Completer<void>();
     final elapsed = Stopwatch()..start();
     try {
       var current = url;
       http.StreamedResponse response;
-      for (var redirects = 0; ; redirects++) {
+      for (var hops = 0; ; hops++) {
         final request =
             http.AbortableRequest('GET', current, abortTrigger: abort.future)
               ..followRedirects = false
               ..headers['Accept'] = accept;
         response = await _client.send(request).timeout(_networkTimeout);
-        if (!allowApkRedirects ||
+        if (redirects == _Redirects.none ||
             !const {301, 302, 303, 307, 308}.contains(response.statusCode)) {
           break;
         }
         final location = response.headers['location'];
-        final next = location == null ? null : current.resolve(location);
-        if (redirects >= 3 ||
-            elapsed.elapsed > _networkTimeout ||
-            next == null ||
-            !_isGitHubReleaseAsset(next)) {
-          throw const FormatException('Untrusted extension download redirect.');
+        final next = location == null
+            ? null
+            : _secureArtifactUri(current.resolve(location).toString());
+        if (hops >= 5 || elapsed.elapsed > _networkTimeout || next == null) {
+          throw const LocalSourceSecurityException(
+            'Untrusted extension download redirect.',
+          );
         }
         // Release redirects have no installer payload. Cancel their stream.
         await response.stream.listen(null).cancel();
@@ -1243,21 +1452,11 @@ class LocalSources {
         }
         bytes.add(chunk);
       }
-      return bytes.takeBytes();
+      return (bytes: bytes.takeBytes(), redirected: current != url);
     } finally {
       abort.complete();
     }
   }
-
-  bool _isGitHubReleaseAsset(Uri url) =>
-      url.scheme == 'https' &&
-      !url.hasPort &&
-      url.userInfo.isEmpty &&
-      !url.hasFragment &&
-      const {
-        'release-assets.githubusercontent.com',
-        'objects.githubusercontent.com',
-      }.contains(url.host);
 
   Future<T> _feed<T>(
     LocalExtension source,
@@ -1449,6 +1648,15 @@ class _SourceHttpException extends HttpException {
       statusCode >= HttpStatus.internalServerError;
 }
 
+/// Which redirects a download may follow.
+enum _Redirects {
+  /// Kuchie repositories and packages must answer directly.
+  none,
+
+  /// Mihon stores and APKs, which the store signing key vouches for.
+  https,
+}
+
 class _SourceState {
   const _SourceState(this.repositories, this.extensions);
 
@@ -1457,9 +1665,11 @@ class _SourceState {
 }
 
 Map<String, Object?> _repositoryJson(LocalSourceRepository repo) =>
-    repo.hasNativeAdapters
+    repo.signingKey != null
     ? {
-        'format': 'kuchie.keiyoushi.v2',
+        'format': 'kuchie.mihon-store.v1',
+        'name': repo.name,
+        'signingKey': repo.signingKey,
         'extensions': [
           for (final package in repo.packages)
             {

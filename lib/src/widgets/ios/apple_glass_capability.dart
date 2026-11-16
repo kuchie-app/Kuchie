@@ -17,6 +17,48 @@ Future<bool> appleGlassAvailable() async {
   }
 }
 
+/// Whether this device can show Liquid Glass, and whether it should.
+enum AppleGlassCapability {
+  /// Before iOS 26, or not an iPhone/iPad.
+  unsupported,
+
+  /// iOS 26 on a device with too little memory to keep the effects smooth.
+  limited,
+
+  /// iOS 26 on a device that renders the effects smoothly.
+  capable,
+}
+
+/// 6 GB devices report about 5.6 GiB and 4 GB devices under 4 GiB, so this
+/// separates iPhone 11–13 from iPhone 13 Pro, 14 and newer.
+const kAppleGlassMinMemoryBytes = 5 * 1000 * 1000 * 1000;
+
+AppleGlassCapability classifyAppleGlass({
+  required bool osSupported,
+  required int? memoryBytes,
+}) {
+  if (!osSupported) return AppleGlassCapability.unsupported;
+  // An unknown size keeps the glass the app has always shown on iOS 26.
+  if (memoryBytes != null && memoryBytes < kAppleGlassMinMemoryBytes) {
+    return AppleGlassCapability.limited;
+  }
+  return AppleGlassCapability.capable;
+}
+
+Future<AppleGlassCapability> appleGlassCapability() async {
+  final supported = await appleGlassAvailable();
+  if (!supported) return AppleGlassCapability.unsupported;
+  int? memory;
+  try {
+    memory = await _channel.invokeMethod<int>('physicalMemory');
+  } on MissingPluginException {
+    memory = null;
+  } on PlatformException {
+    memory = null;
+  }
+  return classifyAppleGlass(osSupported: true, memoryBytes: memory);
+}
+
 bool supportsAppleGlass(BuildContext context) =>
     context.windowSizeClass == WindowSizeClass.compact &&
     appleGlassEnabled(context);
@@ -25,18 +67,30 @@ bool appleGlassEnabled(BuildContext context) =>
     context.dependOnInheritedWidgetOfExactType<AppleGlassScope>()?.available ??
     false;
 
+/// What the device can do and whether glass is on for it.
+AppleGlassCapability appleGlassCapabilityOf(BuildContext context) =>
+    context.dependOnInheritedWidgetOfExactType<AppleGlassScope>()?.capability ??
+    AppleGlassCapability.unsupported;
+
 class AppleGlassScope extends InheritedWidget {
   const AppleGlassScope({
     super.key,
     required this.available,
+    AppleGlassCapability? capability,
     required super.child,
-  });
+  }) : capability =
+           capability ??
+           (available
+               ? AppleGlassCapability.capable
+               : AppleGlassCapability.unsupported);
 
+  /// Glass is on: the device is capable and the user has not turned it off.
   final bool available;
+  final AppleGlassCapability capability;
 
   @override
   bool updateShouldNotify(AppleGlassScope oldWidget) =>
-      available != oldWidget.available;
+      available != oldWidget.available || capability != oldWidget.capability;
 }
 
 /// Positions a nested page action above the floating shell tab bar.

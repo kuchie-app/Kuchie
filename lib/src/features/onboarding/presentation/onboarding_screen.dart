@@ -48,6 +48,7 @@ import '../data/onboarding_complete.dart';
 import '../data/server_discovery.dart';
 import '../data/server_resolver.dart';
 import 'collection_choice_step.dart';
+import 'onboarding_motion.dart';
 import 'onboarding_sign_in.dart';
 
 class OnboardingScreen extends HookConsumerWidget {
@@ -76,6 +77,8 @@ class OnboardingScreen extends HookConsumerWidget {
     );
     final nextRequest = useState(0);
     final activity = useState<String?>(null);
+    // Local skips the server step but still lands on the All set screen.
+    final localFinish = useState(false);
     final changingMode = useRef(false);
     useEffect(() {
       if (resume) {
@@ -116,7 +119,8 @@ class OnboardingScreen extends HookConsumerWidget {
 
     Future<void> confirmChoice() async {
       if (choice.value == CollectionMode.local) {
-        await openLocal();
+        localFinish.value = true;
+        step.value = 2;
         return;
       }
       if (choice.value != CollectionMode.server || changingMode.value) return;
@@ -133,43 +137,33 @@ class OnboardingScreen extends HookConsumerWidget {
       }
     }
 
-    final cs = context.theme.colorScheme;
-
     return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.center,
-                  colors: [
-                    cs.primary.withValues(alpha: 0.20),
-                    context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
-                  ],
-                ),
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: _OnboardingBody(
+                stepState: step,
+                activityState: activity,
+                requestState: nextRequest,
+                move: (next) async {
+                  if (localFinish.value) {
+                    localFinish.value = false;
+                    step.value = 0;
+                    return;
+                  }
+                  await moveTo(next);
+                },
+                finish: localFinish.value ? openLocal : finish,
+                localFinish: localFinish.value,
+                skip: isDualMode ? openLocal : finish,
+                choice: isDualMode ? choice : null,
+                confirmChoice: confirmChoice,
               ),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 620),
-                child: _OnboardingBody(
-                  stepState: step,
-                  activityState: activity,
-                  requestState: nextRequest,
-                  move: moveTo,
-                  finish: finish,
-                  skip: isDualMode ? openLocal : finish,
-                  choice: isDualMode ? choice : null,
-                  confirmChoice: confirmChoice,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -179,11 +173,26 @@ class _StepSwitcher extends StatelessWidget {
   const _StepSwitcher({required this.child});
   final Widget child;
 
+  // Each step slides in from the side and settles while the last one fades.
   @override
   Widget build(BuildContext context) => context.reduceMotion
       ? child
       : AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 420),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: animation.drive(
+                Tween(begin: const Offset(0.08, 0), end: Offset.zero),
+              ),
+              child: ScaleTransition(
+                scale: animation.drive(Tween(begin: 0.97, end: 1)),
+                child: child,
+              ),
+            ),
+          ),
           child: child,
         );
 }
@@ -314,6 +323,7 @@ class _OnboardingBody extends StatelessWidget {
     required this.requestState,
     required this.move,
     required this.finish,
+    required this.localFinish,
     required this.skip,
     required this.choice,
     required this.confirmChoice,
@@ -324,6 +334,7 @@ class _OnboardingBody extends StatelessWidget {
   final ValueNotifier<int> requestState;
   final Future<void> Function(int next) move;
   final VoidCallback finish;
+  final bool localFinish;
   final VoidCallback skip;
   final ValueNotifier<CollectionMode?>? choice;
   final VoidCallback confirmChoice;
@@ -391,7 +402,9 @@ class _OnboardingBody extends StatelessWidget {
       showBack: step > 0,
       isLast: isLast,
       onBack: () => move(stepState.value - 1),
-      nextLabel: choosingMode && choice?.value == CollectionMode.local
+      nextLabel:
+          (choosingMode && choice?.value == CollectionMode.local) ||
+              (isLast && localFinish)
           ? collectionText(context, 'Start reading', 'Mulai membaca')
           : null,
       onNext: choosingMode && choice?.value == null
@@ -1274,7 +1287,8 @@ class _ServerStep extends HookConsumerWidget {
         // Proxy access headers must be set before probing.
         const CustomHeadersSection(compact: true),
         const SizedBox(height: 12),
-        FilledButton.tonalIcon(
+        // Secondary like Back, so the gradient Next stays the one main action.
+        BrandGlassButton(
           onPressed: busy ? null : testConnection,
           icon: state.value == _TestState.testing
               ? SizedBox(
@@ -1282,7 +1296,7 @@ class _ServerStep extends HookConsumerWidget {
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: cs.onPrimary,
+                    color: cs.primary,
                   ),
                 )
               : const Icon(FluentIcons.wifi_1_24_regular),
@@ -1291,7 +1305,6 @@ class _ServerStep extends HookConsumerWidget {
                 ? context.l10n.onboardingCheckingConnection
                 : context.l10n.onboardingTestConnection,
           ),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
         ),
         const SizedBox(height: 12),
         if (testStatus.isNotEmpty)
@@ -1396,7 +1409,7 @@ class _ServerStep extends HookConsumerWidget {
             ),
           ],
           const SizedBox(height: 12),
-          FilledButton.icon(
+          BrandGlassButton(
             onPressed: busy ? null : signIn,
             icon: busy
                 ? SizedBox(
@@ -1404,7 +1417,7 @@ class _ServerStep extends HookConsumerWidget {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: cs.onPrimary,
+                      color: cs.primary,
                     ),
                   )
                 : const Icon(FluentIcons.arrow_enter_20_regular),
@@ -1412,9 +1425,6 @@ class _ServerStep extends HookConsumerWidget {
               state.value == _TestState.signingIn
                   ? context.l10n.onboardingSigningIn
                   : context.l10n.onboardingSignIn,
-            ),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(46),
             ),
           ),
         ],
@@ -1567,26 +1577,25 @@ class _FinishStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 48),
-        Icon(FluentIcons.rocket_24_regular, size: 64, color: cs.primary),
-        const SizedBox(height: 24),
-        Text(
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: FlyingKuchie(
+        title: Text(
           context.l10n.onboardingDoneTitle,
           textAlign: TextAlign.center,
-          style: context.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w600,
+          style: context.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.6,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
+        subtitle: Text(
           context.l10n.onboardingDoneSubtitle,
           textAlign: TextAlign.center,
-          style: TextStyle(color: cs.onSurfaceVariant),
+          style: context.textTheme.bodyLarge?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -30,6 +30,8 @@ enum DBKeys<T> {
   // Fresh installs are seeded dark by seedFirstRunPreferences.
   themeMode(ThemeMode.system),
   isTrueBlack(null),
+  // Null follows the device: on when it renders glass smoothly.
+  liquidGlass(null),
   authType(AuthType.none),
   basicCredentials(null),
   authUsername(null),

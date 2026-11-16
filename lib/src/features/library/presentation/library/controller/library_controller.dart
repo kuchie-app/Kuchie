@@ -502,17 +502,41 @@ List<String>? _validCategoryFilter(
   return valid;
 }
 
+/// Drops deleted categories from a saved filter once the category list changes.
+///
+/// The list can change while a widget is building (it is read lazily from a
+/// build), and Riverpod forbids notifying listeners then, so the pruned value
+/// is applied after the frame's synchronous work.
+void _pruneCategoryFilter(
+  Ref ref,
+  AsyncValue<List<CategoryDto>?> categories,
+  List<String>? current,
+  DBKeys key,
+  void Function(List<String>?) update,
+) {
+  final valid = _validCategoryFilter(ref, categories, current, key);
+  if (identical(valid, current)) return;
+  Future.microtask(() {
+    if (ref.mounted) update(valid);
+  });
+}
+
 @riverpod
 class LibraryFilterCategoriesInclude extends _$LibraryFilterCategoriesInclude
     with SharedPreferenceClientMixin<List<String>> {
   @override
   List<String>? build() {
     final saved = initialize(DBKeys.filterCategoriesInclude);
-    ref.listen(categoryControllerProvider, (_, next) {
-      update(_validCategoryFilter(
-        ref, next, state, DBKeys.filterCategoriesInclude,
-      ));
-    });
+    ref.listen(
+      categoryControllerProvider,
+      (_, next) => _pruneCategoryFilter(
+        ref,
+        next,
+        state,
+        DBKeys.filterCategoriesInclude,
+        update,
+      ),
+    );
     return _validCategoryFilter(
       ref,
       ref.read(categoryControllerProvider),
@@ -528,11 +552,16 @@ class LibraryFilterCategoriesExclude extends _$LibraryFilterCategoriesExclude
   @override
   List<String>? build() {
     final saved = initialize(DBKeys.filterCategoriesExclude);
-    ref.listen(categoryControllerProvider, (_, next) {
-      update(_validCategoryFilter(
-        ref, next, state, DBKeys.filterCategoriesExclude,
-      ));
-    });
+    ref.listen(
+      categoryControllerProvider,
+      (_, next) => _pruneCategoryFilter(
+        ref,
+        next,
+        state,
+        DBKeys.filterCategoriesExclude,
+        update,
+      ),
+    );
     return _validCategoryFilter(
       ref,
       ref.read(categoryControllerProvider),

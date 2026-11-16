@@ -16,7 +16,7 @@ import '../../../graphql/__generated__/schema.graphql.dart';
 import '../../account/data/account_providers.dart';
 import '../../account/domain/account_access.dart';
 import '../../auth/data/auth_state.dart';
-import '../../local_collection/data/local_collection_services.dart';
+import '../../local_collection/data/local_collection_providers.dart';
 import '../../local_collection/data/local_download_queue.dart';
 import '../../manga_book/domain/downloads/downloads_model.dart';
 import '../../manga_book/presentation/downloads/controller/downloads_controller.dart';
@@ -163,9 +163,7 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
         if (job == null) return serverSnapshot;
         return (
           source: _DownloadSource.local,
-          progress: job.pageCount == 0
-              ? null
-              : job.done / job.pageCount,
+          progress: job.pageCount == 0 ? null : job.done / job.pageCount,
           remaining: jobs
               .where(
                 (item) =>
@@ -179,7 +177,7 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
       void updateSnapshot() => updates.setSnapshot(currentSnapshot());
       void attachQueue() {
         queue?.removeListener(updateSnapshot);
-        queue = LocalCollectionServices.activeQueue.value;
+        queue = ref.read(activeLocalDownloadQueueProvider);
         queue?.addListener(updateSnapshot);
         updateSnapshot();
       }
@@ -190,7 +188,10 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
               updateSnapshot();
             }, fireImmediately: true)
           : null;
-      LocalCollectionServices.activeQueue.addListener(attachQueue);
+      final localQueueSubscription = ref.listenManual(
+        activeLocalDownloadQueueProvider,
+        (_, _) => attachQueue(),
+      );
       attachQueue();
       var resumeGeneration = 0;
       var wasPaused =
@@ -240,7 +241,7 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
         resumeGeneration++;
         lifecycle.dispose();
         subscription?.close();
-        LocalCollectionServices.activeQueue.removeListener(attachQueue);
+        localQueueSubscription.close();
         queue?.removeListener(updateSnapshot);
         updates.dispose();
       };

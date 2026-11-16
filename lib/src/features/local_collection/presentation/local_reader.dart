@@ -301,14 +301,39 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   }
 
   void _save() {
-    if (!_pending || _incognito || _ephemeral) return;
+    if (!_pending || _incognito) return;
     _pending = false;
-    unawaited(_writeProgress(_chapter.id, _index));
+    unawaited(_writeProgress(_chapter, _index, ephemeral: _ephemeral));
   }
 
-  Future<void> _writeProgress(String chapterId, int index) async {
+  // Chapters read online have no saved pages, so they go to History only.
+  Future<void> _writeProgress(
+    LocalChapter chapter,
+    int index, {
+    required bool ephemeral,
+  }) async {
     try {
-      await widget.catalog.setProgress(widget.series.id, chapterId, index);
+      if (ephemeral) {
+        await widget.catalog.recordRemoteRead(
+          series: widget.series,
+          chapterId: chapter.id,
+          chapterTitle: chapter.title,
+          progress: index,
+        );
+      } else {
+        await widget.catalog.setProgress(widget.series.id, chapter.id, index);
+      }
+    } catch (_) {
+      if (mounted) _showStorageError();
+    }
+  }
+
+  // Reaching the end marker completes the chapter, saved or read online.
+  Future<void> _markRead(String chapterId) async {
+    try {
+      await widget.catalog.setChapterMarks(widget.series.id, [
+        chapterId,
+      ], read: true);
     } catch (_) {
       if (mounted) _showStorageError();
     }
@@ -321,7 +346,10 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   void _onPage(int raw) {
     if (!mounted || raw < 0 || raw > _pages.length) return;
     if (raw == _pages.length) {
-      if (!_finished) setState(() => _finished = true);
+      if (!_finished) {
+        setState(() => _finished = true);
+        if (!_incognito) unawaited(_markRead(_chapter.id));
+      }
       return;
     }
     if (_restore) {
@@ -332,7 +360,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     _index = raw;
     _finished = false;
     _pageIndex.value = raw;
-    if (_incognito || _ephemeral) return;
+    if (_incognito) return;
     _pending = true;
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 550), _save);
@@ -634,12 +662,15 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   @override
   Widget build(BuildContext context) {
     _incognito = ref.watch(incognitoModeProvider);
-    if (!_incognito && !_ephemeral && !_opened) {
+    if (!_incognito && !_opened) {
       _opened = true;
-      final id = _chapter.id;
+      final chapter = _chapter;
       final page = _index;
+      final ephemeral = _ephemeral;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_incognito) unawaited(_writeProgress(id, page));
+        if (mounted && !_incognito) {
+          unawaited(_writeProgress(chapter, page, ephemeral: ephemeral));
+        }
       });
     }
     final settings = ref.watch(_settingsProvider);

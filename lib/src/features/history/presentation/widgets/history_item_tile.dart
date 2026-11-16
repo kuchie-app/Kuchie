@@ -33,6 +33,9 @@ bool isHistoryChapterCompleted(HistoryItemDto item) {
   return isFullyRead || hasFinishedChapter;
 }
 
+/// The page a reader resumes on, counted from 1; the server stores it from 0.
+int historyResumePage(HistoryItemDto item) => item.user.lastPageRead + 1;
+
 void ensureHistoryPreferenceProvidersInitialized(WidgetRef ref, int mangaId) {
   ref.read(mangaChapterSortProvider);
   ref.read(mangaChapterSortDirectionProvider);
@@ -358,7 +361,7 @@ class _ProgressLine extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              value: item.user.lastPageRead / item.pageCount,
+              value: historyResumePage(item) / item.pageCount,
               minHeight: 3,
               backgroundColor: scheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
@@ -368,7 +371,7 @@ class _ProgressLine extends StatelessWidget {
         const SizedBox(width: 8),
         Flexible(
           child: Text(
-            context.l10n.pageOfTotal(item.user.lastPageRead, item.pageCount),
+            context.l10n.pageOfTotal(historyResumePage(item), item.pageCount),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: context.theme.textTheme.labelSmall?.copyWith(
@@ -424,7 +427,7 @@ class _PhoneMetaLine extends StatelessWidget {
           Text(
             completed
                 ? context.l10n.historyChapterCompleted
-                : '${item.user.lastPageRead}/${item.pageCount}',
+                : '${historyResumePage(item)}/${item.pageCount}',
             style: context.theme.textTheme.labelSmall?.copyWith(
               color: completed
                   ? context.theme.colorScheme.secondary

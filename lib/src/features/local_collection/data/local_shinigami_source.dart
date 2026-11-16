@@ -40,86 +40,10 @@ bool _isKeiyoushiUrl(Uri url) {
       );
 }
 
-Map<String, Object?> _keiyoushiCatalog(Map<String, Object?> data) {
-  if (data['name'] != 'Keiyoushi') {
-    throw const FormatException('Invalid Keiyoushi store index.');
-  }
-  final entries = _list(_object(data['extensionList']), 'extensions', 10000);
-  final packages = <Map<String, Object?>>[];
-  final seen = <String>{};
-  for (final value in entries) {
-    if (value is! Map<String, Object?>) continue;
-    final id = value['packageName'];
-    if (id is! String || !_keiyoushiPackagePattern.hasMatch(id)) continue;
-    final version = value['versionName'];
-    if (version is! String || version.length > 64) continue;
-    try {
-      Version.parse(version);
-    } on FormatException {
-      continue;
-    }
-    final sources = value['sources'];
-    if (sources is! List<Object?> || sources.isEmpty) continue;
-    final isShinigami =
-        id == _ShinigamiSource.id &&
-        sources.any(
-          (source) =>
-              source is Map && source['id'] == _ShinigamiSource.sourceId,
-        );
-    final resources = value['resources'];
-    final apk = resources is Map ? resources['apkUrl'] : null;
-    final rawIcon = resources is Map ? resources['iconUrl'] : null;
-    final name = value['name'];
-    if (!isShinigami &&
-        (apk is! String ||
-            _keiyoushiApkUri(apk) == null ||
-            name is! String ||
-            name.trim().isEmpty ||
-            name.length > 160)) {
-      continue;
-    }
-    if (!seen.add(id)) continue;
-    packages.add({
-      'id': id,
-      'name': isShinigami ? 'Shinigami' : name,
-      'version': version,
-      'language': id.split('.')[4],
-      'apk': isShinigami ? null : apk,
-      'icon': rawIcon is String ? _keiyoushiIconUri(rawIcon)?.toString() : null,
-      'nsfw': value['contentWarning'] == 'CONTENT_WARNING_NSFW',
-    });
-  }
-  return {'format': 'kuchie.keiyoushi.v2', 'extensions': packages};
-}
-
-Future<Map<String, Object?>> _decodeKeiyoushiIndex(Uint8List bytes) =>
-    Isolate.run(() => _keiyoushiCatalog(_decode(bytes)));
-
-final _keiyoushiPackagePattern = RegExp(
-  r'^eu\.kanade\.tachiyomi\.extension\.[a-zA-Z0-9-]+\.[a-zA-Z0-9_.-]+$',
-);
-
-Uri? _keiyoushiApkUri(String raw) {
-  final uri = _secureArtifactUri(raw);
-  if (uri?.host == 'github.com' &&
-      uri!.path.startsWith('/keiyoushi/extensions/releases/download/') &&
-      uri.path.endsWith('.apk') &&
-      !uri.hasQuery) {
-    return uri;
-  }
-  return null;
-}
-
-Uri? _keiyoushiIconUri(String raw) {
-  final uri = _secureArtifactUri(raw);
-  if (uri?.host == 'cdn.jsdelivr.net' &&
-      uri!.path.startsWith('/gh/keiyoushi/extensions-source@') &&
-      uri.path.endsWith('.png') &&
-      !uri.hasQuery) {
-    return uri;
-  }
-  return null;
-}
+/// The certificate Keiyoushi signs its APKs with, for stores saved before
+/// Kuchie recorded each store's key.
+const _keiyoushiSigningKey =
+    '9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2';
 
 Uri? _secureArtifactUri(String raw) {
   final uri = raw.length <= 2048 ? Uri.tryParse(raw) : null;

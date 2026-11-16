@@ -90,7 +90,10 @@ void main() {
           (_) async => http.Response('{"tag_name":"v9.0.0"}', 200),
         ),
       );
-      expect(result.value, isNull);
+      // Release links default to the official repository, so the check runs
+      // outside Play and completes even though its provider was disposed.
+      expect(result.hasError, isFalse);
+      expect(result.value?.toString(), play ? isNull : '9.0.0');
     },
   );
 

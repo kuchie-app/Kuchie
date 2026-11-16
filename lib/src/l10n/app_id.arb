@@ -826,5 +826,9 @@
     "serverInstalledNewWebUI": "Server Anda telah memperbarui antarmuka web",
     "couldNotUpdateServerWebUI": "Antarmuka web server gagal diperbarui",
     "serverWebUIVersionAvailable": "Versi antarmuka web {version} ({channel}) tersedia",
-    "serverWebUIVersionUpdated": "Antarmuka web diperbarui ke versi {version} ({channel})"
+    "serverWebUIVersionUpdated": "Antarmuka web diperbarui ke versi {version} ({channel})",
+  "liquidGlass": "Liquid Glass",
+  "liquidGlassSubtitle": "Tab bar, toolbar, dan kontrol berefek kaca",
+  "liquidGlassLimited": "Dimatikan agar perangkat ini tetap lancar",
+  "liquidGlassUnsupported": "Butuh iOS 26 atau lebih baru"
 }

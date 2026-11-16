@@ -13,8 +13,6 @@ import '../../../constants/enum.dart';
 import '../../../utils/network/graphql_errors.dart';
 import '../../../utils/platform/web_auth_mode.dart';
 
-
-
 enum ProbeAuthMode {
   /// Both aboutServer and the protected probe returned data.
   open,
@@ -118,7 +116,6 @@ enum ResolveOutcome {
 
   notReached,
 }
-
 
 const int kDefaultSuwayomiPort = 4567;
 
@@ -236,13 +233,11 @@ List<String> _dedup(List<String?> urls) {
   return out;
 }
 
-
 // aboutServer is auth-exempt and confirms Suwayomi even when auth is configured.
 const String kAboutProbeQuery = 'query { aboutServer { name version } }';
 
 // downloadStatus requires auth and reports Unauthorized in GraphQL errors when denied.
 const String kAuthProbeQuery = 'query { downloadStatus { __typename } }';
-
 
 /// Confirms aboutServer even with partial-data errors; auth errors match "unauthor" case-insensitively.
 ProbeResult? classifyProbeBody({
@@ -306,7 +301,6 @@ bool _bodyIndicatesUnauthorised(String authBody) {
   return false;
 }
 
-
 /// Detects auth from a redirect-OFF root response; null means the responses cannot identify a mode.
 AuthType? detectAuthType({
   required int probeStatus,
@@ -337,7 +331,6 @@ AuthType? detectAuthType({
 
   return null;
 }
-
 
 /// Appends /api/graphql structurally, preserving the server base path.
 Uri graphqlUriFor(String baseUrl) {
@@ -560,7 +553,6 @@ Future<(int, String?)?> readRootStatus(
   }
 }
 
-
 /// First confirmed candidate wins; otherwise returns Basic-gated, unconfirmed, then unreachable.
 Future<ResolvedServer> resolveServer(
   String rawInput, {
@@ -743,7 +735,6 @@ bool webServerAuthUnsupported({
   }
   return isWebUnsupportedAuthMode(detectedAuthType);
 }
-
 
 /// Auth mode whose credential authorized a protected API call.
 enum VerifiedAuthMode { simpleLogin, uiLogin }

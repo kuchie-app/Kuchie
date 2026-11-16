@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:pub_semver/pub_semver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../constants/app_sizes.dart';
@@ -32,6 +31,7 @@ import '../../../widgets/kuchie_character_motion.dart';
 import '../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../widgets/search_field.dart';
+import '../../../widgets/selection_action_bar.dart';
 import '../../../widgets/server_image.dart';
 import '../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../../widgets/touch_tab_pager.dart';
@@ -52,7 +52,9 @@ import '../data/local_collection_services.dart';
 import '../data/local_download_queue.dart';
 import '../data/local_mihon_runtime.dart';
 import '../data/local_sources.dart';
+import '../data/package_catalog_index.dart';
 import 'local_reader.dart';
+import 'local_series_personal.dart';
 import 'local_ui.dart';
 
 typedef _SourceLists = ({
@@ -546,8 +548,8 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
         for (final MapEntry(key: language, value: entries) in remaining.entries)
           ..._section(_languageName(language), entries, tile),
         if (visible.isEmpty)
+          // Emoticons sizes with a LayoutBuilder, which cannot report intrinsics.
           SliverFillRemaining(
-            hasScrollBody: false,
             child: _sourceQuery.isNotEmpty
                 ? const BrowseNoSearchResults()
                 : Emoticons(
@@ -571,34 +573,39 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
     );
   }
 
+  // Rebuilt only when the stores reload; see [PackageCatalogIndex].
+  PackageCatalogIndex<LocalSourcePackage>? _catalogIndex;
+  List<LocalSourceRepository>? _indexedRepositories;
+
+  PackageCatalogIndex<LocalSourcePackage> _indexFor(_SourceLists data) {
+    if (!identical(_indexedRepositories, data.repositories)) {
+      _indexedRepositories = data.repositories;
+      _catalogIndex = PackageCatalogIndex(
+        [for (final repository in data.repositories) ...repository.packages],
+        id: (package) => package.id,
+        name: (package) => package.name,
+        version: (package) => package.version,
+        language: (package) => package.language,
+      );
+    }
+    return _catalogIndex!;
+  }
+
   Widget _extensionList(BuildContext context, _SourceLists data) {
     final installed = {
       for (final extension in data.extensions) extension.packageId: extension,
     };
-    final available = <String, LocalSourcePackage>{};
-    for (final repository in data.repositories) {
-      for (final package in repository.packages) {
-        final existing = available[package.id];
-        if (existing == null ||
-            Version.parse(package.version) > Version.parse(existing.version)) {
-          available[package.id] = package;
-        }
-      }
-    }
-
-    final updates = <LocalSourcePackage>[];
-    final packages = <String, List<LocalSourcePackage>>{};
-    for (final package in available.values) {
-      if (!_matches(package.name, package.language, _extensionQuery)) continue;
-      final owned = installed[package.id];
-      if (owned != null) {
-        if (Version.parse(package.version) > Version.parse(owned.version)) {
-          updates.add(package);
-        }
-      } else {
-        (packages[package.language] ??= []).add(package);
-      }
-    }
+    final available = _indexFor(data);
+    final grouped = available.group(
+      installed: {
+        for (final extension in data.extensions)
+          extension.packageId: extension.version,
+      },
+      query: _extensionQuery,
+      languageAllowed: _languages?.contains,
+    );
+    final updates = grouped.updates;
+    final packages = grouped.byLanguage;
     final updatedIds = {for (final package in updates) package.id};
     final installedList = data.extensions
         .where(
@@ -683,14 +690,12 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
         for (final language in packages.keys.toList()..sort())
           ..._section(
             _languageName(language),
-            packages[language]!..sort(
-              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-            ),
+            packages[language]!,
             packageTile,
           ),
         if (installedList.isEmpty && updates.isEmpty && packages.isEmpty)
+          // Emoticons sizes with a LayoutBuilder, which cannot report intrinsics.
           SliverFillRemaining(
-            hasScrollBody: false,
             child: _extensionQuery.isNotEmpty
                 ? const BrowseNoSearchResults()
                 : Emoticons(
@@ -1085,10 +1090,18 @@ class _LocalAddExtensionStoreDialogState
       await widget.sources.addRepository(url);
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
+      if (kDebugMode) debugPrint('Kuchie extension store failed: $error');
       if (!mounted) return;
       setState(() {
         _busy = false;
         _error = switch (error) {
+          LocalSourceSecurityException(insecureUrl: true) =>
+            localSecurityMessage(context, error),
+          LocalSourceSecurityException() => localText(
+            context,
+            'This repository failed a security check and was not added.',
+            'Repositori ini gagal pemeriksaan keamanan dan tidak ditambahkan.',
+          ),
           FormatException() => localText(
             context,
             'This repository has no compatible iOS extensions.',
@@ -1697,6 +1710,14 @@ class _LocalSourceMangaPage extends StatefulWidget {
 class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
   late Future<List<LocalSourceChapter>> _chapters = _load();
   late Future<LocalSeries?> _library = widget.services.catalog.find(_seriesId);
+  var _marks = const <String, LocalChapterMarks>{};
+  File? _customCover;
+  int _personalRequest = 0;
+
+  /// Chapter ids picked for a bulk action; selection mode while not empty.
+  final _selection = <String>{};
+  bool _unreadOnly = false;
+  bool _bookmarkedOnly = false;
   late LocalSourceManga _manga = widget.manga;
   int _detailsRequest = 0;
   final _busy = <String>{};
@@ -1714,6 +1735,23 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     super.initState();
     _queue.completed.addListener(_reload);
     unawaited(_loadMangaDetails());
+    unawaited(_loadPersonal());
+  }
+
+  Future<void> _loadPersonal() async {
+    final request = ++_personalRequest;
+    try {
+      final catalog = widget.services.catalog;
+      final marks = await catalog.chapterMarks(_seriesId);
+      final meta = await catalog.seriesMeta(_seriesId);
+      if (!mounted || request != _personalRequest) return;
+      setState(() {
+        _marks = marks;
+        _customCover = meta.cover;
+      });
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    }
   }
 
   @override
@@ -1727,7 +1765,46 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     setState(() {
       _library = widget.services.catalog.find(_seriesId);
     });
+    unawaited(_loadPersonal());
   }
+
+  Future<void> _mark(
+    Iterable<String> chapterIds, {
+    bool? read,
+    bool? bookmarked,
+  }) => _changeDownload(() async {
+    await widget.services.catalog.setChapterMarks(
+      _seriesId,
+      chapterIds,
+      read: read,
+      bookmarked: bookmarked,
+    );
+    if (mounted) {
+      setState(_selection.clear);
+      _reload();
+    }
+  });
+
+  void _toggleSelected(String chapterId) => setState(() {
+    if (!_selection.remove(chapterId)) _selection.add(chapterId);
+  });
+
+  Future<void> _editCover() async {
+    try {
+      final picked = await FilePicker.pickFile(type: FileType.image);
+      final path = picked?.path;
+      if (path == null || !mounted) return;
+      await widget.services.catalog.setCover(_seriesId, File(path));
+      if (mounted) _reload();
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    }
+  }
+
+  Future<void> _resetCover() => _changeDownload(() async {
+    await widget.services.catalog.setCover(_seriesId, null);
+    if (mounted) _reload();
+  });
 
   Future<void> _loadMangaDetails() async {
     final request = ++_detailsRequest;
@@ -1876,9 +1953,12 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     LocalSourceChapter chapter,
     LocalSeries? series,
     LocalChapter? saved,
-    LocalDownload? job,
-  ) async {
+    LocalDownload? job, {
+    required LocalChapterMarks marks,
+    required List<LocalSourceChapter> readingOrder,
+  }) async {
     final l10n = context.l10n;
+    final index = readingOrder.indexWhere((other) => other.id == chapter.id);
     await showAppleGlassMenu<void>(
       context: context,
       position: menuAnchorForPoint(context, point),
@@ -1891,23 +1971,41 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
             label: l10n.offlineChapterRead,
           ),
         ),
-        if (saved != null)
+        PopupMenuItem(
+          onTap: () => _toggleSelected(chapter.id),
+          child: ChapterMenuRow(
+            icon: FluentIcons.checkbox_checked_24_regular,
+            label: l10n.select,
+          ),
+        ),
+        PopupMenuItem(
+          onTap: () => _mark([chapter.id], read: !marks.read),
+          child: ChapterMenuRow(
+            icon: marks.read
+                ? FluentIcons.eye_off_24_regular
+                : FluentIcons.eye_24_regular,
+            label: marks.read ? l10n.markAsUnread : l10n.markAsRead,
+          ),
+        ),
+        if (index > 0)
           PopupMenuItem(
-            onTap: () => _changeDownload(() async {
-              await widget.services.catalog.setBookmark(
-                _seriesId,
-                chapter.id,
-                !saved.bookmarked,
-              );
-              if (mounted) _reload();
-            }),
+            onTap: () => _mark([
+              for (final previous in readingOrder.take(index)) previous.id,
+            ], read: true),
             child: ChapterMenuRow(
-              icon: saved.bookmarked
-                  ? FluentIcons.bookmark_off_24_regular
-                  : FluentIcons.bookmark_24_regular,
-              label: saved.bookmarked ? l10n.removeBookmark : l10n.bookmark,
+              icon: FluentIcons.arrow_up_24_regular,
+              label: l10n.markPreviousAsRead,
             ),
           ),
+        PopupMenuItem(
+          onTap: () => _mark([chapter.id], bookmarked: !marks.bookmarked),
+          child: ChapterMenuRow(
+            icon: marks.bookmarked
+                ? FluentIcons.bookmark_off_24_regular
+                : FluentIcons.bookmark_24_regular,
+            label: marks.bookmarked ? l10n.removeBookmark : l10n.bookmark,
+          ),
+        ),
         if (saved != null)
           PopupMenuItem(
             onTap: () => _removeChapter(chapter),
@@ -1945,8 +2043,12 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     LocalSourceChapter chapter,
     LocalSeries? series,
     LocalChapter? saved,
-    LocalDownload? job,
-  ) {
+    LocalDownload? job, {
+    required LocalChapterMarks marks,
+    required List<LocalSourceChapter> readingOrder,
+  }) {
+    final selecting = _selection.isNotEmpty;
+    final selected = _selection.contains(chapter.id);
     final working =
         _busy.contains(chapter.id) ||
         job?.state == LocalDownloadState.queued ||
@@ -1962,17 +2064,56 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
         : job.pageCount == 0
         ? null
         : '${job.done} / ${job.pageCount}';
+    final dimmed = marks.read && !selected;
     return GestureDetector(
-      onLongPressStart: (details) =>
-          _chapterMenu(details.globalPosition, chapter, series, saved, job),
+      onLongPressStart: (details) => selecting
+          ? _toggleSelected(chapter.id)
+          : _chapterMenu(
+              details.globalPosition,
+              chapter,
+              series,
+              saved,
+              job,
+              marks: marks,
+              readingOrder: readingOrder,
+            ),
       child: ListTile(
+        selected: selected,
         contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 4, 12, 4),
-        title: Text(chapter.title),
-        leading: saved?.bookmarked == true
-            ? const Icon(FluentIcons.bookmark_24_filled)
+        title: Text(
+          chapter.title,
+          style: dimmed
+              ? TextStyle(color: context.colorScheme.onSurfaceVariant)
+              : null,
+        ),
+        leading: selecting
+            ? Icon(
+                selected
+                    ? FluentIcons.checkmark_circle_24_filled
+                    : FluentIcons.circle_24_regular,
+                color: selected ? context.colorScheme.primary : null,
+              )
+            : marks.bookmarked
+            ? Icon(
+                FluentIcons.bookmark_24_filled,
+                color: context.colorScheme.primary,
+              )
             : null,
-        subtitle: subtitle == null ? null : Text(subtitle),
-        trailing: saved != null
+        subtitle: subtitle == null
+            ? null
+            : Text(
+                subtitle,
+                style: dimmed
+                    ? TextStyle(
+                        color: context.colorScheme.onSurfaceVariant.withValues(
+                          alpha: .7,
+                        ),
+                      )
+                    : null,
+              ),
+        trailing: selecting
+            ? null
+            : saved != null
             ? IconButton(
                 tooltip: context.l10n.removeFromDevice,
                 onPressed: () => _removeChapter(chapter),
@@ -2007,7 +2148,9 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                         () => _queue.resume(_seriesId, chapter.id),
                       ),
               ),
-        onTap: () => _openChapter(chapter, series),
+        onTap: selecting
+            ? () => _toggleSelected(chapter.id)
+            : () => _openChapter(chapter, series),
       ),
     );
   }
@@ -2016,21 +2159,45 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     LocalSourceChapter chapter,
     LocalSeries? series,
     LocalChapter? saved,
-    LocalDownload? job,
-  ) => GestureDetector(
-    onLongPressStart: (details) =>
-        _chapterMenu(details.globalPosition, chapter, series, saved, job),
-    child: OutlinedButton(
-      onPressed: () => _openChapter(chapter, series),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        backgroundColor: saved == null
-            ? null
-            : context.colorScheme.primaryContainer,
+    LocalDownload? job, {
+    required LocalChapterMarks marks,
+    required List<LocalSourceChapter> readingOrder,
+  }) {
+    final selecting = _selection.isNotEmpty;
+    final selected = _selection.contains(chapter.id);
+    final colors = context.colorScheme;
+    return GestureDetector(
+      onLongPressStart: (details) => selecting
+          ? _toggleSelected(chapter.id)
+          : _chapterMenu(
+              details.globalPosition,
+              chapter,
+              series,
+              saved,
+              job,
+              marks: marks,
+              readingOrder: readingOrder,
+            ),
+      child: OutlinedButton(
+        onPressed: selecting
+            ? () => _toggleSelected(chapter.id)
+            : () => _openChapter(chapter, series),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          foregroundColor: marks.read && !selected
+              ? colors.onSurfaceVariant
+              : null,
+          side: selected ? BorderSide(color: colors.primary, width: 2) : null,
+          backgroundColor: selected
+              ? colors.primary.withValues(alpha: .18)
+              : saved == null
+              ? null
+              : colors.primaryContainer,
+        ),
+        child: Text(chapter.title, maxLines: 2, textAlign: TextAlign.center),
       ),
-      child: Text(chapter.title, maxLines: 2, textAlign: TextAlign.center),
-    ),
-  );
+    );
+  }
 
   Future<void> _showFilters() => showAppBottomSheet<void>(
     context: context,
@@ -2044,6 +2211,22 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
             value: _onlyDownloaded,
             onChanged: (value) {
               setState(() => _onlyDownloaded = value);
+              setSheetState(() {});
+            },
+          ),
+          SwitchListTile(
+            title: Text(context.l10n.filterOptionUnread),
+            value: _unreadOnly,
+            onChanged: (value) {
+              setState(() => _unreadOnly = value);
+              setSheetState(() {});
+            },
+          ),
+          SwitchListTile(
+            title: Text(context.l10n.filterOptionBookmarked),
+            value: _bookmarkedOnly,
+            onChanged: (value) {
+              setState(() => _bookmarkedOnly = value);
               setSheetState(() {});
             },
           ),
@@ -2100,13 +2283,86 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     }
   }
 
+  Widget _selectionBar(
+    List<LocalSourceChapter> shown,
+    Map<String, LocalChapter> downloaded,
+    Map<String, LocalDownload> jobs,
+    LocalChapterMarks Function(String id) marksOf,
+  ) {
+    final l10n = context.l10n;
+    final ids = _selection.toList(growable: false);
+    final allBookmarked = ids.every((id) => marksOf(id).bookmarked);
+    final unsaved = [
+      for (final chapter in shown)
+        if (_selection.contains(chapter.id) &&
+            !downloaded.containsKey(chapter.id) &&
+            !jobs.containsKey(chapter.id))
+          chapter,
+    ];
+    return SelectionActionBar(
+      leading: [
+        IconButton(
+          tooltip: l10n.clearSelection,
+          icon: const Icon(FluentIcons.dismiss_24_regular),
+          onPressed: () => setState(_selection.clear),
+        ),
+        Text('${ids.length}', style: context.textTheme.titleMedium),
+      ],
+      actions: [
+        IconButton(
+          tooltip: l10n.selectAll,
+          icon: const Icon(FluentIcons.select_all_on_24_regular),
+          onPressed: () => setState(
+            () => _selection.addAll(shown.map((chapter) => chapter.id)),
+          ),
+        ),
+        IconButton(
+          tooltip: l10n.markAsRead,
+          icon: const Icon(Icons.done_all_rounded),
+          onPressed: () => _mark(ids, read: true),
+        ),
+        IconButton(
+          tooltip: l10n.markAsUnread,
+          icon: const Icon(Icons.remove_done_rounded),
+          onPressed: () => _mark(ids, read: false),
+        ),
+        IconButton(
+          tooltip: allBookmarked ? l10n.removeBookmark : l10n.bookmark,
+          icon: Icon(
+            allBookmarked
+                ? FluentIcons.bookmark_off_24_regular
+                : FluentIcons.bookmark_24_regular,
+          ),
+          onPressed: () => _mark(ids, bookmarked: !allBookmarked),
+        ),
+        IconButton(
+          tooltip: localText(context, 'Save to device', 'Simpan ke perangkat'),
+          icon: const Icon(FluentIcons.arrow_circle_down_24_regular),
+          onPressed: unsaved.isEmpty
+              ? null
+              : () async {
+                  setState(_selection.clear);
+                  for (final chapter in unsaved) {
+                    if (!mounted) break;
+                    await _download(chapter);
+                  }
+                },
+        ),
+      ],
+      clearsSystemNav: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ImageProvider? image(Uri? url) => url == null
         ? null
         : NetworkImage(url.toString(), headers: _manga.coverHeaders);
     final homepage = _manga.webUrl ?? widget.extension.homepage;
-    final cover = image(_manga.cover);
+    // A picked cover is a local file and wins over the source's covers.
+    final cover = _customCover != null
+        ? FileImage(_customCover!)
+        : image(_manga.cover);
     final fallbackCover = image(_manga.coverFallback);
     final coverBehindBar =
         supportsAppleGlass(context) && (cover != null || fallbackCover != null);
@@ -2141,6 +2397,25 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                     onSelected: _refresh,
                     fallbackIcon: FluentIcons.arrow_clockwise_24_regular,
                   ),
+                  AppleGlassToolbarMenuItem(
+                    id: 'edit-cover',
+                    title: context.l10n.editCover,
+                    symbol: 'photo',
+                    onSelected: _editCover,
+                    fallbackIcon: FluentIcons.image_edit_24_regular,
+                  ),
+                  if (_customCover != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'reset-cover',
+                      title: localText(
+                        context,
+                        'Use source cover',
+                        'Pakai cover sumber',
+                      ),
+                      symbol: 'arrow.uturn.backward',
+                      onSelected: _resetCover,
+                      fallbackIcon: FluentIcons.arrow_undo_24_regular,
+                    ),
                   if (homepage != null)
                     AppleGlassToolbarMenuItem(
                       id: 'home',
@@ -2184,10 +2459,16 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
               final descending = widget.extension.chaptersNewestFirst
                   ? chapters
                   : chapters.reversed;
+              final orderedForReading = readingOrder.toList(growable: false);
+              const noMarks = (read: false, bookmarked: false);
+              LocalChapterMarks marksOf(String id) => _marks[id] ?? noMarks;
               final shown = (_descending ? descending : readingOrder)
                   .where(
                     (chapter) =>
-                        !_onlyDownloaded || downloaded.containsKey(chapter.id),
+                        (!_onlyDownloaded ||
+                            downloaded.containsKey(chapter.id)) &&
+                        (!_unreadOnly || !marksOf(chapter.id).read) &&
+                        (!_bookmarkedOnly || marksOf(chapter.id).bookmarked),
                   )
                   .toList();
               return ValueListenableBuilder<List<LocalDownload>>(
@@ -2198,7 +2479,7 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                       if (job.request.seriesId == _seriesId)
                         job.request.chapterId: job,
                   };
-                  return NotificationListener<ScrollNotification>(
+                  final list = NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
                       if (notification.depth == 0 &&
                           notification.metrics.axis == Axis.vertical) {
@@ -2309,6 +2590,20 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                 ),
                               ),
                             ),
+                          SliverToBoxAdapter(
+                            child: LocalSeriesPersonal(
+                              catalog: widget.services.catalog,
+                              seriesId: _seriesId,
+                              categories: series?.inLibrary == true
+                                  ? series!.categories
+                                  : null,
+                              onCategoriesChanged: () => setState(() {
+                                _library = widget.services.catalog.find(
+                                  _seriesId,
+                                );
+                              }),
+                            ),
+                          ),
                           if (firstChapter != null)
                             SliverToBoxAdapter(
                               child: Padding(
@@ -2402,6 +2697,8 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                     series,
                                     downloaded[chapter.id],
                                     byChapter[chapter.id],
+                                    marks: marksOf(chapter.id),
+                                    readingOrder: orderedForReading,
                                   );
                                 },
                               ),
@@ -2416,12 +2713,37 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                   series,
                                   downloaded[chapter.id],
                                   byChapter[chapter.id],
+                                  marks: marksOf(chapter.id),
+                                  readingOrder: orderedForReading,
                                 );
                               },
+                            ),
+                          // Keeps the last rows clear of the selection bar.
+                          if (_selection.isNotEmpty)
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 88),
                             ),
                         ],
                       ),
                     ),
+                  );
+                  // Keep one tree shape so entering selection keeps the scroll.
+                  return Stack(
+                    children: [
+                      list,
+                      if (_selection.isNotEmpty)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _selectionBar(
+                            shown,
+                            downloaded,
+                            byChapter,
+                            marksOf,
+                          ),
+                        ),
+                    ],
                   );
                 },
               );
@@ -2456,12 +2778,54 @@ Future<void> openLocalSourceChapter(
       chapters: chapters,
       initialId: initialChapter.id,
       initialTitle: initialChapter.title,
+      // History needs the source reference to reopen chapters read online.
       series:
           savedSeries ??
-          LocalSeries(id: seriesId, title: manga.title, chapters: const []),
+          LocalSeries(
+            id: seriesId,
+            title: manga.title,
+            chapters: const [],
+            source: services.sources.seriesReference(
+              manga,
+              sourceName: extension.name,
+            ),
+          ),
     ),
   ),
 );
+
+/// Reopens a chapter from History that was read online and never saved.
+Future<void> openRemoteLocalChapter(
+  BuildContext context,
+  LocalCollectionServices services, {
+  required LocalSeries series,
+  required String chapterId,
+}) async {
+  final sources = services.sources;
+  final reference = localSeriesReference(sources, series);
+  if (reference == null) throw StateError('The source is unavailable.');
+  final selection = await sources.resolveSeries(reference, series.title);
+  final available = await sources.chapters(
+    selection.extension.id,
+    selection.manga,
+  );
+  final chapters = selection.extension.chaptersNewestFirst
+      ? available.reversed.toList(growable: false)
+      : available;
+  final initial = chapters.where((chapter) => chapter.id == chapterId);
+  if (initial.isEmpty) throw StateError('The chapter is no longer listed.');
+  if (!context.mounted) return;
+  await openLocalSourceChapter(
+    context,
+    services: services,
+    extension: selection.extension,
+    manga: selection.manga,
+    chapters: chapters,
+    initialChapter: initial.first,
+    seriesId: series.id,
+    savedSeries: series.chapters.isEmpty ? null : series,
+  );
+}
 
 Future<void> openSavedLocalChapter(
   BuildContext context,
@@ -2585,6 +2949,11 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
           'kuchie-preview-',
         ));
         if (_closed) throw const LocalTransferCancelled();
+        final progress = await widget.services.catalog.remoteProgress(
+          widget.series.id,
+          chapter.id,
+        );
+        if (_closed) throw const LocalTransferCancelled();
         final session = LocalPreviewPages(
           directory: Directory('${directory.path}/${_previews.length}'),
           chapterId: chapter.id,
@@ -2593,6 +2962,7 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
           headers: [for (final page in pages) page.headers],
           client: _client,
           isCancelled: () => _closed,
+          progress: progress,
         );
         _previews[id] = session;
         return LocalReaderChapterContent(

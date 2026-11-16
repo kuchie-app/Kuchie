@@ -85,7 +85,6 @@ private final class AppleGlassReaderSlider: NSObject, FlutterPlatformView, UIGes
     slider.sliderStyle = .default
     slider.minimumValue = 0
     slider.isContinuous = true
-    slider.minimumTrackTintColor = UIColor(red: 0.69, green: 0.78, blue: 1, alpha: 1)
     slider.accessibilityIdentifier = "kuchie.reader.page-slider"
     slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
     slider.addTarget(self, action: #selector(valueChanged), for: .valueChanged)
@@ -136,6 +135,8 @@ private final class AppleGlassReaderSlider: NSObject, FlutterPlatformView, UIGes
   func view() -> UIView { surface }
 
   private func update(_ data: [String: Any]) {
+    slider.minimumTrackTintColor =
+      UIColor.kuchieARGB(data["tint"]) ?? UIColor(red: 0.69, green: 0.78, blue: 1, alpha: 1)
     guard let index = data["index"] as? Int, let count = data["count"] as? Int,
           (0..<max(count, 0)).contains(index) else { return }
     let reversed = data["reversed"] as? Bool == true

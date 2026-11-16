@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../constants/app_sizes.dart';
@@ -27,36 +28,41 @@ import '../../onboarding/data/collection_mode.dart';
 import '../../onboarding/presentation/collection_mode_picker.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../data/local_catalog.dart';
+import '../data/local_collection_providers.dart';
 import '../data/local_collection_services.dart';
 import '../data/local_download_queue.dart';
+import '../data/local_history.dart';
 import '../data/local_sources.dart';
 import '../data/local_updates.dart';
 import 'local_extension_browser.dart';
+import 'local_series_personal.dart';
 import 'local_ui.dart';
 
 const _sections = ['library', 'updates', 'browse', 'history', 'more'];
 
-class LocalCollectionHome extends StatefulWidget {
+class LocalCollectionHome extends ConsumerStatefulWidget {
   const LocalCollectionHome({
     super.key,
     required this.onOpenServer,
     this.initialSection,
-    this.openServices = LocalCollectionServices.open,
   });
 
   final void Function(String section) onOpenServer;
   final String? initialSection;
-  final Future<LocalCollectionServices> Function() openServices;
 
   @override
-  State<LocalCollectionHome> createState() => _LocalCollectionHomeState();
+  ConsumerState<LocalCollectionHome> createState() =>
+      _LocalCollectionHomeState();
 }
 
-class _LocalCollectionHomeState extends State<LocalCollectionHome> {
+class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   late int _tab = _initialTab;
   late bool _downloads = widget.initialSection == 'downloads';
-  late Future<LocalCollectionServices> _services = widget.openServices();
+  late Future<LocalCollectionServices> _services = ref.read(
+    localCollectionServicesProvider.future,
+  );
   Future<List<LocalSeries>>? _library;
+  Future<List<LocalRemoteRead>>? _remoteReads;
   LocalCollectionServices? _bound;
   bool _importing = false;
   bool _showExtensions = false;
@@ -97,6 +103,7 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
     _bound?.downloads.completed.removeListener(_refresh);
     _bound = services;
     _library = services.catalog.list();
+    _remoteReads = services.catalog.remoteHistory();
     services.downloads.completed.addListener(_refresh);
   }
 
@@ -105,6 +112,7 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
     if (services != null && mounted) {
       setState(() {
         _library = services.catalog.list();
+        _remoteReads = services.catalog.remoteHistory();
       });
     }
   }
@@ -135,6 +143,12 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
   }
 
   void _select(int index) => setState(() {
+    // Chapters read online in Browse never refresh this screen on their own.
+    final services = _bound;
+    if (index == 3 && services != null) {
+      _library = services.catalog.list();
+      _remoteReads = services.catalog.remoteHistory();
+    }
     _tab = index;
     _downloads = false;
     _showExtensions = false;
@@ -294,7 +308,8 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
             return Center(
               child: TextButton(
                 onPressed: () => setState(() {
-                  _services = widget.openServices();
+                  ref.invalidate(localCollectionServicesProvider);
+                  _services = ref.read(localCollectionServicesProvider.future);
                 }),
                 child: Text(context.l10n.retry),
               ),
@@ -519,16 +534,22 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
     _refresh();
   }
 
-  Widget _history(LocalCollectionServices services, List<LocalSeries> books) {
-    final read =
-        [
-          for (final book in books)
-            for (final chapter in book.chapters)
-              if (chapter.lastReadAt != null) (book: book, chapter: chapter),
-        ]..sort(
-          (left, right) =>
-              right.chapter.lastReadAt!.compareTo(left.chapter.lastReadAt!),
-        );
+  Widget _history(LocalCollectionServices services, List<LocalSeries> books) =>
+      FutureBuilder<List<LocalRemoteRead>>(
+        future: _remoteReads,
+        builder: (context, snapshot) => _historyList(
+          services,
+          books,
+          snapshot.data ?? const <LocalRemoteRead>[],
+        ),
+      );
+
+  Widget _historyList(
+    LocalCollectionServices services,
+    List<LocalSeries> books,
+    List<LocalRemoteRead> remoteReads,
+  ) {
+    final read = mergeLocalHistory(books, remoteReads);
     final query = _query.text.trim().toLowerCase();
     final visible = [
       for (final item in read)
@@ -549,13 +570,27 @@ class _LocalCollectionHomeState extends State<LocalCollectionHome> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
       itemCount: visible.length,
-      itemBuilder: (context, index) {
+      // State.context, so the post-await failure check matches `mounted`.
+      itemBuilder: (_, index) {
         final entry = visible[index];
         return _LocalHistoryRow(
           book: entry.book,
           chapter: entry.chapter,
           onOpen: () async {
-            await _openReader(context, services, entry.book, entry.chapter);
+            try {
+              if (entry.saved) {
+                await _openReader(context, services, entry.book, entry.chapter);
+              } else {
+                await openRemoteLocalChapter(
+                  context,
+                  services,
+                  series: entry.book,
+                  chapterId: entry.chapter.id,
+                );
+              }
+            } catch (error) {
+              if (mounted) localFailure(context, error);
+            }
             _refresh();
           },
           onOpenManga: () => _openManga(services, entry.book),
@@ -945,22 +980,29 @@ class _LocalBooksState extends State<_LocalBooks> {
                   itemCount: visible.length,
                   itemBuilder: (context, index) {
                     final book = visible[index];
-                    final cover = book.chapters.firstOrNull?.pages.firstOrNull;
+                    final firstPage =
+                        book.chapters.firstOrNull?.pages.firstOrNull;
                     final remoteCover = book.source?.cover;
+                    // The tile decodes at its own size; nesting ResizeImage fails.
+                    final pageImage = firstPage == null
+                        ? null
+                        : FileImage(firstPage);
+                    final remoteImage = remoteCover == null
+                        ? null
+                        : NetworkImage(remoteCover.toString());
                     final unreadCount = book.chapters
                         .where((chapter) => chapter.lastReadAt == null)
                         .length;
                     return MangaCoverGridTile(
                       key: ValueKey(book.id),
                       titleOverride: book.title,
-                      coverImage: cover != null
-                          ? FileImage(cover)
-                          : remoteCover == null
-                          ? null
-                          : ResizeImage(
-                              NetworkImage(remoteCover.toString()),
-                              width: 512,
-                            ),
+                      // Custom cover, then the source cover; the first saved
+                      // page stands in offline or when a source has none.
+                      coverImage: switch (book.customCover) {
+                        final custom? => FileImage(custom),
+                        null => remoteImage ?? pageImage,
+                      },
+                      fallbackCoverImage: pageImage,
                       badgeCountOverride: unreadCount,
                       showDarkOverlay: false,
                       outlineOnCovers: true,
@@ -1037,10 +1079,19 @@ class _LocalHistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cover = book.chapters.firstOrNull?.pages.firstOrNull;
+    final cover =
+        book.customCover ?? book.chapters.firstOrNull?.pages.firstOrNull;
+    // Chapters read online have no saved pages to show.
+    final remoteCover = book.source?.cover;
     final glass = supportsAppleGlass(context);
     final width = glass ? 84.0 : 56.0;
     final height = glass ? 122.0 : 80.0;
+    final cacheWidth = (width * MediaQuery.devicePixelRatioOf(context)).round();
+    final placeholder = SizedBox(
+      width: width,
+      height: height,
+      child: const Icon(Icons.book_outlined),
+    );
     final readAt = chapter.lastReadAt;
     return Card(
       margin: EdgeInsets.symmetric(horizontal: glass ? 0 : 4, vertical: 4),
@@ -1058,21 +1109,24 @@ class _LocalHistoryRow extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(glass ? 12 : 8),
-                child: cover == null
-                    ? SizedBox(
-                        width: width,
-                        height: height,
-                        child: const Icon(Icons.book_outlined),
-                      )
-                    : Image.file(
+                child: cover != null
+                    ? Image.file(
                         cover,
                         width: width,
                         height: height,
-                        cacheWidth:
-                            (width * MediaQuery.devicePixelRatioOf(context))
-                                .round(),
+                        cacheWidth: cacheWidth,
                         fit: BoxFit.cover,
-                      ),
+                      )
+                    : remoteCover != null
+                    ? Image.network(
+                        remoteCover.toString(),
+                        width: width,
+                        height: height,
+                        cacheWidth: cacheWidth,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => placeholder,
+                      )
+                    : placeholder,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1180,55 +1234,21 @@ class _SeriesDetailState extends State<_SeriesDetail> {
     }
   }
 
+  Future<void> _editCover() async {
+    final picked = await FilePicker.pickFile(type: FileType.image);
+    final path = picked?.path;
+    if (path == null || !mounted) return;
+    await _modify(() => _catalog.setCover(_series.id, File(path)));
+  }
+
   Future<void> _categoryPicker() async {
-    try {
-      final categories = await _catalog.categories();
-      if (!mounted) return;
-      final selected = _series.categories.toSet();
-      final result = await showAppBottomSheet<List<String>>(
-        context: context,
-        builder: (sheet) => StatefulBuilder(
-          builder: (context, update) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppSheetHeader(title: localText(sheet, 'Categories', 'Kategori')),
-              if (categories.isEmpty)
-                ListTile(
-                  title: Text(
-                    localText(
-                      sheet,
-                      'Create a category in Library first',
-                      'Buat kategori di Perpustakaan dulu',
-                    ),
-                  ),
-                ),
-              for (final category in categories)
-                CheckboxListTile(
-                  title: Text(category),
-                  value: selected.contains(category),
-                  onChanged: (value) => update(() {
-                    if (value == true) {
-                      selected.add(category);
-                    } else {
-                      selected.remove(category);
-                    }
-                  }),
-                ),
-              if (categories.isNotEmpty)
-                FilledButton(
-                  onPressed: () => Navigator.pop(sheet, selected.toList()),
-                  child: Text(MaterialLocalizations.of(sheet).okButtonLabel),
-                ),
-            ],
-          ),
-        ),
-      );
-      if (result != null && mounted) {
-        await _modify(() => _catalog.setCategories(_series.id, result));
-      }
-    } catch (error) {
-      if (mounted) localFailure(context, error);
-    }
+    final changed = await showLocalCategoryPicker(
+      context,
+      _catalog,
+      seriesId: _series.id,
+      current: _series.categories,
+    );
+    if (changed && mounted) await _refresh();
   }
 
   Future<void> _read(LocalChapter chapter) async {
@@ -1247,7 +1267,8 @@ class _SeriesDetailState extends State<_SeriesDetail> {
 
   @override
   Widget build(BuildContext context) {
-    final cover = _series.chapters.firstOrNull?.pages.firstOrNull;
+    final cover =
+        _series.customCover ?? _series.chapters.firstOrNull?.pages.firstOrNull;
     final reading = [..._series.chapters]
       ..sort((a, b) {
         final left = a.lastReadAt?.millisecondsSinceEpoch ?? 0;
@@ -1295,6 +1316,26 @@ class _SeriesDetailState extends State<_SeriesDetail> {
                     fallbackIcon: Icons.folder_outlined,
                     onSelected: _categoryPicker,
                   ),
+                  AppleGlassToolbarMenuItem(
+                    id: 'edit-cover',
+                    title: context.l10n.editCover,
+                    symbol: 'photo',
+                    fallbackIcon: Icons.image_outlined,
+                    onSelected: _editCover,
+                  ),
+                  if (_series.customCover != null)
+                    AppleGlassToolbarMenuItem(
+                      id: 'reset-cover',
+                      title: localText(
+                        context,
+                        'Use first page',
+                        'Pakai halaman pertama',
+                      ),
+                      symbol: 'arrow.uturn.backward',
+                      fallbackIcon: Icons.undo,
+                      onSelected: () =>
+                          _modify(() => _catalog.setCover(_series.id, null)),
+                    ),
                 ],
               ),
             ],
@@ -1310,17 +1351,12 @@ class _SeriesDetailState extends State<_SeriesDetail> {
             source: context.l10n.downloadsOnDeviceTab,
             cover: cover == null ? null : FileImage(cover),
           ),
-          if (_series.categories.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  for (final name in _series.categories)
-                    Chip(label: Text(name)),
-                ],
-              ),
-            ),
+          LocalSeriesPersonal(
+            catalog: _catalog,
+            seriesId: _series.id,
+            categories: _series.categories,
+            onCategoriesChanged: _refresh,
+          ),
           if (chapter != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),

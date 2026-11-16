@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -75,16 +76,48 @@ class Emoticons extends HookWidget {
       ),
     );
     return WebSelectionArea(
-      child: LayoutBuilder(
-        builder: (context, constraints) => constraints.hasBoundedHeight
-            ? SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: content,
-                ),
-              )
-            : content,
+      child: _NoIntrinsicSize(
+        child: LayoutBuilder(
+          builder: (context, constraints) => constraints.hasBoundedHeight
+              ? SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: content,
+                  ),
+                )
+              : content,
+        ),
       ),
     );
   }
+}
+
+/// Lets slivers that measure their child, such as the paged lists' first-page
+/// SliverFillRemaining(hasScrollBody: false), hold Emoticons.
+///
+/// A LayoutBuilder cannot report intrinsic sizes, so measuring it threw on
+/// every frame and the error or empty state never appeared. Reporting zero
+/// makes those slivers fill the space left, where the content centers itself.
+class _NoIntrinsicSize extends SingleChildRenderObjectWidget {
+  const _NoIntrinsicSize({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderNoIntrinsicSize();
+}
+
+class _RenderNoIntrinsicSize extends RenderProxyBox {
+  @override
+  double computeMinIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => 0;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => 0;
 }

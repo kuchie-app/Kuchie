@@ -1,55 +1,45 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-
 import 'local_catalog.dart';
 import 'local_download_queue.dart';
 import 'local_sources.dart';
 
+/// The Local collection's storage, sources and download queue.
+///
+/// Obtain it from `localCollectionServicesProvider`; widgets receive it by
+/// constructor so tests can pass [LocalCollectionServices.custom].
 class LocalCollectionServices {
-  LocalCollectionServices(
+  factory LocalCollectionServices(
     Directory directory, {
     bool allowInsecureLoopback = false,
-  }) : catalog = LocalCatalog(Directory('${directory.path}/catalog')),
-       sources = LocalSources(
-         directory,
-         allowInsecureLoopback: allowInsecureLoopback,
-       ),
-       _queueFile = File('${directory.path}/downloads.json');
+  }) {
+    final catalog = LocalCatalog(Directory('${directory.path}/catalog'));
+    final sources = LocalSources(
+      directory,
+      allowInsecureLoopback: allowInsecureLoopback,
+    );
+    return LocalCollectionServices.custom(
+      catalog: catalog,
+      sources: sources,
+      downloads: LocalDownloadQueue(
+        catalog,
+        File('${directory.path}/downloads.json'),
+        resolveRuntimeChapter: sources.refreshChapterPages,
+      ),
+    );
+  }
+
+  /// Wires already-built dependencies, such as fakes or mocks in tests.
+  const LocalCollectionServices.custom({
+    required this.catalog,
+    required this.sources,
+    required this.downloads,
+  });
 
   final LocalCatalog catalog;
   final LocalSources sources;
-  final File _queueFile;
-  late final LocalDownloadQueue downloads = LocalDownloadQueue(
-    catalog,
-    _queueFile,
-    resolveRuntimeChapter: sources.refreshChapterPages,
-  );
-
-  static Future<LocalCollectionServices>? _current;
-  static final ValueNotifier<LocalDownloadQueue?> activeQueue = ValueNotifier(
-    null,
-  );
-
-  static Future<LocalCollectionServices> open() => _current ??= _open();
-
-  static Future<LocalCollectionServices> _open() async {
-    try {
-      final support = await getApplicationSupportDirectory();
-      final service = LocalCollectionServices(
-        Directory('${support.path}/local-collection'),
-        allowInsecureLoopback: kDebugMode,
-      );
-      await service.downloads.load();
-      activeQueue.value = service.downloads;
-      return service;
-    } catch (_) {
-      _current = null;
-      rethrow;
-    }
-  }
+  final LocalDownloadQueue downloads;
 }
 
 String localSourceSeriesId(LocalExtension source, String mangaId) => base64Url

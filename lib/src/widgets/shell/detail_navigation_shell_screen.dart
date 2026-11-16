@@ -56,13 +56,25 @@ PreferredSizeWidget detailNavigationAppBar(
 /// Shell ModalRoute.canPop misses outer pages; consult GoRouter for back navigation.
 Widget? detailNavigationBackButton(BuildContext context) {
   Widget back(VoidCallback onPressed) => Builder(
-    builder: (context) => AppleGlassToolbarButton(
-      id: 'back',
-      symbol: 'chevron.backward',
-      label: MaterialLocalizations.of(context).backButtonTooltip,
-      onPressed: onPressed,
-      fallback: BackButton(onPressed: onPressed),
-    ),
+    builder: (context) {
+      final button = AppleGlassToolbarButton(
+        id: 'back',
+        symbol: 'chevron.backward',
+        label: MaterialLocalizations.of(context).backButtonTooltip,
+        onPressed: onPressed,
+        fallback: BackButton(onPressed: onPressed),
+      );
+      if (!supportsAppleGlass(context)) return button;
+      // Mirrors the trailing actions' margin so both edges line up.
+      return Padding(
+        padding: const EdgeInsetsDirectional.only(start: kAppleGlassBarInset),
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          widthFactor: 1,
+          child: button,
+        ),
+      );
+    },
   );
   final router = GoRouter.maybeOf(context);
   if (router == null) {

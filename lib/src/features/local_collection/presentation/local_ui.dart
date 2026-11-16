@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../widgets/popup_widgets/app_dialog.dart';
 import '../data/local_mihon_runtime.dart';
+import '../data/local_sources.dart';
 
 String localText(BuildContext context, String english, String indonesian) =>
     Localizations.localeOf(context).languageCode == 'id' ? indonesian : english;
@@ -66,9 +67,26 @@ Future<bool> localConfirm(
     ) ??
     false;
 
+/// Why a repository or package was refused, in words a reader can act on.
+String localSecurityMessage(
+  BuildContext context,
+  LocalSourceSecurityException error,
+) => error.insecureUrl
+    ? localText(
+        context,
+        'Use an HTTPS address without a username, password or # fragment.',
+        'Gunakan alamat HTTPS tanpa nama pengguna, kata sandi, atau fragmen #.',
+      )
+    : localText(
+        context,
+        'This extension failed a security check and was not installed.',
+        'Ekstensi ini gagal pemeriksaan keamanan dan tidak dipasang.',
+      );
+
 void localFailure(BuildContext context, Object error) {
   if (!context.mounted) return;
   final message = switch (error) {
+    LocalSourceSecurityException() => localSecurityMessage(context, error),
     MihonRuntimeUnavailable() => localText(
       context,
       'The extension runtime is unavailable on this build.',

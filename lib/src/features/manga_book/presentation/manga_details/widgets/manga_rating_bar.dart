@@ -15,7 +15,7 @@ import '../../../../../utils/theme/brand.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../controller/manga_details_controller.dart';
 
-class MangaRatingBar extends HookConsumerWidget {
+class MangaRatingBar extends ConsumerWidget {
   const MangaRatingBar({
     super.key,
     required this.mangaId,
@@ -26,8 +26,31 @@ class MangaRatingBar extends HookConsumerWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final rating = ref.watch(mangaRatingProvider(mangaId: mangaId));
+  Widget build(BuildContext context, WidgetRef ref) => RatingStars(
+    rating: ref.watch(mangaRatingProvider(mangaId: mangaId)),
+    compact: compact,
+    onChanged: (next) =>
+        ref.read(mangaRatingProvider(mangaId: mangaId).notifier).update(next),
+  );
+}
+
+/// Five tappable stars; tapping the current rating clears it to 0.
+///
+/// Shared by the Server and Local collections, which store ratings apart.
+class RatingStars extends HookWidget {
+  const RatingStars({
+    super.key,
+    required this.rating,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final int rating;
+  final Future<void> Function(int rating) onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
     final hovered = useState<int?>(null);
     final pending = useState<int?>(null);
     final row = Row(
@@ -61,9 +84,7 @@ class MangaRatingBar extends HookConsumerWidget {
                     if (!context.reduceMotion) pop.forward(from: 0);
                     final next = (pending.value ?? rating) == star ? 0 : star;
                     pending.value = next;
-                    await ref
-                        .read(mangaRatingProvider(mangaId: mangaId).notifier)
-                        .update(next);
+                    await onChanged(next);
                     if (context.mounted && pending.value == next) {
                       pending.value = null;
                     }
@@ -73,7 +94,9 @@ class MangaRatingBar extends HookConsumerWidget {
                     child: Transform.scale(
                       scale: scale,
                       child: Icon(
-                        filled ? FluentIcons.star_24_filled : FluentIcons.star_24_regular,
+                        filled
+                            ? FluentIcons.star_24_filled
+                            : FluentIcons.star_24_regular,
                         size: 24,
                         color: filled
                             ? brandStarColor(context.theme.brightness)

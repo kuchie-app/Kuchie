@@ -11,7 +11,6 @@ import 'package:network_info_plus/network_info_plus.dart';
 
 import 'server_resolver.dart';
 
-
 // 4567 is Suwayomi's default; 4568-4570 cover alternate local ports.
 const List<int> kSuwayomiScanPorts = [4567, 4568, 4569, 4570];
 
@@ -168,8 +167,7 @@ Future<String?> localLanIp() async {
         if (_isPrivateV4(addr.address)) return addr.address;
       }
     }
-  } catch (_) {
-  }
+  } catch (_) {}
   try {
     return await NetworkInfo().getWifiIP();
   } catch (_) {

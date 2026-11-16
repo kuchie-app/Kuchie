@@ -112,6 +112,13 @@ void main() {
     expect(tabs[2]['badge'], '3');
     expect(tabs[4]['badge'], '');
     expect(state!['selectedIndex'], 0);
+    // The selected tab follows the theme accent rather than UIKit's blue.
+    expect(
+      state!['tint'],
+      Theme.of(
+        tester.element(find.byType(UiKitView)),
+      ).colorScheme.primary.toARGB32(),
+    );
     expect(tester.getSize(find.byType(UiKitView)).height, 114);
 
     Future<void> nativeSelect(int index) async {

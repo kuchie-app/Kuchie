@@ -4609,5 +4609,21 @@
         "type": "String"
       }
     }
+  },
+  "liquidGlass": "Liquid Glass",
+  "@liquidGlass": {
+    "description": "Appearance toggle for Apple's Liquid Glass controls"
+  },
+  "liquidGlassSubtitle": "Glass tab bar, toolbars and controls",
+  "@liquidGlassSubtitle": {
+    "description": "Explains what the Liquid Glass toggle changes"
+  },
+  "liquidGlassLimited": "Off to keep this device smooth",
+  "@liquidGlassLimited": {
+    "description": "Shown when the device has too little memory for Liquid Glass; the toggle is locked off"
+  },
+  "liquidGlassUnsupported": "Requires iOS 26 or later",
+  "@liquidGlassUnsupported": {
+    "description": "Shown before iOS 26; the toggle is locked off"
   }
 }

@@ -99,6 +99,7 @@ class _AppleGlassSearchControlState extends State<AppleGlassSearchControl> {
       'end': value?.selection.end ?? -1,
       'dark': Theme.of(context).brightness == Brightness.dark,
       'rtl': Directionality.of(context) == TextDirection.rtl,
+      'tint': Theme.of(context).colorScheme.primary.toARGB32(),
     };
   }
 
@@ -242,7 +243,13 @@ class _AppleGlassSearchControlState extends State<AppleGlassSearchControl> {
       ),
     );
     if (widget.focusNode case final node?) {
-      return Focus(focusNode: node, skipTraversal: true, child: view);
+      // Keep the caller's node out of traversal without writing its
+      // skipTraversal: a useFocusNode owner resets that on every rebuild, and
+      // the two writes notified each other on every frame, so the screen
+      // never went idle.
+      return ExcludeFocusTraversal(
+        child: Focus.withExternalFocusNode(focusNode: node, child: view),
+      );
     }
     return view;
   }

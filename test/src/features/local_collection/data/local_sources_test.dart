@@ -12,6 +12,8 @@ import 'package:kuchie/src/features/local_collection/data/local_sources.dart';
 import 'package:kuchie/src/features/local_collection/data/local_updates.dart';
 import 'package:pointycastle/digests/sha256.dart';
 
+import '../../../../helpers/signed_apk_fixture.dart';
+
 const host = 'https://fixture.example';
 final index = Uri.parse('$host/index.json');
 
@@ -165,12 +167,14 @@ void main() {
       final assetUrl = Uri.parse(
         'https://release-assets.githubusercontent.com/example/fixture.apk?token=fixture',
       );
-      final apk = Uint8List.fromList([80, 75, 3, 4, 5]);
+      final signer = ApkTestSigner(1);
+      final apk = signedApk(signer);
       final responses = MockClient((request) async {
         if (request.url == index) {
           return http.Response(
             jsonEncode({
               'name': 'Keiyoushi',
+              'signingKey': signer.fingerprint,
               'extensionList': {
                 'extensions': [
                   {
@@ -338,6 +342,232 @@ void main() {
     },
   );
 
+  test('refuses tampered, unhashed and mislabelled packages as security '
+      'failures', () async {
+    Matcher security({bool insecureUrl = false}) => throwsA(
+      isA<LocalSourceSecurityException>().having(
+        (error) => error.insecureUrl,
+        'insecureUrl',
+        insecureUrl,
+      ),
+    );
+
+    // Plain HTTP off loopback and URLs with credentials are refused up front.
+    await expectLater(
+      sources.addRepository(Uri.parse('http://fixture.example/index.json')),
+      security(insecureUrl: true),
+    );
+    await expectLater(
+      sources.addRepository(
+        Uri.parse('https://user:pw@fixture.example/i.json'),
+      ),
+      security(insecureUrl: true),
+    );
+
+    // An index entry without a checksum is not trusted.
+    final unhashed = jsonDecode(_index()) as Map<String, dynamic>;
+    (unhashed['extensions'] as List).cast<Map<String, dynamic>>().single.remove(
+      'sha256',
+    );
+    server['/index.json'] = jsonEncode(unhashed);
+    await expectLater(sources.addRepository(index), security());
+
+    // Bytes that differ from the published checksum are never installed.
+    server['/index.json'] = _index();
+    final repo = await sources.addRepository(index);
+    server['/extension.json'] = _extension().replaceAll('QA Sample', 'Hijack');
+    await expectLater(sources.install(repo.packages.single), security());
+
+    // A package that matches its checksum but claims another version.
+    server['/extension.json'] = _extension(version: '9.9.9');
+    server['/index.json'] = _index(digest: _hash(server['/extension.json']!));
+    final lying = await sources.refreshRepository(index);
+    await expectLater(sources.install(lying.packages.single), security());
+
+    expect(await sources.extensions(), isEmpty);
+  });
+
+  group('Mihon extension stores', () {
+    const package = 'eu.kanade.tachiyomi.extension.all.example';
+    final signer = ApkTestSigner(1);
+    final stranger = ApkTestSigner(2);
+
+    test('adds a protobuf v2 store from its repo.json and installs a signed '
+        'APK', () async {
+      final repoJson = Uri.parse(
+        'https://raw.githubusercontent.com/acme/cursed/repo/repo.json',
+      );
+      final indexV2 = Uri.parse(
+        'https://github.com/acme/cursed/raw/repo/index.pb',
+      );
+      final rawIndex = Uri.parse(
+        'https://raw.githubusercontent.com/acme/cursed/repo/index.pb',
+      );
+      final apkUrl = Uri.parse(
+        'https://github.com/acme/cursed/releases/download/v1/example.apk',
+      );
+      final apk = signedApk(signer);
+      final store = gzip.encode(
+        _storeProto(
+          name: 'Cursed QA',
+          signingKey: signer.fingerprint.toUpperCase(),
+          extensions: [
+            (id: package, name: 'Example', version: '1.6.1', apk: '$apkUrl'),
+            (
+              id: 'eu.kanade.tachiyomi.extension.all.plain',
+              name: 'Plain HTTP',
+              version: '1.6.1',
+              apk: 'http://cdn.example/plain.apk',
+            ),
+          ],
+        ),
+      );
+      final client = MockClient((request) async {
+        if (request.url == repoJson) {
+          return http.Response(
+            jsonEncode({
+              'index_v2': '$indexV2',
+              'meta': {
+                'name': 'Cursed QA',
+                'website': 'https://store.example',
+                'signingKeyFingerprint': signer.fingerprint,
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url == indexV2) {
+          return http.Response('', 302, headers: {'location': '$rawIndex'});
+        }
+        if (request.url == rawIndex) return http.Response.bytes(store, 200);
+        if (request.url == apkUrl) return http.Response.bytes(apk, 200);
+        return http.Response('', 404);
+      });
+      addTearDown(client.close);
+      final runtime = _FixtureRuntime(package, apk);
+      addTearDown(runtime.close);
+      final catalog = LocalSources(root, client: client, runtime: runtime);
+
+      final repo = await catalog.addRepository(repoJson);
+      expect(repo.url, indexV2);
+      expect(repo.name, 'Cursed QA');
+      expect(repo.signingKey, signer.fingerprint);
+      expect(repo.packages.map((item) => item.id), [package]);
+      expect(repo.packages.single.isNsfw, isTrue);
+      expect(repo.packages.single.language, 'en');
+
+      final installed = await catalog.install(repo.packages.single);
+      expect(installed.packageId, package);
+      expect((await catalog.refreshRepository(repo.url)).url, indexV2);
+    });
+
+    test('reads a legacy index.min.json store and refuses APKs signed by '
+        'anyone else', () async {
+      final index = Uri.parse('https://legacy.example/repo/index.min.json');
+      var key = signer.fingerprint;
+      var apk = signedApk(stranger);
+      final client = MockClient((request) async {
+        switch (request.url.toString()) {
+          case 'https://legacy.example/repo/index.min.json':
+            return http.Response(
+              jsonEncode([
+                {
+                  'name': 'Tachiyomi: Example',
+                  'pkg': package,
+                  'apk': 'tachiyomi-all.example-v1.4.2.apk',
+                  'lang': 'all',
+                  'code': 2,
+                  'version': '1.4.2',
+                  'nsfw': 0,
+                },
+                {'name': 'Broken', 'pkg': '../escape', 'apk': 'x.apk'},
+              ]),
+              200,
+            );
+          case 'https://legacy.example/repo/repo.json':
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'name': 'Legacy QA',
+                  'website': 'https://legacy.example',
+                  'signingKeyFingerprint': key,
+                },
+              }),
+              200,
+            );
+          case 'https://legacy.example/repo/apk/tachiyomi-all.example-v1.4.2.apk':
+            return http.Response.bytes(apk, 200);
+        }
+        return http.Response('', 404);
+      });
+      addTearDown(client.close);
+      final runtime = _FixtureRuntime(package, signedApk(signer));
+      addTearDown(runtime.close);
+      final catalog = LocalSources(root, client: client, runtime: runtime);
+
+      final link = Uri(
+        scheme: 'tachiyomi',
+        host: 'add-repo',
+        queryParameters: {'url': '$index'},
+      );
+      final repo = await catalog.addRepository(link);
+      expect(repo.url, index);
+      final example = repo.packages.single;
+      expect(example.name, 'Example');
+      expect(
+        example.url,
+        Uri.parse(
+          'https://legacy.example/repo/apk/tachiyomi-all.example-v1.4.2.apk',
+        ),
+      );
+      expect(
+        example.icon,
+        Uri.parse('https://legacy.example/repo/icon/$package.png'),
+      );
+
+      await expectLater(
+        catalog.install(example),
+        throwsA(isA<LocalSourceSecurityException>()),
+      );
+      expect(await catalog.extensions(), isEmpty);
+
+      apk = signedApk(signer);
+      expect((await catalog.install(example)).packageId, package);
+
+      // A store that starts signing with another key is not an update.
+      key = stranger.fingerprint;
+      await expectLater(
+        catalog.refreshRepository(index),
+        throwsA(isA<LocalSourceSecurityException>()),
+      );
+      expect(
+        (await catalog.repositories()).single.signingKey,
+        signer.fingerprint,
+      );
+    });
+
+    test('refuses stores without a valid signing key', () async {
+      final index = Uri.parse('https://nokey.example/index.json');
+      final client = MockClient(
+        (request) async => http.Response(
+          jsonEncode({
+            'name': 'No key',
+            'signingKey': 'not-a-fingerprint',
+            'extensionList': {'extensions': []},
+          }),
+          200,
+        ),
+      );
+      addTearDown(client.close);
+      final catalog = LocalSources(root, client: client);
+      await expectLater(
+        catalog.addRepository(index),
+        throwsA(isA<LocalSourceSecurityException>()),
+      );
+      expect(await catalog.repositories(), isEmpty);
+    });
+  });
+
   test('disallows cross-origin catalog and chapter links', () async {
     server['/extension.json'] = _extension(
       catalog: 'https://elsewhere.example/catalog.json',
@@ -446,12 +676,14 @@ void main() {
       };
       server['/keiyoushi/extensions/repo/index.json'] = jsonEncode({
         'name': 'Keiyoushi',
+        'signingKey': ApkTestSigner(1).fingerprint,
         'extensionList': {
           'extensions': [
             entry(package, validApk),
+            // APKs may live on any host, but never behind plain HTTP.
             entry(
               'eu.kanade.tachiyomi.extension.en.invalid',
-              'https://other.example/example.apk',
+              'http://other.example/example.apk',
             ),
           ],
         },
@@ -495,6 +727,7 @@ void main() {
       );
       server['/keiyoushi/extensions/repo/index.json'] = jsonEncode({
         'name': 'Keiyoushi',
+        'signingKey': ApkTestSigner(1).fingerprint,
         'extensionList': {
           'extensions': [
             {
@@ -722,6 +955,61 @@ void main() {
       expect((await reopened.extensions()).single.id, source.id);
     },
   );
+}
+
+/// Encodes a Mihon v2 `NetworkExtensionStore` the way protobuf does.
+Uint8List _storeProto({
+  required String name,
+  required String signingKey,
+  required List<({String id, String name, String version, String apk})>
+  extensions,
+}) {
+  List<int> varint(int value) {
+    final out = <int>[];
+    while (value >= 0x80) {
+      out.add((value & 0x7f) | 0x80);
+      value >>= 7;
+    }
+    return out..add(value);
+  }
+
+  List<int> bytes(int field, List<int> value) => [
+    ...varint(field << 3 | 2),
+    ...varint(value.length),
+    ...value,
+  ];
+  List<int> text(int field, String value) => bytes(field, utf8.encode(value));
+  List<int> number(int field, int value) => [
+    ...varint(field << 3),
+    ...varint(value),
+  ];
+
+  return Uint8List.fromList([
+    ...text(1, name),
+    ...text(2, name),
+    ...text(3, signingKey),
+    ...bytes(4, text(1, 'https://store.example')),
+    ...bytes(101, [
+      for (final extension in extensions)
+        ...bytes(1, [
+          ...text(1, extension.name),
+          ...text(2, extension.id),
+          ...bytes(3, [
+            ...text(1, extension.apk),
+            ...text(2, 'https://cdn.example/icon.png'),
+          ]),
+          ...text(4, '1.6'),
+          ...number(5, 106001),
+          ...text(6, extension.version),
+          ...number(7, 3),
+          ...bytes(8, [
+            ...number(1, 1234),
+            ...text(2, 'Cursed'),
+            ...text(3, 'en'),
+          ]),
+        ]),
+    ]),
+  ]);
 }
 
 class _FixtureRuntime extends MihonRuntimeClient {

@@ -317,7 +317,8 @@ class MigrationSourcePickerBody extends HookConsumerWidget {
               for (final control in controls)
                 SliverToBoxAdapter(child: control),
               if (groups.isEmpty)
-                SliverFillRemaining(hasScrollBody: false, child: empty)
+                // Emoticons sizes with a LayoutBuilder, which cannot report intrinsics.
+                SliverFillRemaining(child: empty)
               else
                 SliverList.builder(itemCount: groups.length, itemBuilder: row),
             ],
