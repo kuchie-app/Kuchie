@@ -13,10 +13,11 @@ First public release.
 
 ### Mihon extension stores
 - Add any store Mihon accepts: v2 indexes (`index.pb` protobuf or JSON, gzipped or not, with `extensionListUrl`), `repo.json` with `index_v2`, legacy `index.min.json`, and `mihon://` / `tachiyomi://add-repo` links. Tested with Keiyoushi, Suwayomi and Yūzōnō stores.
-- APKs install only when their APK Signature Scheme v2/v3 signature verifies and the signer matches the store's signing key. Tampered APKs, APKs signed by another key, stores without a key, plain-HTTP stores and stores that change their key are refused with a clear message.
+- Every APK's Signature Scheme v2/v3 signature is verified. APKs signed by their store's key install directly; others install only after you trust their signer, as in Mihon. Tampered APKs, plain-HTTP stores and stores that change their key are refused with a clear message.
 
 ### Reader and app
-- Paged and continuous reading modes, chapter-to-chapter reading and page actions.
+- Paged and continuous reading modes, chapter-to-chapter reading and page actions. Webtoon (continuous vertical) is the default.
+- The page slider starts at page 1 on the left in every reading direction.
 - Live Activities and Dynamic Island for downloads, Liquid Glass controls on iOS 26, themes, alternate app icons and 20+ languages.
 - The in-app update check and project links point to github.com/kuchie-app/Kuchie by default.
 
@@ -32,10 +33,6 @@ First public release.
 - Untrusted APKs (not signed by their store's key, or from stores without a SHA-256 key) install after you trust their signer, as in Mihon. Anime extensions and unsupported extension-lib versions are left out, as in Mihon.
 - Fixed: UTF-8 requests to the runtime, full chapter data for page lists, empty URLs, large catalogues, long APK loads, and the 32-store limit.
 - Tested against 80 public stores and 211 extensions with Suwayomi-Server as a reference; see docs/extension-compatibility.md.
-
-### Reader
-- Webtoon (continuous vertical) is the default reading mode.
-- The page slider starts at page 1 on the left in every reading direction.
 
 ### Known limitations
 - Some extensions apply a changed setting only after Kuchie restarts, as in Mihon.
