@@ -37,7 +37,7 @@ enum DBKeys<T> {
   authUsername(null),
   // Blocks reuse of credentials left behind by a refused secure-storage delete.
   authCredentialsInvalidated(false),
-  readerMode(ReaderMode.singleHorizontalRTL),
+  readerMode(ReaderMode.webtoon),
   readerPadding(0.0),
   // Compensates for Flutter Linux's 53 px mouse-wheel step.
   readerMouseScrollSpeed(1.7),

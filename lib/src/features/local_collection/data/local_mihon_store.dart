@@ -62,14 +62,15 @@ Object? _decodeMihonDocument(Uint8List raw) {
   );
 }
 
+/// The store's signing key, as a lowercase SHA-256 hex digest.
+///
+/// Like Mihon, a store whose key is missing or not a SHA-256 (some publish an
+/// MD5, a SHA-1 or a placeholder) is still added: its APKs simply match no
+/// key, and each one needs the reader's explicit trust before it installs.
 String _mihonSigningKey(Object? raw) {
-  final key = raw is String ? raw.trim().toLowerCase() : null;
-  if (key == null || !LocalSources._digestPattern.hasMatch(key)) {
-    throw const LocalSourceSecurityException(
-      'The extension store has no valid signing key.',
-    );
-  }
-  return key;
+  if (raw is! String) return '';
+  final key = raw.replaceAll(RegExp(r'[\s:]'), '').toLowerCase();
+  return key.length <= 128 ? key : '';
 }
 
 /// Normalises v2 extensions (`extensionList.extensions`) to Kuchie packages.
@@ -90,7 +91,8 @@ Map<String, Object?>? _mihonV2Package(
   final version = value['versionName'];
   final sources = value['sources'];
   if (id is! String ||
-      !_mihonPackagePattern.hasMatch(id) ||
+      !_isMangaPackage(id) ||
+      !_supportedLib('${value['extensionLib'] ?? ''}') ||
       version is! String ||
       !_validVersion(version) ||
       sources is! List<Object?> ||
@@ -152,11 +154,13 @@ Map<String, Object?>? _mihonLegacyPackage(
   final name = value['name'];
   final language = value['lang'];
   if (id is! String ||
-      !_mihonPackagePattern.hasMatch(id) ||
-      apk is! String ||
-      !_apkFilePattern.hasMatch(apk) ||
+      !_isMangaPackage(id) ||
       version is! String ||
       !_validVersion(version) ||
+      // Legacy versions are "<lib>.<code>", e.g. 1.4.29 for lib 1.4.
+      !_supportedLib(version.substring(0, version.lastIndexOf('.'))) ||
+      apk is! String ||
+      !_apkFilePattern.hasMatch(apk) ||
       name is! String ||
       language is! String ||
       language.isEmpty ||
@@ -177,6 +181,15 @@ Map<String, Object?>? _mihonLegacyPackage(
     'nsfw': value['nsfw'] == 1,
   };
 }
+
+/// Mihon loads manga extensions only; Aniyomi's anime extensions share the
+/// stores but not the API.
+bool _isMangaPackage(String id) =>
+    _mihonPackagePattern.hasMatch(id) && !id.contains('.animeextension.');
+
+/// The extension-lib versions Mihon loads (ExtensionLoader's
+/// SUPPORTED_LIB_VERSIONS). Others would install and then never run.
+bool _supportedLib(String lib) => const {'1.4', '1.6'}.contains(lib);
 
 bool _validVersion(String version) {
   if (version.length > 64) return false;
@@ -333,8 +346,14 @@ class _MihonProto {
     throw const FormatException('Invalid store index.');
   }
 
+  // A known field with another wire type (an Aniyomi store reusing a number)
+  // is skipped, so one odd entry drops out instead of the whole store.
+
   int varint(int wire) {
-    if (wire != 0) throw const FormatException('Invalid store index.');
+    if (wire != 0) {
+      skip(wire);
+      return -1;
+    }
     return _varint();
   }
 
@@ -350,12 +369,20 @@ class _MihonProto {
   }
 
   String string(int wire) {
+    if (wire != 2) {
+      skip(wire);
+      return '';
+    }
     final (start, end) = _delimited(wire);
     if (end - start > 4096) throw const FormatException('Invalid store index.');
     return utf8.decode(Uint8List.sublistView(_bytes, start, end));
   }
 
   _MihonProto message(int wire) {
+    if (wire != 2) {
+      skip(wire);
+      return _MihonProto(_bytes, _offset, _offset);
+    }
     final (start, end) = _delimited(wire);
     return _MihonProto(_bytes, start, end);
   }

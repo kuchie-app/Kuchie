@@ -14,6 +14,7 @@ class MihonRuntimeSource {
     required this.language,
     this.homepage,
     this.supportsLatest = true,
+    this.preferences = const [],
   });
 
   final String id;
@@ -21,6 +22,100 @@ class MihonRuntimeSource {
   final String language;
   final Uri? homepage;
   final bool supportsLatest;
+
+  /// The source's saved settings, sent with every request so a freshly
+  /// started runtime reads the values the reader chose (Mihon's
+  /// ConfigurableSource preferences).
+  final List<MihonPreference> preferences;
+
+  MihonRuntimeSource withPreferences(List<MihonPreference> preferences) =>
+      MihonRuntimeSource(
+        id: id,
+        name: name,
+        language: language,
+        homepage: homepage,
+        supportsLatest: supportsLatest,
+        preferences: preferences,
+      );
+}
+
+enum MihonPreferenceKind {
+  checkBox('checkBoxPreference'),
+  toggle('switchPreferenceCompat'),
+  text('editTextPreference'),
+  list('listPreference'),
+  multiSelect('multiSelectListPreference');
+
+  const MihonPreferenceKind(this.wireName);
+  final String wireName;
+}
+
+/// One setting from an extension's preference screen.
+///
+/// The runtime describes each setting as `{key, <kind>: {...}}`; Kuchie keeps
+/// that shape so a changed value goes back exactly as the runtime expects.
+class MihonPreference {
+  const MihonPreference._(this.key, this.kind, this._fields);
+
+  /// Parses one runtime entry, or returns null for kinds Kuchie cannot show.
+  static MihonPreference? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final key = raw['key'];
+    if (key is! String || key.isEmpty || key.length > 256) return null;
+    for (final kind in MihonPreferenceKind.values) {
+      final fields = raw[kind.wireName];
+      if (fields is Map) {
+        return MihonPreference._(key, kind, Map<String, Object?>.from(fields));
+      }
+    }
+    return null;
+  }
+
+  final String key;
+  final MihonPreferenceKind kind;
+  final Map<String, Object?> _fields;
+
+  String get title => _label(_fields['title']) ?? key;
+  String get summary => _label(_fields['summary']) ?? '';
+  String? get dialogTitle => _label(_fields['dialogTitle']);
+  String? get dialogMessage => _label(_fields['dialogMessage']);
+
+  bool get checked => _fields['value'] == true;
+  String get text => switch (_fields['value'] ?? _fields['text']) {
+    final String value => value,
+    _ => '',
+  };
+  List<String> get entries => _strings(_fields['entries']);
+  List<String> get entryValues => _strings(_fields['entryValues']);
+
+  /// The chosen entry of a list setting, or -1 when none is chosen.
+  int get selectedIndex => switch (_fields['valueIndex']) {
+    final int index when index >= 0 && index < entryValues.length => index,
+    _ => -1,
+  };
+  Set<String> get selectedValues => _strings(_fields['values']).toSet();
+
+  MihonPreference withChecked(bool value) => _with({'value': value});
+  MihonPreference withText(String value) =>
+      _with({'value': value, 'text': value});
+  MihonPreference withSelectedIndex(int index) => _with({'valueIndex': index});
+  MihonPreference withSelectedValues(Set<String> values) => _with({
+    'values': [
+      for (final value in entryValues)
+        if (values.contains(value)) value,
+    ],
+  });
+
+  MihonPreference _with(Map<String, Object?> changes) =>
+      MihonPreference._(key, kind, {..._fields, ...changes});
+
+  Map<String, Object?> toJson() => {'key': key, kind.wireName: _fields};
+
+  static String? _label(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value : null;
+
+  static List<String> _strings(Object? value) =>
+      value is List ? [for (final item in value) '$item'] : const [];
 }
 
 class MihonRuntimeManga {
@@ -66,9 +161,54 @@ class MihonRuntimeChapter {
 }
 
 String _stableLocator(String locator) {
+  final chapter = _splitChapterLocator(locator).url;
   const marker = '|mangayomi-memo|';
-  final index = locator.lastIndexOf(marker);
-  return index > 0 ? locator.substring(0, index) : locator;
+  final index = chapter.lastIndexOf(marker);
+  return index > 0 ? chapter.substring(0, index) : chapter;
+}
+
+/// Kuchie keeps a runtime chapter as one string: the extension's URL, then
+/// the rest of the SChapter Mihon hands back to `getPageList` (name,
+/// scanlator, number, date). Sources such as Guya pick a translation group by
+/// scanlator, so pages need it. IDs come from the URL alone.
+const _chapterMarker = '|kuchie-chapter|';
+
+String _chapterLocator(String url, Map<String, Object?> chapter) {
+  final fields = {
+    for (final key in const [
+      'name',
+      'scanlator',
+      'chapter_number',
+      'date_upload',
+    ])
+      if (chapter[key] case final value?
+          when value is num || (value is String && value.isNotEmpty))
+        key: value is String && value.length > 1024
+            ? value.substring(0, 1024)
+            : value,
+  };
+  if (fields.isEmpty) return url;
+  return '$url$_chapterMarker${base64Url.encode(utf8.encode(jsonEncode(fields)))}';
+}
+
+({String url, Map<String, Object?> fields}) _splitChapterLocator(
+  String locator,
+) {
+  final index = locator.lastIndexOf(_chapterMarker);
+  if (index < 0) return (url: locator, fields: const {});
+  try {
+    final decoded = jsonDecode(
+      utf8.decode(
+        base64Url.decode(locator.substring(index + _chapterMarker.length)),
+      ),
+    );
+    return (
+      url: locator.substring(0, index),
+      fields: decoded is Map<String, Object?> ? decoded : const {},
+    );
+  } on FormatException {
+    return (url: locator.substring(0, index), fields: const {});
+  }
 }
 
 class MihonRuntimePage {
@@ -97,15 +237,20 @@ class MihonRuntimeClient {
   MihonRuntimeClient({
     http.Client? client,
     Future<Uri> Function()? resolveEndpoint,
+    Future<Map<String, String>> Function()? webViewHeaders,
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
+       _webViewHeaders = webViewHeaders,
        _resolveEndpoint = resolveEndpoint == null
            ? _startEmbeddedServer
            : (() async => (url: await resolveEndpoint(), token: null));
 
   static const _channel = MethodChannel('m_extension_server');
   static const _preferredPort = 34879;
-  static const _timeout = Duration(seconds: 45);
+  // Long enough for the runtime's 30-second Cloudflare solve plus the request
+  // itself; loading a large APK (dex to JVM translation) gets longer still.
+  static const _timeout = Duration(seconds: 90);
+  static const _loadTimeout = Duration(minutes: 3);
   static const _maxResponseBytes = 12 * 1024 * 1024;
   static const _maxApkBytes = 16 * 1024 * 1024;
   static final _sourceId = RegExp(r'^-?\d{1,19}$');
@@ -127,6 +272,9 @@ class MihonRuntimeClient {
 
   final http.Client _client;
   final bool _ownsClient;
+
+  /// Offers this device's WebViews to extensions (see RemoteWebViewServer).
+  final Future<Map<String, String>> Function()? _webViewHeaders;
   final Future<_RuntimeEndpoint> Function() _resolveEndpoint;
   final _keys = Expando<String>();
   Future<_RuntimeEndpoint>? _endpoint;
@@ -174,7 +322,7 @@ class MihonRuntimeClient {
       arguments: {'page': page, if (query.isNotEmpty) 'search': query},
     );
     final data = _object(response.result);
-    final mangas = _list(data['mangas'], limit: 1000);
+    final mangas = _list(data['mangas'], limit: 20000);
     return (
       items: [
         for (final manga in mangas)
@@ -204,6 +352,46 @@ class MihonRuntimeClient {
     );
   }
 
+  /// The source's settings with their current values; empty when the source
+  /// has none.
+  Future<List<MihonPreference>> preferences(
+    Uint8List apk,
+    MihonRuntimeSource source,
+  ) async {
+    final response = await _invoke(apk, 'preferencesManga', source: source);
+    return _preferences(response.result);
+  }
+
+  /// Applies one changed setting and returns every setting afterwards, since
+  /// a change can update other settings' values or summaries.
+  Future<List<MihonPreference>> setPreference(
+    Uint8List apk,
+    MihonRuntimeSource source,
+    MihonPreference changed,
+  ) async {
+    final response = await _invoke(
+      apk,
+      'setPreferenceManga',
+      source: source,
+      arguments: {
+        'preferences': [
+          for (final item in source.preferences)
+            if (item.key != changed.key) item.toJson(),
+          changed.toJson(),
+          {'key': _bridgeContextKey, 'changedPreferenceKey': changed.key},
+        ],
+      },
+    );
+    return _preferences(response.result);
+  }
+
+  static const _bridgeContextKey = '__mangayomi_bridge_context__';
+
+  static List<MihonPreference> _preferences(Object? result) => [
+    for (final entry in _list(result, limit: 512))
+      ?MihonPreference.tryParse(entry),
+  ];
+
   Future<List<MihonRuntimeChapter>> chapters(
     Uint8List apk,
     MihonRuntimeSource source,
@@ -231,10 +419,14 @@ class MihonRuntimeClient {
       'getPageList',
       source: source,
       arguments: {
-        'chapterData': {'url': chapter.locator, 'name': chapter.title},
+        'chapterData': {
+          'name': chapter.title,
+          ..._splitChapterLocator(chapter.locator).fields,
+          'url': _splitChapterLocator(chapter.locator).url,
+        },
       },
     );
-    final entries = _list(response.result, limit: 4000);
+    final entries = _list(response.result, limit: 20000);
     if (entries.isEmpty) {
       throw const MihonRuntimeException('The extension returned no pages.');
     }
@@ -353,6 +545,8 @@ class MihonRuntimeClient {
     final body = {
       'method': method,
       if (source != null) 'sourceId': source.id,
+      if (source != null && source.preferences.isNotEmpty)
+        'preferences': [for (final item in source.preferences) item.toJson()],
       ...arguments,
     };
 
@@ -360,6 +554,7 @@ class MihonRuntimeClient {
       _RuntimeEndpoint endpoint,
     ) async {
       final target = endpoint.url.replace(path: '/dalvik');
+      final extraHeaders = await _webViewHeaders?.call() ?? const {};
       try {
         return (
           endpoint: endpoint.url,
@@ -367,6 +562,7 @@ class MihonRuntimeClient {
             target,
             token: endpoint.token,
             jsonBody: {...body, 'extensionId': key},
+            extraHeaders: extraHeaders,
           ),
         );
       } on MihonRuntimeException catch (error) {
@@ -377,6 +573,7 @@ class MihonRuntimeClient {
             target,
             token: endpoint.token,
             jsonBody: {...body, 'data': base64Encode(apk)},
+            extraHeaders: extraHeaders,
           ),
         );
       }
@@ -396,16 +593,25 @@ class MihonRuntimeClient {
     Uri uri, {
     required String? token,
     Map<String, Object?>? jsonBody,
+    Map<String, String> extraHeaders = const {},
   }) async {
     final request = http.Request(jsonBody == null ? 'GET' : 'POST', uri)
       ..followRedirects = false
+      ..headers.addAll(extraHeaders)
       ..headers['Accept'] = 'application/json';
     if (token != null) request.headers['X-Kuchie-Runtime-Token'] = token;
     if (jsonBody != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(jsonBody);
+      // The runtime's HTTP server reads a body without a charset as ASCII,
+      // which garbles non-Latin manga URLs (Chinese, Japanese, Thai...) and
+      // sends the extension to pages that do not exist.
+      request.headers['Content-Type'] = 'application/json; charset=utf-8';
+      request.bodyBytes = utf8.encode(jsonEncode(jsonBody));
     }
-    final response = await _client.send(request).timeout(_timeout);
+    // A request that carries the APK makes the runtime load it first.
+    final timeout = jsonBody?.containsKey('data') == true
+        ? _loadTimeout
+        : _timeout;
+    final response = await _client.send(request).timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       await response.stream.listen(null).cancel();
       throw MihonRuntimeException(
@@ -414,7 +620,7 @@ class MihonRuntimeClient {
       );
     }
     final bytes = BytesBuilder(copy: false);
-    await for (final chunk in response.stream.timeout(_timeout)) {
+    await for (final chunk in response.stream.timeout(timeout)) {
       if (bytes.length + chunk.length > _maxResponseBytes) {
         throw const MihonRuntimeException(
           'The extension response is too large.',
@@ -480,7 +686,7 @@ class MihonRuntimeClient {
   static MihonRuntimeChapter _parseChapter(
     Map<String, Object?> data,
   ) => MihonRuntimeChapter(
-    locator: _locator(data['url']),
+    locator: _chapterLocator(_locator(data['url']), data),
     title:
         _labelOrNull(data['name'], max: 1024) ??
         switch (data['chapter_number']) {

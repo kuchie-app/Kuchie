@@ -844,7 +844,8 @@ class ReaderWrapper extends HookConsumerWidget {
                     : null,
                 resolvedReaderMode: resolvedReaderMode,
                 autoScrollSupported: onToggleAutoScroll != null,
-                reverseSeekBar: isRTLReaderMode(resolvedReaderMode),
+                // Page 1 sits at the left in every reading direction.
+                reverseSeekBar: false,
                 onChanged: onChanged,
                 onOpenSettings: () async {
                   await showReaderSettingsSheet(

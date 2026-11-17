@@ -16,6 +16,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/db_keys.dart';
+import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/browse_center/presentation/extension/controller/extension_update_badge.dart';
 import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
@@ -118,8 +120,10 @@ ChapterPagesDto _chapterPages() => ChapterPagesDto(
   pages: _localPages(3),
 );
 
-Future<ProviderContainer> _container() async {
-  SharedPreferences.setMockInitialValues(const {});
+Future<ProviderContainer> _container({
+  Map<String, Object> preferences = const {},
+}) async {
+  SharedPreferences.setMockInitialValues(preferences);
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
     overrides: [
@@ -226,9 +230,14 @@ void main() {
     expect(find.byType(DesktopTopBar), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // And the reader.
+    // And the reader, in paged mode so the wide window shows a spread
+    // (webtoon is the default).
     await tester.pumpWidget(const SizedBox.shrink());
-    container = await _container();
+    container = await _container(
+      preferences: {
+        DBKeys.readerMode.name: ReaderMode.singleHorizontalRTL.index,
+      },
+    );
     addTearDown(container.dispose);
     await _pump(tester, container, ReaderScreen(mangaId: 1, chapterId: 1));
     // Wide window -> spread view on the first spread: indicator reads 2 / 3.

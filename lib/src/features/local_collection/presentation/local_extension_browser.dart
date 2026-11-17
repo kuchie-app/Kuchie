@@ -55,6 +55,7 @@ import '../data/local_sources.dart';
 import '../data/package_catalog_index.dart';
 import 'local_reader.dart';
 import 'local_series_personal.dart';
+import 'local_source_settings.dart';
 import 'local_ui.dart';
 
 typedef _SourceLists = ({
@@ -228,9 +229,39 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
       '${package.name} ${package.version}\n${package.repository.host}',
     );
     if (accepted && mounted) {
-      await _perform(package.id, () => _sources.install(package));
+      await _perform(package.id, () async {
+        try {
+          await _sources.install(package);
+        } on LocalSourceUntrustedException catch (error) {
+          // Mihon's "untrusted extension": the APK verifies, but its signer
+          // is not the store's key. Install only if the reader trusts it.
+          if (!mounted || !await _trustSigner(package, error.signer)) return;
+          await _sources.install(package, trustSigner: error.signer);
+        }
+      });
     }
   }
+
+  Future<bool> _trustSigner(LocalSourcePackage package, String signer) =>
+      localConfirm(
+        context,
+        localText(context, 'Untrusted extension', 'Ekstensi tidak tepercaya'),
+        localText(
+          context,
+          '${package.name} ${package.version} is not signed by the key '
+              '${package.repository.host} publishes. Install it only if you '
+              'trust its author.\n\nSigner: ${_groupHex(signer)}',
+          '${package.name} ${package.version} tidak ditandatangani dengan '
+              'kunci yang diterbitkan ${package.repository.host}. Pasang '
+              'hanya jika Anda memercayai pembuatnya.\n\nPenanda tangan: '
+              '${_groupHex(signer)}',
+        ),
+      );
+
+  static String _groupHex(String hex) => [
+    for (var i = 0; i < hex.length; i += 4)
+      hex.substring(i, (i + 4).clamp(0, hex.length)),
+  ].join(' ');
 
   Future<void> _uninstall(LocalExtension extension) async {
     if (await localConfirm(
@@ -1185,6 +1216,20 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
   int _requestGeneration = 0;
   String _query = '';
 
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LocalSourceSettingsScreen(
+          sources: widget.services.sources,
+          extension: widget.extension,
+        ),
+      ),
+    );
+    // A changed setting can change what the source lists (language,
+    // mirror, content filters), so reload from the first page.
+    if (mounted) _paging.refresh();
+  }
+
   Future<ServerPage<LocalSourceManga>> _loadPage(int page) async {
     final generation = _requestGeneration;
     final result = await widget.services.sources.browsePage(
@@ -1331,6 +1376,18 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
                           ? FluentIcons.grid_24_regular
                           : FluentIcons.list_24_regular,
                     ),
+                    if (extension.canHaveSettings)
+                      AppleGlassToolbarMenuItem(
+                        id: 'source-settings',
+                        title: localText(
+                          context,
+                          'Source settings',
+                          'Pengaturan sumber',
+                        ),
+                        symbol: 'gearshape',
+                        onSelected: _openSettings,
+                        fallbackIcon: FluentIcons.settings_24_regular,
+                      ),
                     if (extension.homepage case final url?)
                       AppleGlassToolbarMenuItem(
                         id: 'home',

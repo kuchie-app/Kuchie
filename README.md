@@ -125,10 +125,8 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ## Known limitations
 
-- **Mihon APK extensions** run in an embedded JVM, not on Android. In a random sample of 44 extensions from Keiyoushi, Yūzōnō and Suwayomi, 30 browsed, opened details, listed chapters and loaded pages end to end. The rest need features Kuchie does not have yet or fail outside Kuchie:
-  - sites behind Cloudflare challenges, which Mihon solves in a WebView (Kuchie has no WebView bridge yet);
-  - extensions that need their own settings first, such as the Suwayomi extension's server address;
-  - a few extensions the runtime still translates incorrectly, and sites that are offline.
+- **Mihon APK extensions** run in an embedded JVM, not on Android. Kuchie was tested against 80 public stores and 211 random extensions, with Suwayomi-Server as a reference: every failure left is one the extension, its site or its store has elsewhere too (dead sites, corrupt APKs, extensions built for Mihon forks). See the [compatibility report](docs/extension-compatibility.md).
+- Some extensions apply a changed setting only after Kuchie restarts, as in Mihon.
 - Android and web launch projects can be added to the shared Flutter source later; the checked-in target is iOS.
 
 ## Contributing
@@ -142,7 +140,9 @@ Kuchie stands on the work of these projects and their contributors:
 - [Suwayomi-Tsumiru](https://github.com/Suwayomi/Suwayomi-Tsumiru): the Flutter client Kuchie is based on (MPL-2.0), and [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), which powers the Server collection.
 - [Mihon](https://github.com/mihonapp/mihon) and the Tachiyomi community: the extension store formats, the extension API and the signing-key trust model Kuchie follows.
 - [Keiyoushi](https://github.com/keiyoushi/extensions), [Yūzōnō](https://github.com/yuzono) and the other extension store maintainers.
-- [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server) by kodjodevf, and the iOS runtime build it is embedded from.
+- [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server) by kodjodevf and [1Selxo's iOS runtime fork](https://github.com/1Selxo/M-Extension-Server), which Kuchie embeds with the patches in `ios/MihonRuntime/patches/`.
+- [Mangayomi](https://github.com/kodjodevf/mangayomi): Kuchie's remote WebView bridge for Cloudflare challenges is adapted from Mangayomi's (Apache-2.0).
+- [flutter_inappwebview](https://github.com/pichillilorenzo/flutter_inappwebview) for the headless WebViews.
 - [OpenJDK](https://openjdk.org) (Zero interpreter) for the on-device extension runtime.
 - [Flutter](https://flutter.dev) and the open-source packages listed in [`pubspec.yaml`](pubspec.yaml).
 - The translators of Suwayomi-Tsumiru and Kuchie; their notices are in [`assets/licenses/`](assets/licenses/).

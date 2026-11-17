@@ -1,0 +1,16 @@
+diff --git a/AndroidCompat/src/main/java/android/view/View.java b/AndroidCompat/src/main/java/android/view/View.java
+index 3ff9c73..e286e3e 100644
+--- a/AndroidCompat/src/main/java/android/view/View.java
++++ b/AndroidCompat/src/main/java/android/view/View.java
+@@ -3240,7 +3240,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
+     }
+ 
+     public final ViewParent getParent() {
+-        throw new RuntimeException("Stub!");
++        // Views here are never attached to a window, so, like a detached view
++        // on Android, they have no parent. Extensions check it before removing
++        // a WebView (Turnstile solvers).
++        return null;
+     }
+ 
+     public void setScrollX(int value) {

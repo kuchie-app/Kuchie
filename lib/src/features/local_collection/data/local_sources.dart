@@ -11,6 +11,7 @@ import 'package:pub_semver/pub_semver.dart';
 import 'apk_signature.dart';
 import 'local_catalog.dart';
 import 'local_mihon_runtime.dart';
+import 'remote_webview/remote_webview_server.dart';
 
 part 'local_mihon_store.dart';
 part 'local_shinigami_source.dart';
@@ -23,6 +24,17 @@ class LocalSourceSecurityException extends FormatException {
 
   /// The URL itself was refused (not HTTPS, or carried credentials).
   final bool insecureUrl;
+}
+
+/// An APK that verifies but is not signed with its store's key. Mihon shows
+/// such extensions as untrusted and installs one only after the reader trusts
+/// its signer; Kuchie asks the same.
+class LocalSourceUntrustedException extends LocalSourceSecurityException {
+  const LocalSourceUntrustedException(this.signer)
+    : super('The extension is not signed by its store.');
+
+  /// SHA-256 of the APK's signing certificate, to show and to trust.
+  final String signer;
 }
 
 class LocalSourceRepository {
@@ -110,6 +122,9 @@ class LocalExtension {
   bool get chaptersNewestFirst =>
       _manifest.isShinigami || _runtimeSource != null;
   bool get isNsfw => _manifest.isNsfw;
+
+  /// APK sources can offer their own settings (Mihon's source preferences).
+  bool get canHaveSettings => _runtimeSource != null;
 }
 
 typedef LocalSourcePage = ({Uri url, Map<String, String> headers});
@@ -188,7 +203,15 @@ class LocalSources {
     bool allowInsecureLoopback = false,
   }) : _directory = Directory('${root.path}/sources'),
        _client = client ?? http.Client(),
-       _runtime = runtime ?? MihonRuntimeClient(),
+       _runtime =
+           runtime ??
+           MihonRuntimeClient(
+             // Only the app's own runtime gets WebViews; tests and other
+             // hosts keep their own clients.
+             webViewHeaders: Platform.isIOS
+                 ? RemoteWebViewServer.instance.headers
+                 : null,
+           ),
        _ownsRuntime = runtime == null,
        _ownsClient = client == null,
        _allowInsecureLoopback = allowInsecureLoopback;
@@ -197,10 +220,11 @@ class LocalSources {
   static const _maxManifestBytes = 128 * 1024;
   static const _maxFeedBytes = 2 * 1024 * 1024;
   static const _maxApkBytes = 16 * 1024 * 1024;
-  static const _maxStateBytes = 12 * 1024 * 1024;
-  static const _maxRepositories = 32;
+  static const _maxStateBytes = 48 * 1024 * 1024;
+  // Mihon sets no limit; this only guards against runaway storage.
+  static const _maxRepositories = 256;
   static const _maxPackages = 1000;
-  static const _maxInstalled = 128;
+  static const _maxInstalled = 512;
   static const _maxCacheEntries = 24;
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
   static final _idPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$');
@@ -372,7 +396,11 @@ class LocalSources {
         if (next == _keiyoushiIndex && url != _keiyoushiIndex) {
           return (next, await _fetchMihonStore(next));
         }
-        return _readMihonStore(next, await _mihonDocument(next), depth: depth + 1);
+        return _readMihonStore(
+          next,
+          await _mihonDocument(next),
+          depth: depth + 1,
+        );
       }
       final base = _mihonBase(indexUrl);
       final list = document is List<Object?>
@@ -433,7 +461,13 @@ class LocalSources {
     state.repositories.remove(_repositoryUrl(index).toString());
   });
 
-  Future<LocalExtension> install(LocalSourcePackage package) async {
+  /// Installs [package]. An APK whose signer is not the store's key installs
+  /// only when [trustSigner] names that signer (the reader agreed) or the
+  /// reader trusted this package version and signer before.
+  Future<LocalExtension> install(
+    LocalSourcePackage package, {
+    String? trustSigner,
+  }) async {
     _requirePackage(await _readState(), package);
     if (package._native) {
       return _installManifest(
@@ -441,7 +475,9 @@ class LocalSources {
         package: package,
       );
     }
-    if (package._mihon) return _installMihon(package);
+    if (package._mihon) {
+      return _installMihon(package, trustSigner: trustSigner);
+    }
     final bytes = await _download(package.url, _maxManifestBytes);
     if (_sha256(bytes) != package.sha256) {
       throw const LocalSourceSecurityException(
@@ -461,7 +497,10 @@ class LocalSources {
     return _installManifest(manifest, package: package);
   }
 
-  Future<LocalExtension> _installMihon(LocalSourcePackage package) async {
+  Future<LocalExtension> _installMihon(
+    LocalSourcePackage package, {
+    String? trustSigner,
+  }) async {
     final signingKey = package.signingKey;
     if (signingKey == null) {
       throw StateError('Refresh the extension list and try again.');
@@ -478,10 +517,15 @@ class LocalSources {
     } on ApkSignatureException catch (error) {
       throw LocalSourceSecurityException(error.message);
     }
+    final trustKey = '${package.id}:${package.version}';
+    final signer = signers.last;
+    var newlyTrusted = false;
     if (!signers.contains(signingKey)) {
-      throw const LocalSourceSecurityException(
-        'The extension is not signed by its store.',
-      );
+      final trusted = (await _readState()).trusted[trustKey];
+      if (trusted != signer && trustSigner != signer) {
+        throw LocalSourceUntrustedException(signer);
+      }
+      newlyTrusted = trusted != signer;
     }
     final sources = await _runtime.inspect(apk, packageName: package.id);
     if (sources.isEmpty || sources.length > 256) {
@@ -507,7 +551,21 @@ class LocalSources {
       runtimeSources: sources,
     );
     try {
-      return await _installManifest(manifest, package: package, apk: apk);
+      final installed = await _installManifest(
+        manifest,
+        package: package,
+        apk: apk,
+      );
+      if (newlyTrusted) {
+        await _change<void>((state) {
+          // Trust covers one version of one package, as in Mihon.
+          state.trusted.removeWhere(
+            (key, _) => key.startsWith('${package.id}:'),
+          );
+          state.trusted[trustKey] = signer;
+        });
+      }
+      return installed;
     } finally {
       await _pruneApks(package.id);
     }
@@ -647,8 +705,65 @@ class LocalSources {
   Future<void> uninstall(String id) async {
     final key = _packageId(id);
     if (!_idPattern.hasMatch(key)) throw ArgumentError.value(id);
-    await _change<void>((state) => state.extensions.remove(key));
+    await _change<void>((state) {
+      state.extensions.remove(key);
+      state.preferences.removeWhere((source, _) => _packageId(source) == key);
+    });
     await _pruneApks(key);
+  }
+
+  /// The settings an APK source offers, with their current values. Empty for
+  /// sources without settings and for non-APK sources.
+  Future<List<MihonPreference>> sourcePreferences(String id) async {
+    final source = await _enabled(id);
+    final runtimeSource = source._runtimeSource;
+    if (runtimeSource == null) return const [];
+    final preferences = await _runtime.preferences(
+      await _installedApk(source),
+      runtimeSource,
+    );
+    await _savePreferences(source.id, preferences);
+    return preferences;
+  }
+
+  /// Changes one setting and returns every setting afterwards.
+  Future<List<MihonPreference>> setSourcePreference(
+    String id,
+    MihonPreference changed,
+  ) async {
+    final source = await _enabled(id);
+    final runtimeSource = source._runtimeSource;
+    if (runtimeSource == null) {
+      throw StateError('This source has no settings.');
+    }
+    final preferences = await _runtime.setPreference(
+      await _installedApk(source),
+      runtimeSource,
+      changed,
+    );
+    await _savePreferences(source.id, preferences);
+    return preferences;
+  }
+
+  Future<void> _savePreferences(String id, List<MihonPreference> preferences) =>
+      _change<void>((state) {
+        if (!state.extensions.containsKey(_packageId(id))) return;
+        if (preferences.isEmpty) {
+          state.preferences.remove(id);
+        } else {
+          state.preferences[id] = [
+            for (final item in preferences) item.toJson(),
+          ];
+        }
+      });
+
+  static List<MihonPreference> _savedPreferences(
+    _SourceState state,
+    String id,
+  ) {
+    final saved = state.preferences[id];
+    if (saved is! List) return const [];
+    return [for (final entry in saved) ?MihonPreference.tryParse(entry)];
   }
 
   Future<List<LocalSourceManga>> browse(
@@ -996,7 +1111,7 @@ class LocalSources {
     String locator,
   ) async {
     final runtimeSource = source._runtimeSource;
-    if (runtimeSource == null || locator.isEmpty || locator.length > 32768) {
+    if (runtimeSource == null || locator.length > 32768) {
       throw const FormatException('Invalid chapter locator.');
     }
     final pages = await _runtime.pages(
@@ -1004,7 +1119,7 @@ class LocalSources {
       runtimeSource,
       MihonRuntimeChapter(locator: locator, title: ''),
     );
-    if (pages.isEmpty || pages.length > 4000) {
+    if (pages.isEmpty || pages.length > 20000) {
       throw const FormatException('The extension returned no valid pages.');
     }
     return [
@@ -1056,20 +1171,31 @@ class LocalSources {
   }
 
   Future<LocalExtension> _enabled(String id) async {
-    final raw = (await _readState()).extensions[_packageId(id)];
+    final state = await _readState();
+    final raw = state.extensions[_packageId(id)];
     if (raw != null) {
       final extension = _parseInstalled(raw);
       if (extension.enabled) {
-        if (id == extension.id || id == extension.packageId) return extension;
-        final source = extension._manifest.runtimeSources
-            .where((source) => id == '${extension.packageId}:${source.id}')
-            .firstOrNull;
+        if (extension._runtimeSource == null &&
+            (id == extension.id || id == extension.packageId)) {
+          return extension;
+        }
+        // A package ID alone opens its first source, like the listing does.
+        final source = id == extension.packageId
+            ? extension._runtimeSource
+            : extension._manifest.runtimeSources
+                  .where(
+                    (source) => id == '${extension.packageId}:${source.id}',
+                  )
+                  .firstOrNull;
         if (source != null) {
           return LocalExtension._(
             extension._manifest,
             true,
             extension.repository,
-            runtimeSource: source,
+            runtimeSource: source.withPreferences(
+              _savedPreferences(state, '${extension.packageId}:${source.id}'),
+            ),
           );
         }
       }
@@ -1103,10 +1229,16 @@ class LocalSources {
     if (url == _keiyoushiIndex && data['format'] == 'kuchie.keiyoushi.v2') {
       // Saved before stores carried their key; Keiyoushi publishes this one.
       const key = _keiyoushiSigningKey;
-      return LocalSourceRepository._(url, 'Keiyoushi', [
-        for (final entry in _list(data, 'extensions', 20000))
-          _parseMihonPackage(url, _object(entry), signingKey: key),
-      ], hasNativeAdapters: true, signingKey: key);
+      return LocalSourceRepository._(
+        url,
+        'Keiyoushi',
+        [
+          for (final entry in _list(data, 'extensions', 20000))
+            _parseMihonPackage(url, _object(entry), signingKey: key),
+        ],
+        hasNativeAdapters: true,
+        signingKey: key,
+      );
     }
     if (data['format'] == 'kuchie.mihon-store.v1') {
       final key = _mihonSigningKey(data['signingKey']);
@@ -1394,12 +1526,8 @@ class LocalSources {
     int maxBytes, {
     String accept = 'application/json',
     _Redirects redirects = _Redirects.none,
-  }) async => (await _fetch(
-    url,
-    maxBytes,
-    accept: accept,
-    redirects: redirects,
-  )).bytes;
+  }) async =>
+      (await _fetch(url, maxBytes, accept: accept, redirects: redirects)).bytes;
 
   Future<({Uint8List bytes, bool redirected})> _fetch(
     Uri url,
@@ -1535,7 +1663,7 @@ class LocalSources {
 
   Future<_SourceState> _readState() async {
     final file = _state;
-    if (!await file.exists()) return _SourceState({}, {});
+    if (!await file.exists()) return _SourceState({}, {}, {}, {});
     if (await file.length() > _maxStateBytes) {
       throw const FormatException('Saved local extension data is too large.');
     }
@@ -1543,6 +1671,8 @@ class LocalSources {
     return _SourceState(
       _object(data['repositories']),
       _object(data['extensions']),
+      data['preferences'] == null ? {} : _object(data['preferences']),
+      data['trusted'] == null ? {} : _object(data['trusted']),
     );
   }
 
@@ -1554,6 +1684,8 @@ class LocalSources {
           jsonEncode({
             'repositories': state.repositories,
             'extensions': state.extensions,
+            if (state.preferences.isNotEmpty) 'preferences': state.preferences,
+            if (state.trusted.isNotEmpty) 'trusted': state.trusted,
           }),
         );
         if (bytes.length > _maxStateBytes) {
@@ -1658,10 +1790,23 @@ enum _Redirects {
 }
 
 class _SourceState {
-  const _SourceState(this.repositories, this.extensions);
+  const _SourceState(
+    this.repositories,
+    this.extensions,
+    this.preferences,
+    this.trusted,
+  );
 
   final Map<String, Object?> repositories;
   final Map<String, Object?> extensions;
+
+  /// Extension settings by source ID (`package:sourceId`), as the runtime
+  /// last reported them.
+  final Map<String, Object?> preferences;
+
+  /// Signers the reader trusted, by `package:version` (Mihon's trusted
+  /// extensions).
+  final Map<String, Object?> trusted;
 }
 
 Map<String, Object?> _repositoryJson(LocalSourceRepository repo) =>

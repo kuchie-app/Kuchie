@@ -243,7 +243,9 @@ class ReaderBottomDock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final systemBottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final isRtl = isRTLReaderMode(resolvedReaderMode);
+    // The chapter buttons follow the seek bar: previous on the side where
+    // the bar starts.
+    final isRtl = reverseSeekBar;
     final l10n = context.l10n;
     final navSurface = readerNavSurface(context.theme.colorScheme);
     final chapterButtons = chapterNavCallbacks(

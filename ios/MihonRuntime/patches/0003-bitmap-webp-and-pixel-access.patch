@@ -1,0 +1,185 @@
+diff --git a/AndroidCompat/src/main/java/android/graphics/Bitmap.java b/AndroidCompat/src/main/java/android/graphics/Bitmap.java
+index 613f21a..87aa9de 100644
+--- a/AndroidCompat/src/main/java/android/graphics/Bitmap.java
++++ b/AndroidCompat/src/main/java/android/graphics/Bitmap.java
+@@ -253,6 +253,34 @@ public final class Bitmap {
+         image.getRGB(x, y, width, height, pixels, offset, stride);
+     }
+ 
++    // Pixel access as on Android: ARGB ints, row by row with a stride.
++    // Extensions that descramble pages copy tiles with these.
++    public void setPixels(@ColorInt int[] pixels, int offset, int stride,
++                          int x, int y, int width, int height) {
++        checkPixelsAccess(x, y, width, height, offset, stride, pixels);
++
++        image.setRGB(x, y, width, height, pixels, offset, stride);
++    }
++
++    @ColorInt
++    public int getPixel(int x, int y) {
++        if (x < 0 || y < 0 || x >= width || y >= height) {
++            throw new IllegalArgumentException("x and y must be inside the bitmap");
++        }
++        return image.getRGB(x, y);
++    }
++
++    public void setPixel(int x, int y, @ColorInt int color) {
++        if (x < 0 || y < 0 || x >= width || y >= height) {
++            throw new IllegalArgumentException("x and y must be inside the bitmap");
++        }
++        image.setRGB(x, y, color);
++    }
++
++    public boolean isRecycled() {
++        return false;
++    }
++
+     public void eraseColor(int c) {
+         java.awt.Color color = Color.valueOf(c).toJavaColor();
+         Graphics2D graphics = image.createGraphics();
+diff --git a/AndroidCompat/src/main/java/android/graphics/BitmapFactory.java b/AndroidCompat/src/main/java/android/graphics/BitmapFactory.java
+index dbbe126..7db6d7f 100644
+--- a/AndroidCompat/src/main/java/android/graphics/BitmapFactory.java
++++ b/AndroidCompat/src/main/java/android/graphics/BitmapFactory.java
+@@ -2,8 +2,8 @@ package android.graphics;
+ 
+ import java.awt.image.BufferedImage;
+ import java.io.ByteArrayInputStream;
+-import java.io.InputStream;
+ import java.io.IOException;
++import java.io.InputStream;
+ import java.util.Iterator;
+ import javax.imageio.ImageIO;
+ import javax.imageio.ImageReader;
+@@ -11,41 +11,49 @@ import javax.imageio.stream.ImageInputStream;
+ 
+ public class BitmapFactory {
+     public static Bitmap decodeStream(InputStream inputStream) {
+-        Bitmap bitmap = null;
+-
+         try {
+-            ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream);
+-            Iterator<ImageReader> imageReaders = ImageIO.getImageReaders(imageInputStream);
+-
+-            if (!imageReaders.hasNext()) {
+-                throw new IllegalArgumentException("no reader for image");
+-            }
+-
+-            ImageReader imageReader = imageReaders.next();
+-            imageReader.setInput(imageInputStream);
+-
+-            BufferedImage image = imageReader.read(0, imageReader.getDefaultReadParam());
+-            bitmap = new Bitmap(image);
+-
+-            imageReader.dispose();
++            return decode(inputStream.readAllBytes());
+         } catch (IOException ex) {
+             throw new RuntimeException(ex);
+         }
+-
+-        return bitmap;
+     }
+ 
+     public static Bitmap decodeByteArray(byte[] data, int offset, int length) {
+-        Bitmap bitmap = null;
++        byte[] slice = new byte[length];
++        System.arraycopy(data, offset, slice, 0, length);
++        return decode(slice);
++    }
+ 
+-        ByteArrayInputStream byteArrayStream = new ByteArrayInputStream(data);
+-        try {
+-            BufferedImage image = ImageIO.read(byteArrayStream);
+-            bitmap = new Bitmap(image);
++    /**
++     * Tries every registered reader for the image in turn. A reader backed by
++     * a native library (webp-imageio) cannot load where JNI libraries are
++     * unavailable, such as on iOS; the pure-Java reader after it (TwelveMonkeys)
++     * then decodes the same bytes, as Android's built-in decoders would.
++     */
++    private static Bitmap decode(byte[] bytes) {
++        Throwable failure = null;
++        try (ImageInputStream probe = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
++            Iterator<ImageReader> readers = ImageIO.getImageReaders(probe);
++            if (!readers.hasNext()) {
++                throw new IllegalArgumentException("no reader for image");
++            }
++            while (readers.hasNext()) {
++                ImageReader reader = readers.next();
++                try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
++                    reader.setInput(input);
++                    BufferedImage image = reader.read(0, reader.getDefaultReadParam());
++                    if (image != null) {
++                        return new Bitmap(image);
++                    }
++                } catch (IOException | RuntimeException | LinkageError error) {
++                    failure = error;
++                } finally {
++                    reader.dispose();
++                }
++            }
+         } catch (IOException ex) {
+             throw new RuntimeException(ex);
+         }
+-
+-        return bitmap;
++        throw new RuntimeException("no reader could decode the image", failure);
+     }
+ }
+diff --git a/AndroidCompat/src/test/kotlin/android/graphics/BitmapFactoryWebPTest.kt b/AndroidCompat/src/test/kotlin/android/graphics/BitmapFactoryWebPTest.kt
+new file mode 100644
+index 0000000..88d2144
+--- /dev/null
++++ b/AndroidCompat/src/test/kotlin/android/graphics/BitmapFactoryWebPTest.kt
+@@ -0,0 +1,20 @@
++package android.graphics
++
++import java.util.Base64
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class BitmapFactoryWebPTest {
++    // A 1x1 lossless WebP. Extensions that descramble pages decode WebP through
++    // BitmapFactory; it must work even where the native WebP reader cannot load.
++    private val webp = Base64.getDecoder().decode("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==")
++
++    @Test
++    fun `decodes WebP without the native reader`() {
++        val bitmap = BitmapFactory.decodeByteArray(webp, 0, webp.size)
++        assertEquals(1, bitmap.width)
++        assertEquals(1, bitmap.height)
++        val streamed = BitmapFactory.decodeStream(webp.inputStream())
++        assertEquals(1, streamed.width)
++    }
++}
+diff --git a/AndroidCompat/src/test/kotlin/android/graphics/BitmapPixelsTest.kt b/AndroidCompat/src/test/kotlin/android/graphics/BitmapPixelsTest.kt
+new file mode 100644
+index 0000000..9746e4a
+--- /dev/null
++++ b/AndroidCompat/src/test/kotlin/android/graphics/BitmapPixelsTest.kt
+@@ -0,0 +1,25 @@
++package android.graphics
++
++import kotlin.test.Test
++import kotlin.test.assertContentEquals
++import kotlin.test.assertEquals
++
++class BitmapPixelsTest {
++    @Test
++    fun `copies a tile with getPixels and setPixels, as descramblers do`() {
++        val source = Bitmap.createBitmap(4, 2, Bitmap.Config.ARGB_8888)
++        source.setPixel(1, 0, 0xFF112233.toInt())
++        source.setPixel(2, 1, 0xFF445566.toInt())
++
++        val tile = IntArray(2 * 2)
++        source.getPixels(tile, 0, 2, 1, 0, 2, 2)
++        val target = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
++        target.setPixels(tile, 0, 2, 0, 0, 2, 2)
++
++        assertEquals(0xFF112233.toInt(), target.getPixel(0, 0))
++        assertEquals(0xFF445566.toInt(), target.getPixel(1, 1))
++        val back = IntArray(4)
++        target.getPixels(back, 0, 2, 0, 0, 2, 2)
++        assertContentEquals(tile, back)
++    }
++}

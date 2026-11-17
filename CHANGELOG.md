@@ -25,14 +25,20 @@ First public release.
 - Library category filters could notify listeners while a widget was building, which Riverpod forbids.
 - Release logging, HTTP client leaks and startup crash handling.
 
-### Extension runtime
-- The embedded runtime is M-Extension-Server v1.0.8.1 (built for iOS from 1Selxo/M-Extension-Server@6a11ad7), which repairs constructors of R8-optimised classes. Release IPAs now include the runtime.
-- Accept the empty URLs and blank titles that single-series sources return, as Mihon does.
-- In a random sample of 44 extensions, 30 work end to end (browse, details, chapters, pages).
+### Extension runtime and compatibility
+- The embedded runtime is M-Extension-Server v1.0.8.1, built for iOS with three Kuchie patches (extension user-agents, detached views, WebP and bitmap pixels). Release IPAs include it.
+- Cloudflare challenges are solved in a hidden WebView, using Mangayomi's remote WebView bridge.
+- **Source settings** for extensions that offer them (server addresses, logins, languages, mirrors).
+- Untrusted APKs (not signed by their store's key, or from stores without a SHA-256 key) install after you trust their signer, as in Mihon. Anime extensions and unsupported extension-lib versions are left out, as in Mihon.
+- Fixed: UTF-8 requests to the runtime, full chapter data for page lists, empty URLs, large catalogues, long APK loads, and the 32-store limit.
+- Tested against 80 public stores and 211 extensions with Suwayomi-Server as a reference; see docs/extension-compatibility.md.
+
+### Reader
+- Webtoon (continuous vertical) is the default reading mode.
+- The page slider starts at page 1 on the left in every reading direction.
 
 ### Known limitations
-- No WebView bridge yet, so sources behind Cloudflare challenges fail.
-- No extension settings screen yet, so extensions that must be configured first (such as Suwayomi's server address) fail.
-- A few extensions still fail in the runtime's dex-to-JVM translation.
+- Some extensions apply a changed setting only after Kuchie restarts, as in Mihon.
+- Extensions built for Mihon forks (Komikku, Kotatsu, novel readers) need APIs Mihon does not have.
 
 [1.0.0]: https://github.com/kuchie-app/Kuchie/releases/tag/v1.0.0

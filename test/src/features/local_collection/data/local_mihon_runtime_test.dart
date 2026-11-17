@@ -233,6 +233,7 @@ void main() {
 
   test('accepts empty URLs and blank names the way Mihon does', () async {
     final apk = Uint8List.fromList([4, 2]);
+    final pageRequests = <Map<String, dynamic>>[];
     final client = MockClient((request) async {
       if (request.url.path == '/capabilities') {
         return http.Response(_capabilities, 200);
@@ -271,10 +272,17 @@ void main() {
         'getChapterList' => http.Response(
           jsonEncode([
             {'url': '', 'name': '', 'chapter_number': 3.0},
-            {'url': '/2', 'name': ' '},
+            {'url': '/2', 'name': ' ', 'scanlator': 'Group A'},
           ]),
           200,
         ),
+        'getPageList' => () {
+          pageRequests.add(body['chapterData'] as Map<String, dynamic>);
+          return http.Response(
+            '[{"index":0,"imageUrl":"https://cdn.example/1.png"}]',
+            200,
+          );
+        }(),
         _ => http.Response('{"error":"unexpected"}', 500),
       };
     });
@@ -301,7 +309,150 @@ void main() {
     expect(details.description, 'Webcomic');
 
     final chapters = await runtime.chapters(apk, _source, details);
-    expect(chapters.map((chapter) => chapter.locator), ['', '/2']);
+    expect(chapters.map((chapter) => chapter.stableLocator), ['', '/2']);
     expect(chapters.map((chapter) => chapter.title), ['Chapter 3', 'Chapter']);
+
+    // Pages get the whole chapter back, as Mihon passes its SChapter: Guya
+    // picks a translation group by scanlator.
+    await runtime.pages(apk, _source, chapters.last);
+    await runtime.pages(apk, _source, chapters.first);
+    // The extension's own values come back unchanged, its blank name too.
+    expect(pageRequests.first, {
+      'url': '/2',
+      'name': ' ',
+      'scanlator': 'Group A',
+    });
+    expect(pageRequests.last['url'], '');
+    expect(pageRequests.last['chapter_number'], 3.0);
   });
+
+  test(
+    'reads and changes source settings, sending them on later calls',
+    () async {
+      final apk = Uint8List.fromList([5, 6]);
+      final requests = <Map<String, dynamic>>[];
+      Map<String, Object?> language(int index) => {
+        'key': 'lang',
+        'listPreference': {
+          'title': 'Language',
+          'summary': '%s',
+          'valueIndex': index,
+          'entries': ['English', 'Indonesia'],
+          'entryValues': ['en', 'id'],
+        },
+      };
+      final client = MockClient((request) async {
+        if (request.url.path == '/capabilities') {
+          return http.Response(_capabilities, 200);
+        }
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        requests.add(body);
+        return switch (body['method']) {
+          'extensionInfo' when body['data'] == null => http.Response(
+            '{"error":"Extension not loaded","code":409}',
+            409,
+          ),
+          'preferencesManga' => http.Response(
+            jsonEncode([
+              language(0),
+              {
+                'key': 'nsfw',
+                'switchPreferenceCompat': {'title': 'Adult', 'value': false},
+              },
+              {'key': 'unknown', 'somethingElse': {}},
+            ]),
+            200,
+          ),
+          'setPreferenceManga' => http.Response(jsonEncode([language(1)]), 200),
+          'getPopularManga' => http.Response(
+            '{"mangas":[],"hasNextPage":false}',
+            200,
+          ),
+          _ => http.Response('{"error":"unexpected"}', 500),
+        };
+      });
+      final runtime = MihonRuntimeClient(
+        client: client,
+        resolveEndpoint: () async => _endpoint,
+      );
+      addTearDown(runtime.close);
+
+      final settings = await runtime.preferences(apk, _source);
+      expect(settings.map((item) => item.key), ['lang', 'nsfw']);
+      final lang = settings.first;
+      expect(lang.kind, MihonPreferenceKind.list);
+      expect(lang.selectedIndex, 0);
+      expect(settings.last.checked, isFalse);
+
+      final changed = await runtime.setPreference(
+        apk,
+        _source.withPreferences(settings),
+        lang.withSelectedIndex(1),
+      );
+      expect(changed.single.selectedIndex, 1);
+      final sent = requests.last['preferences'] as List;
+      expect(sent.last, {
+        'key': '__mangayomi_bridge_context__',
+        'changedPreferenceKey': 'lang',
+      });
+      expect(sent.where((item) => item['key'] == 'lang').single, {
+        'key': 'lang',
+        'listPreference': containsPair('valueIndex', 1),
+      });
+
+      await runtime.browse(
+        apk,
+        _source.withPreferences(changed),
+        query: '',
+        latest: false,
+        page: 1,
+      );
+      expect(requests.last['preferences'], [changed.single.toJson()]);
+    },
+  );
+
+  test(
+    'sends UTF-8 JSON so non-Latin manga URLs reach the extension intact',
+    () async {
+      final apk = Uint8List.fromList([7, 7]);
+      http.Request? details;
+      final client = MockClient((request) async {
+        if (request.url.path == '/capabilities') {
+          return http.Response(_capabilities, 200);
+        }
+        final body =
+            jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, dynamic>;
+        if (body['method'] == 'getDetailsManga') details = request;
+        return switch (body['method']) {
+          'extensionInfo' when body['data'] == null => http.Response(
+            '{"error":"Extension not loaded","code":409}',
+            409,
+          ),
+          _ => http.Response.bytes(
+            utf8.encode('{"url":"/中字h漫/長途/","title":"長途"}'),
+            200,
+          ),
+        };
+      });
+      final runtime = MihonRuntimeClient(
+        client: client,
+        resolveEndpoint: () async => _endpoint,
+      );
+      addTearDown(runtime.close);
+      final manga = await runtime.details(
+        apk,
+        _source,
+        const MihonRuntimeManga(locator: '/中字h漫/長途/', title: '長途'),
+      );
+      expect(
+        details!.headers['content-type'],
+        'application/json; charset=utf-8',
+      );
+      expect(
+        (jsonDecode(utf8.decode(details!.bodyBytes)) as Map)['mangaData'],
+        {'url': '/中字h漫/長途/', 'title': '長途'},
+      );
+      expect(manga.title, '長途');
+    },
+  );
 }

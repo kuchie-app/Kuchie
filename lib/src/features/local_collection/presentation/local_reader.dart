@@ -240,7 +240,8 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       switch ((perSeries, configured)) {
         (final mode, _) when mode != ReaderMode.defaultReader => mode,
         (_, final mode?) when mode != ReaderMode.defaultReader => mode,
-        _ => ReaderMode.singleHorizontalRTL,
+        // Matches the app-wide default (DBKeys.readerMode).
+        _ => ReaderMode.webtoon,
       };
 
   void _updateAutoScroll() {
@@ -1016,7 +1017,8 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
                   useBottomSeekBar: !showSideSeekBar,
                   floating: floating,
                   resolvedReaderMode: mode,
-                  reverseSeekBar: reversed,
+                  // Page 1 sits at the left in every reading direction.
+                  reverseSeekBar: false,
                   onChanged: _seek,
                   onNextChapter: nextChapter,
                   onPreviousChapter: previousChapter,

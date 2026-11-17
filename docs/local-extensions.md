@@ -13,15 +13,17 @@ Kuchie reads the same extension stores as [Mihon](https://github.com/mihonapp/mi
 | Legacy `index.min.json` with `repo.json` | `https://raw.githubusercontent.com/suwayomi/tachiyomi-extension/repo/index.min.json` |
 | `mihon://` or `tachiyomi://add-repo?url=…` links | opened from a store website |
 
-Gzipped indexes and stores that keep their list behind `extensionListUrl` work as well. Install a package, then choose a source and language from **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses: sources behind Cloudflare challenges and sources that must be configured in their own settings do not work yet. Shinigami (Indonesia) also has a built-in adapter for existing Keiyoushi installations.
+Gzipped indexes and stores that keep their list behind `extensionListUrl` work as well. See the [compatibility report](extension-compatibility.md) for how Kuchie was tested against 80 public stores. Install a package, then choose a source and language from **Browse → Sources**. Kuchie keeps the APK in the Local profile and runs it through [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server). Extension compatibility depends on the Android APIs and services each source uses. Sources behind Cloudflare challenges are solved in a hidden WebView, as Mihon does, and sources that need configuration (a server address, a login, a language) have their own **Source settings** in the source's **⋯** menu. Shinigami (Indonesia) also has a built-in adapter for existing Keiyoushi installations.
 
 ### How Kuchie decides an APK is safe
 
 Kuchie follows Mihon's trust model and checks it before any extension code runs:
 
 - Store indexes, APKs and icons load over HTTPS only. Plain HTTP is accepted for `127.0.0.1` in debug builds, for the QA fixtures.
-- Every store publishes a signing key, the SHA-256 of the certificate it signs APKs with. A store without a valid key is refused.
-- Kuchie verifies each APK's Android signature (APK Signature Scheme v2 or v3): the signature over the signed data, the certificate's key, and the digest of the whole archive. A modified APK, or one signed by anyone other than the store, is refused. APKs signed only with the legacy v1 scheme are not supported.
+- Every store publishes a signing key, the SHA-256 of the certificate it signs APKs with.
+- Kuchie verifies each APK's Android signature (APK Signature Scheme v2 or v3): the signature over the signed data, the certificate's key, and the digest of the whole archive. A modified APK is always refused. APKs signed only with the legacy v1 scheme are not supported.
+- An APK signed by anyone other than the store's key is *untrusted*, as in Mihon. Kuchie shows its signer's fingerprint and installs it only if you choose to trust it; that trust covers that one version of that extension. Stores that publish no key, or a key that is not a SHA-256, work the same way.
+- Like Mihon, Kuchie lists manga extensions built for extension-lib 1.4 or 1.6 only; anime extensions from Aniyomi stores are left out.
 - A store that starts signing with a different key is treated as a different store; refreshing it fails until you remove it and add it again.
 - An extension ID installed from one store cannot be replaced by a package from another store.
 - Downloads have size limits, redirects are HTTPS-only and limited to five, and the installed APK is re-hashed before each use.

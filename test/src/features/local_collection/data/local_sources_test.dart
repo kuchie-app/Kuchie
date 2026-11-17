@@ -180,6 +180,7 @@ void main() {
                   {
                     'name': 'Example Package',
                     'packageName': package,
+                    'extensionLib': '1.6',
                     'versionName': '1.6.5',
                     'resources': {'apkUrl': apkUrl.toString()},
                     'contentWarning': 'CONTENT_WARNING_NSFW',
@@ -481,6 +482,20 @@ void main() {
                   'nsfw': 0,
                 },
                 {'name': 'Broken', 'pkg': '../escape', 'apk': 'x.apk'},
+                // Mihon loads neither anime extensions nor other libs.
+                for (final (pkg, version) in [
+                  ('eu.kanade.tachiyomi.animeextension.all.anime', '1.4.2'),
+                  ('eu.kanade.tachiyomi.extension.all.old', '1.2.5'),
+                ])
+                  {
+                    'name': 'Skipped',
+                    'pkg': pkg,
+                    'apk': 'skipped.apk',
+                    'lang': 'all',
+                    'code': 1,
+                    'version': version,
+                    'nsfw': 0,
+                  },
               ]),
               200,
             );
@@ -546,25 +561,134 @@ void main() {
       );
     });
 
-    test('refuses stores without a valid signing key', () async {
-      final index = Uri.parse('https://nokey.example/index.json');
-      final client = MockClient(
-        (request) async => http.Response(
-          jsonEncode({
-            'name': 'No key',
-            'signingKey': 'not-a-fingerprint',
-            'extensionList': {'extensions': []},
-          }),
-          200,
-        ),
-      );
+    test('keeps source settings, sends them on every call and forgets them '
+        'on uninstall', () async {
+      final index = Uri.parse('https://legacy.example/repo/index.min.json');
+      final apk = signedApk(signer);
+      final client = MockClient((request) async {
+        switch (request.url.path) {
+          case '/repo/index.min.json':
+            return http.Response(
+              jsonEncode([
+                {
+                  'name': 'Tachiyomi: Example',
+                  'pkg': package,
+                  'apk': 'example.apk',
+                  'lang': 'all',
+                  'code': 1,
+                  'version': '1.4.1',
+                  'nsfw': 0,
+                },
+              ]),
+              200,
+            );
+          case '/repo/repo.json':
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'name': 'Legacy QA',
+                  'website': 'https://legacy.example',
+                  'signingKeyFingerprint': signer.fingerprint,
+                },
+              }),
+              200,
+            );
+          case '/repo/apk/example.apk':
+            return http.Response.bytes(apk, 200);
+        }
+        return http.Response('', 404);
+      });
       addTearDown(client.close);
-      final catalog = LocalSources(root, client: client);
-      await expectLater(
-        catalog.addRepository(index),
-        throwsA(isA<LocalSourceSecurityException>()),
+      final runtime = _SettingsRuntime(package, apk);
+      addTearDown(runtime.close);
+      final catalog = LocalSources(root, client: client, runtime: runtime);
+      final repo = await catalog.addRepository(index);
+      await catalog.install(repo.packages.single);
+      final source = (await catalog.sources()).first;
+      expect(source.canHaveSettings, isTrue);
+
+      final settings = await catalog.sourcePreferences(source.id);
+      expect(settings.single.selectedIndex, 0);
+      final changed = await catalog.setSourcePreference(
+        source.id,
+        settings.single.withSelectedIndex(1),
       );
-      expect(await catalog.repositories(), isEmpty);
+      expect(changed.single.selectedIndex, 1);
+
+      // A new LocalSources (the next app launch) still sends the setting.
+      final reopened = LocalSources(root, client: client, runtime: runtime);
+      await reopened.browsePage(source.id);
+      expect(runtime.seen.single.single, changed.single.toJson());
+
+      await reopened.uninstall(package);
+      await reopened.install(repo.packages.single);
+      await reopened.browsePage(source.id);
+      expect(runtime.seen.last, isEmpty);
+    });
+
+    test('adds a store whose key is not a SHA-256 and installs its APKs only '
+        'once the reader trusts the signer', () async {
+      final index = Uri.parse('https://nokey.example/repo/index.min.json');
+      final apk = signedApk(stranger);
+      final client = MockClient((request) async {
+        switch (request.url.path) {
+          case '/repo/index.min.json':
+            return http.Response(
+              jsonEncode([
+                {
+                  'name': 'Tachiyomi: Example',
+                  'pkg': package,
+                  'apk': 'example.apk',
+                  'lang': 'en',
+                  'code': 1,
+                  'version': '1.4.1',
+                  'nsfw': 0,
+                },
+              ]),
+              200,
+            );
+          case '/repo/repo.json':
+            // A SHA-1 with colons, as some stores publish.
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'name': 'No key',
+                  'website': 'https://nokey.example',
+                  'signingKeyFingerprint': 'CE:B1:D6:DE:86:CA:8C:9E:40:27',
+                },
+              }),
+              200,
+            );
+          case '/repo/apk/example.apk':
+            return http.Response.bytes(apk, 200);
+        }
+        return http.Response('', 404);
+      });
+      addTearDown(client.close);
+      final runtime = _FixtureRuntime(package, apk);
+      addTearDown(runtime.close);
+      final catalog = LocalSources(root, client: client, runtime: runtime);
+      final repo = await catalog.addRepository(index);
+      final example = repo.packages.single;
+
+      final untrusted = await catalog
+          .install(example)
+          .then<LocalSourceUntrustedException?>((_) => null)
+          .catchError((Object error) => error as LocalSourceUntrustedException);
+      expect(untrusted?.signer, stranger.fingerprint);
+      expect(await catalog.extensions(), isEmpty);
+
+      // Trusting a different signer does not help.
+      await expectLater(
+        catalog.install(example, trustSigner: signer.fingerprint),
+        throwsA(isA<LocalSourceUntrustedException>()),
+      );
+      await catalog.install(example, trustSigner: stranger.fingerprint);
+      expect((await catalog.extensions()).single.packageId, package);
+
+      // The trust is remembered for this version.
+      await catalog.uninstall(package);
+      expect((await catalog.install(example)).packageId, package);
     });
   });
 
@@ -667,6 +791,7 @@ void main() {
       Map<String, Object> entry(String packageName, String apk) => {
         'name': 'Example',
         'packageName': packageName,
+        'extensionLib': '1.6',
         'versionName': '1.6.5',
         'contentWarning': 'CONTENT_WARNING_NSFW',
         'resources': {'apkUrl': apk},
@@ -732,12 +857,16 @@ void main() {
           'extensions': [
             {
               'packageName': extensionId,
+              'extensionLib': '1.6',
               'versionName': '1.6.85',
               'sources': [
                 {'id': '3411809758861089969'},
               ],
             },
-            {'packageName': 'eu.kanade.tachiyomi.extension.en.example'},
+            {
+              'packageName': 'eu.kanade.tachiyomi.extension.en.example',
+              'extensionLib': '1.6',
+            },
           ],
         },
       });
@@ -1010,6 +1139,49 @@ Uint8List _storeProto({
         ]),
     ]),
   ]);
+}
+
+/// Records the settings each runtime call receives.
+class _SettingsRuntime extends _FixtureRuntime {
+  _SettingsRuntime(super.package, super.expectedApk);
+
+  final seen = <List<Map<String, Object?>>>[];
+  var current = [
+    MihonPreference.tryParse({
+      'key': 'mirror',
+      'listPreference': {
+        'title': 'Mirror',
+        'valueIndex': 0,
+        'entries': ['Main', 'Backup'],
+        'entryValues': ['main', 'backup'],
+      },
+    })!,
+  ];
+
+  @override
+  Future<List<MihonPreference>> preferences(
+    Uint8List apk,
+    MihonRuntimeSource source,
+  ) async => current;
+
+  @override
+  Future<List<MihonPreference>> setPreference(
+    Uint8List apk,
+    MihonRuntimeSource source,
+    MihonPreference changed,
+  ) async => current = [changed];
+
+  @override
+  Future<({List<MihonRuntimeManga> items, bool hasMore})> browse(
+    Uint8List apk,
+    MihonRuntimeSource source, {
+    required String query,
+    required bool latest,
+    required int page,
+  }) async {
+    seen.add([for (final item in source.preferences) item.toJson()]);
+    return (items: const <MihonRuntimeManga>[], hasMore: false);
+  }
 }
 
 class _FixtureRuntime extends MihonRuntimeClient {
