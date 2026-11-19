@@ -24,7 +24,6 @@ import '../../../../../../widgets/app_bottom_sheet.dart';
 import '../../../../../../widgets/ios/apple_glass_capability.dart';
 import '../../../../../../widgets/ios/apple_glass_surface.dart';
 import '../../../../../../widgets/ios/apple_glass_toolbar.dart';
-import '../../../../../offline/presentation/offline_save_button.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_paged_prefs/reader_paged_prefs.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_webtoon_prefs/reader_webtoon_prefs.dart';
 import '../../../../domain/chapter/chapter_model.dart';
@@ -87,13 +86,88 @@ class ReaderBottomControls extends ConsumerWidget {
   final bool floating;
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) => ReaderBottomControlsView(
+    settingsMangaId: chapter.mangaId,
+    currentIndex: currentIndex,
+    pageCount: totalPageCount ?? chapterPages.chapter.pageCount,
+    useBottomSeekBar: useBottomSeekBar,
+    scrollDirection: scrollDirection,
+    onPreviousChapter: onPreviousChapter,
+    onNextChapter: onNextChapter,
+    resolvedReaderMode: resolvedReaderMode,
+    reverseSeekBar: reverseSeekBar,
+    onChanged: onChanged,
+    onOpenSettings: onOpenSettings,
+    onOpenReaderMode: onOpenReaderMode,
+    onOpenChapters: () => showReaderChapterPicker(
+      context: context,
+      mangaId: chapter.mangaId,
+      currentChapterId: chapter.id,
+      readerScanlatorGroup: readerScanlatorGroup,
+      transVertical: scrollDirection == Axis.vertical,
+    ),
+    bookmark: ReaderBookmarkButton(
+      chapterId: chapter.id,
+      fallbackIsBookmarked: chapter.user.isBookmarked,
+      dark: true,
+    ),
+    floating: floating,
+  );
+}
+
+/// The reader's bottom dock for every collection: chapter buttons, seek bar,
+/// bookmark and the quick actions (chapters, mode, crop, page layout, offset,
+/// settings). Settings resolve through [readerSettingsModelProvider], so the
+/// server and the Local reader read and write the same keys.
+class ReaderBottomControlsView extends ConsumerWidget {
+  const ReaderBottomControlsView({
+    super.key,
+    required this.settingsMangaId,
+    this.localSeriesId,
+    required this.currentIndex,
+    required this.pageCount,
+    required this.useBottomSeekBar,
+    required this.scrollDirection,
+    required this.onPreviousChapter,
+    required this.onNextChapter,
+    required this.resolvedReaderMode,
+    required this.reverseSeekBar,
+    required this.onChanged,
+    required this.onOpenSettings,
+    required this.onOpenReaderMode,
+    required this.onOpenChapters,
+    required this.bookmark,
+    this.floating = false,
+  });
+
+  /// Server manga id, or 0 with [localSeriesId] for an on-device series.
+  final int settingsMangaId;
+  final String? localSeriesId;
+  final int currentIndex;
+  final int pageCount;
+  final bool useBottomSeekBar;
+  final Axis scrollDirection;
+  final VoidCallback? onPreviousChapter;
+  final VoidCallback? onNextChapter;
+  final ReaderMode resolvedReaderMode;
+  final bool reverseSeekBar;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onOpenReaderMode;
+  final VoidCallback onOpenChapters;
+  final Widget bookmark;
+  final bool floating;
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isPagedMode = isPagedReaderMode(resolvedReaderMode);
     final pageLayout = ref.watch(pageLayoutKeyProvider) ?? PageLayout.automatic;
     final dualPageSplitPaged = ref.watch(dualPageSplitPagedProvider).ifNull();
-    final settingsModel = ref.watch(
-      readerSettingsModelProvider(chapter.mangaId),
+    final settingsProvider = readerSettingsModelProvider(
+      settingsMangaId,
+      localSeriesId: localSeriesId,
     );
+    final settingsModel = ref.watch(settingsProvider);
     final offsetDoublePages = settingsModel.offsetDoublePages;
     final cropBorders = isPagedMode
         ? ref.watch(cropBordersProvider).ifNull()
@@ -127,13 +201,7 @@ class ReaderBottomControls extends ConsumerWidget {
         symbol: 'list.number',
         label: l10n.includeChapters,
         fallbackIcon: FluentIcons.text_number_list_ltr_24_regular,
-        onPressed: () => showReaderChapterPicker(
-          context: context,
-          mangaId: chapter.mangaId,
-          currentChapterId: chapter.id,
-          readerScanlatorGroup: readerScanlatorGroup,
-          transVertical: scrollDirection == Axis.vertical,
-        ),
+        onPressed: onOpenChapters,
       ),
       AppleGlassToolbarAction(
         id: 'reader-mode',
@@ -176,7 +244,7 @@ class ReaderBottomControls extends ConsumerWidget {
               ? FluentIcons.arrow_swap_24_filled
               : FluentIcons.arrow_swap_24_regular,
           onPressed: () => ref
-              .read(readerSettingsModelProvider(chapter.mangaId).notifier)
+              .read(settingsProvider.notifier)
               .setOffsetDoublePages(!offsetDoublePages),
         ),
       AppleGlassToolbarAction(
@@ -187,7 +255,6 @@ class ReaderBottomControls extends ConsumerWidget {
         onPressed: onOpenSettings,
       ),
     ];
-    final pageCount = totalPageCount ?? chapterPages.chapter.pageCount;
 
     return ReaderBottomDock(
       currentIndex: currentIndex,
@@ -200,11 +267,7 @@ class ReaderBottomControls extends ConsumerWidget {
       onNextChapter: onNextChapter,
       onPreviousChapter: onPreviousChapter,
       onOpenSettings: onOpenSettings,
-      bookmark: ReaderBookmarkButton(
-        chapterId: chapter.id,
-        fallbackIsBookmarked: chapter.user.isBookmarked,
-        dark: true,
-      ),
+      bookmark: bookmark,
       actions: actions,
     );
   }
@@ -638,7 +701,6 @@ class _ReaderChapterSheet extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              OfflineSaveButton(chapterId: chapter.id),
               DownloadStatusIcon(
                 updateData: refreshChapters,
                 chapter: chapter,

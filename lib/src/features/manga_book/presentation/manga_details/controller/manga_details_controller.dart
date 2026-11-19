@@ -162,9 +162,11 @@ class MangaChapterList extends _$MangaChapterList {
     }
     if (didSourceFetch) {
       // Refresh metadata after scraping; defer invalidation outside the build phase.
-      unawaited(Future.microtask(() {
-        if (current()) ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
-      }));
+      unawaited(
+        Future.microtask(() {
+          if (current()) ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
+        }),
+      );
     }
     return result;
   }
@@ -203,8 +205,7 @@ class MangaChapterList extends _$MangaChapterList {
               didSourceFetch = true;
               return fetched;
             }
-          } catch (_) {
-          }
+          } catch (_) {}
           return stored;
         },
         db: offlineDb,

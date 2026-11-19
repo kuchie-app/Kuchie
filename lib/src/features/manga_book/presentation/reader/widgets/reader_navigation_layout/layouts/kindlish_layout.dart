@@ -46,7 +46,7 @@ class KindlishLayout extends StatelessWidget {
                   onTap: onRightTap,
                   child: Container(color: rightColor),
                 ),
-              )
+              ),
             ],
           ),
         ),

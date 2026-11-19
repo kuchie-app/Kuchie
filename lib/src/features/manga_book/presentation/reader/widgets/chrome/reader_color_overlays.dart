@@ -103,15 +103,18 @@ class ReaderColorOverlays extends HookConsumerWidget {
     final grayscale = ref.watch(grayscaleProvider).ifNull(false);
     final inverted = ref.watch(invertedColorsProvider).ifNull(false);
     final brightnessOn = ref.watch(customBrightnessProvider).ifNull(false);
-    final brightness = ref.watch(customBrightnessValueProvider) ??
+    final brightness =
+        ref.watch(customBrightnessValueProvider) ??
         DBKeys.customBrightnessValue.initial;
     final colorFilterOn = ref.watch(customColorFilterProvider).ifNull(false);
-    final color = ref.watch(colorFilterValueProvider) ??
-        DBKeys.colorFilterValue.initial;
-    final blend = ref.watch(colorFilterBlendModeKeyProvider) ??
+    final color =
+        ref.watch(colorFilterValueProvider) ?? DBKeys.colorFilterValue.initial;
+    final blend =
+        ref.watch(colorFilterBlendModeKeyProvider) ??
         DBKeys.colorFilterBlendMode.initial;
 
-    final useNativeBrightness = !kIsWeb &&
+    final useNativeBrightness =
+        !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS);
     final brightnessOnPage = brightnessOn && !useNativeBrightness;
@@ -119,8 +122,9 @@ class ReaderColorOverlays extends HookConsumerWidget {
     useEffect(() {
       if (!useNativeBrightness) return null;
       void sync() {
-        final value =
-            brightnessOn ? (readerBrightnessPreview.value ?? brightness) : 0;
+        final value = brightnessOn
+            ? (readerBrightnessPreview.value ?? brightness)
+            : 0;
         _applyScreenBrightness(applicationBrightnessFor(value));
       }
 
@@ -228,10 +232,7 @@ class _BackdropOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: ClipRect(
-        child: BackdropFilter(
-          filter: filter,
-          child: const SizedBox.expand(),
-        ),
+        child: BackdropFilter(filter: filter, child: const SizedBox.expand()),
       ),
     );
   }

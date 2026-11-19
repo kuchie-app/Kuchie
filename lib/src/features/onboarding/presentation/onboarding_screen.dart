@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:io' show Platform;
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../constants/db_keys.dart';
 import '../../../constants/enum.dart';
@@ -1012,6 +1015,10 @@ class _ServerStep extends HookConsumerWidget {
         );
         switch (result.outcome) {
           case ResolveOutcome.notReached:
+            if (localNetworkBlockedHint(input) case final hint?
+                when context.mounted) {
+              errorDetail.value = hint(context);
+            }
             state.value = _TestState.failed;
 
           case ResolveOutcome.reachedUnconfirmed:
@@ -1084,7 +1091,9 @@ class _ServerStep extends HookConsumerWidget {
       }
       if (!context.mounted) return;
       if (found.isEmpty) {
-        errorDetail.value = noServerMsg;
+        errorDetail.value = Platform.isIOS
+            ? '$noServerMsg\n\n${context.l10n.onboardingLocalNetworkHint}'
+            : noServerMsg;
         state.value = _TestState.failed;
 
         return;
@@ -1542,6 +1551,17 @@ List<Widget> _buildTestStatus(
             text: context.l10n.onboardingNotReachedHttpsHint,
           ),
         ],
+        if (errorDetail?.contains(context.l10n.onboardingLocalNetworkHint) ??
+            false)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              icon: const Icon(FluentIcons.settings_24_regular),
+              label: Text(context.l10n.onboardingOpenSettings),
+              // Opens Kuchie's page in Settings, where Local Network is.
+              onPressed: () => launchUrl(Uri.parse('app-settings:')),
+            ),
+          ),
       ];
   }
 }
@@ -1602,3 +1622,15 @@ class _FinishStep extends StatelessWidget {
 
 bool _shortLandscape(Size screen) =>
     screen.height < 1000 && screen.width > screen.height;
+
+/// On iOS, a local address that cannot be reached is most often Local
+/// Network permission turned off for Kuchie, while Safari still opens it.
+String Function(BuildContext)? localNetworkBlockedHint(String input) {
+  if (!Platform.isIOS) return null;
+  final url = Uri.tryParse(input.contains('://') ? input : 'http://$input');
+  final host = url?.host ?? '';
+  if (host.isEmpty || !isLocalNetworkHost(host)) return null;
+  return (context) =>
+      '${context.l10n.onboardingNotReached}\n\n'
+      '${context.l10n.onboardingLocalNetworkHint}';
+}

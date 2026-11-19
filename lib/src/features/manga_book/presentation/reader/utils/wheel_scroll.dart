@@ -4,7 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
 /// Stacks wheel notches onto [pendingTarget]; returns null if unchanged and mirrors reversed axes.
 double? wheelScrollTarget({
   required double pixels,

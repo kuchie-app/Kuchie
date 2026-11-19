@@ -59,7 +59,7 @@ private final class DownloadLiveActivityCoordinator {
 
   private var preferredVariant: DownloadIslandVariant {
     UserDefaults.standard.string(forKey: variantKey)
-      .flatMap(DownloadIslandVariant.init(rawValue:)) ?? .defaultValue
+      .flatMap { DownloadIslandVariant(id: $0) } ?? .defaultValue
   }
 
   func handle(_ call: FlutterMethodCall, result: FlutterResult) {
@@ -89,7 +89,7 @@ private final class DownloadLiveActivityCoordinator {
       return
     case "setIslandVariant":
       guard let id = call.arguments as? String,
-            let variant = DownloadIslandVariant(rawValue: id)
+            let variant = DownloadIslandVariant(id: id)
       else {
         result(FlutterError(
           code: "invalid_island_variant", message: "Expected a supported appearance ID", details: nil

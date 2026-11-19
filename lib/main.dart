@@ -33,6 +33,7 @@ import 'src/features/auth/data/auth_state.dart';
 import 'src/features/auth/data/basic_auth_migration.dart';
 import 'src/features/auth/data/custom_headers_store.dart';
 import 'src/features/auth/data/secure_credentials_provider.dart';
+import 'src/features/local_collection/data/local_reading_stats.dart';
 import 'src/features/notifications/data/background/notification_background_entry.dart';
 import 'src/features/offline/data/account_storage_recovery_state.dart';
 import 'src/features/offline/data/background/background_download_controller_shim.dart';
@@ -372,6 +373,8 @@ Future<void> _startApp() async {
     errorBuilder: (error) =>
         AppErrorApp(message: redactTokens('$error'), logPath: _crashLogPath),
   );
+  // Read in the background; History in both collections shows reading time.
+  unawaited(LocalReadingStats.instance.load());
   if (startupChild == null) {
     runApp(app);
   } else {

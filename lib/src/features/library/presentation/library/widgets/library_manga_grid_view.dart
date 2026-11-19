@@ -22,6 +22,7 @@ import '../../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import '../../../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
 import '../../../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
 import '../../../../../widgets/manga_cover/providers/manga_cover_providers.dart';
+import '../../../../../widgets/scroll_bottom_inset.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
 import '../../../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
 import '../../../../settings/presentation/appearance/widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
@@ -72,6 +73,7 @@ class LibraryMangaGridView extends StatelessWidget {
           selection: selection,
           linkLocationFor: linkLocationFor,
         ),
+        const SliverBottomInset(),
       ],
     );
   }

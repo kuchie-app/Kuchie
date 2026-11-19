@@ -36,6 +36,7 @@ import '../../../library/presentation/library/controller/library_manga_list.dart
 import '../../../migration/presentation/screens/migration_window.dart';
 import '../../../offline/data/server_reachability.dart';
 import '../../../offline/presentation/server_unreachable_banner.dart';
+import '../../../security/app_security.dart';
 import '../../../settings/presentation/appearance/widgets/manga_thumbnail_backdrop/manga_thumbnail_backdrop_tile.dart';
 import '../../../settings/presentation/appearance/widgets/show_recommendations/show_recommendations_tile.dart';
 import '../../domain/chapter/chapter_model.dart';
@@ -74,8 +75,14 @@ class MangaDetailsScreen extends HookConsumerWidget {
     final manga = ref.watch(mangaProvider);
     final filteredChapterList = ref.watch(chapterListFilteredProvider);
     final chapterListEntries = ref.watch(chapterListEntriesProvider);
-    final firstUnreadChapter = ref.watch(
+    final firstUnread = ref.watch(
       firstUnreadInFilteredChapterListProvider(mangaId: mangaId),
+    );
+    // Resume the chapter read most recently (by read time, not by number)
+    // at its page; once that one is finished, the next chapter after it.
+    final firstUnreadChapter = resumeChapter(
+      ref.watch(chapterListProvider).value,
+      fallback: firstUnread,
     );
 
     final infoExpansion = useMemoized(SeriesInfoExpansion.new, [mangaId]);
@@ -195,7 +202,7 @@ class MangaDetailsScreen extends HookConsumerWidget {
 
     Future<void> shareSeries(BuildContext context, MangaDto manga) async {
       final url = manga.realUrl;
-      if (url == null) return;
+      if (url == null || !contentSharingAllowed(context)) return;
       if (kIsWeb || isDesktopPlatform) {
         await Clipboard.setData(ClipboardData(text: url));
         if (context.mounted) {
@@ -754,4 +761,32 @@ class MultiSelectPopupButton extends StatelessWidget {
       popUpAnimationStyle: context.motionStyle,
     );
   }
+}
+
+/// The chapter Resume opens: the one with the latest read time while it is
+/// unfinished, else the first unread chapter after it in reading order, else
+/// [fallback] (the first unread chapter of the filtered list).
+ChapterDto? resumeChapter(List<ChapterDto>? chapters, {ChapterDto? fallback}) {
+  if (chapters == null || chapters.isEmpty) return fallback;
+  ChapterDto? latest;
+  var latestAt = 0;
+  for (final chapter in chapters) {
+    final at = int.tryParse(chapter.user.lastReadAt) ?? 0;
+    if (at > latestAt) {
+      latestAt = at;
+      latest = chapter;
+    }
+  }
+  if (latest == null) return fallback;
+  if (!latest.user.isRead) return latest;
+  final ordered = [...chapters]
+    ..sort((a, b) => a.sourceOrder.compareTo(b.sourceOrder));
+  return ordered
+          .where(
+            (chapter) =>
+                chapter.sourceOrder > latest!.sourceOrder &&
+                !chapter.user.isRead,
+          )
+          .firstOrNull ??
+      fallback;
 }

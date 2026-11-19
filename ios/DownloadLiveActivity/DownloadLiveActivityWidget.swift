@@ -125,9 +125,9 @@ private struct DownloadActivityDisplay {
 
   private var glyphAsset: String {
     switch variant {
-    case .kiriRing, .kiriPercentage: "IslandWajahKiri"
-    case .scarf: "IslandSyalPenanda"
-    case .mangaPanel: "IslandPanelManga"
+    case .kiriRing, .kiriPercentage: "IslandKiriFace"
+    case .scarf: "IslandBookmarkScarf"
+    case .mangaPanel: "IslandMangaPanel"
     }
   }
 

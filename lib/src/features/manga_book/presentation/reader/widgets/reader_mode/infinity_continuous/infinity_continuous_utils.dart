@@ -63,7 +63,7 @@ class InfinityContinuousUtils {
 
   static int getTotalPages(
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
+    loadedChapters,
   ) {
     return loadedChapters.fold(
       0,
@@ -75,7 +75,7 @@ class InfinityContinuousUtils {
   static bool isChapterBoundary(
     int index,
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
+    loadedChapters,
   ) {
     int currentIndex = 0;
     for (final chapterData in loadedChapters) {
@@ -96,7 +96,7 @@ class InfinityContinuousUtils {
   static int convertChapterIndexToGlobalIndex(
     int chapterIndex,
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
+    loadedChapters,
     int chapterId,
   ) {
     int globalIndex = 0;
@@ -111,7 +111,7 @@ class InfinityContinuousUtils {
 
   static ChapterPagesDto createChapterPagesDto(
     List<({ChapterPagesDto pages, ChapterDto chapter, int chapterId})>
-        loadedChapters,
+    loadedChapters,
     ChapterDto currentChapter,
     ChapterPagesDto fallbackChapterPages,
   ) {

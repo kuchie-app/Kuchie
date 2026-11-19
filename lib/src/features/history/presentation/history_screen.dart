@@ -19,6 +19,7 @@ import '../../../widgets/emoticons.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
 import '../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../widgets/ios/apple_page_title.dart';
+import '../../../widgets/scroll_bottom_inset.dart';
 import '../../../widgets/search_field.dart';
 import '../../../widgets/server_image.dart';
 import '../../../widgets/shell/detail_navigation_shell_screen.dart';
@@ -267,7 +268,12 @@ class HistoryScreen extends HookConsumerWidget {
                           },
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(8),
+                          padding: EdgeInsets.fromLTRB(
+                            8,
+                            8,
+                            8,
+                            scrollBottomInset(context, extra: 8),
+                          ),
                           itemCount: historyGroups.length,
                           itemBuilder: (context, index) =>
                               HistoryGroupWidget(group: historyGroups[index]),

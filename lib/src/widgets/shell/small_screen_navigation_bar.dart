@@ -20,7 +20,11 @@ class SmallScreenNavigationBar extends ConsumerWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.glassLayout = false,
+    this.tabs,
   });
+
+  /// The tabs to show, in order; defaults to the built-in list.
+  final List<NavigationBarData>? tabs;
 
   final int selectedIndex;
   final bool glassLayout;
@@ -46,11 +50,16 @@ class SmallScreenNavigationBar extends ConsumerWidget {
     final downloadsPaused = ref.watch(downloadsPausedBadgeProvider);
     final extensionUpdates =
         ref.watch(extensionUpdateBadgeCountProvider).value ?? 0;
-    final navList = glassLayout
-        ? NavigationBarData.glassPhoneNavList
-        : NavigationBarData.getNavList(context);
+    final navList =
+        tabs ??
+        (glassLayout
+            ? NavigationBarData.glassPhoneNavList
+            : NavigationBarData.getNavList(context));
     Widget standardBar(BuildContext context) => NavigationBar(
       selectedIndex: selectedIndex,
+      labelBehavior: navList.every((tab) => tab.label(context).isEmpty)
+          ? NavigationDestinationLabelBehavior.alwaysHide
+          : null,
       onDestinationSelected: onDestinationSelected,
       destinations: [
         for (var i = 0; i < navList.length; i++)

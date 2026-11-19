@@ -350,56 +350,57 @@ class BigScreenMangaDetails extends HookConsumerWidget {
                               },
                             )
                           : ScrollablePositionedList.builder(
-                        key: ValueKey(wide),
-                        initialScrollIndex: restoreIndex.value ?? 0,
-                        itemPositionsListener: itemPositionsListener,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemBuilder: (context, index) {
-                          if (chapterEntries.length == index) {
-                            return wide
-                                ? const SizedBox(height: 16)
-                                : const ListTile();
-                          }
-                          final entry = chapterEntries[index];
-                          return switch (entry) {
-                            MangaChapterEntry() => ChapterListTile(
-                              key: ValueKey('${entry.chapter.id}'),
-                              manga: manga,
-                              chapter: entry.chapter,
-                              updateData: () => onListRefresh(false),
-                              isSelected: selection.containsKey(
-                                entry.chapter.id,
-                              ),
-                              canTapSelect: selecting,
-                              toggleSelect: toggleSelect,
-                              desktop: wide,
-                              selectionMode: selecting,
-                              isCurrent: entry.chapter.id == currentId,
-                              onRowTap: (shift) =>
-                                  onRowTap(entry.chapter, shift),
-                              onSecondaryTapAt: (pos) => openMenu(
-                                menuAnchorForPoint(context, pos),
-                                entry.chapter,
-                                ordered,
-                                bulk,
-                                () {},
-                              ),
-                              onOpenMenu: (rect, refocus) => openMenu(
-                                rect,
-                                entry.chapter,
-                                ordered,
-                                bulk,
-                                refocus,
-                              ),
+                              key: ValueKey(wide),
+                              initialScrollIndex: restoreIndex.value ?? 0,
+                              itemPositionsListener: itemPositionsListener,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemBuilder: (context, index) {
+                                if (chapterEntries.length == index) {
+                                  return wide
+                                      ? const SizedBox(height: 16)
+                                      : const ListTile();
+                                }
+                                final entry = chapterEntries[index];
+                                return switch (entry) {
+                                  MangaChapterEntry() => ChapterListTile(
+                                    key: ValueKey('${entry.chapter.id}'),
+                                    manga: manga,
+                                    chapter: entry.chapter,
+                                    updateData: () => onListRefresh(false),
+                                    isSelected: selection.containsKey(
+                                      entry.chapter.id,
+                                    ),
+                                    canTapSelect: selecting,
+                                    toggleSelect: toggleSelect,
+                                    desktop: wide,
+                                    selectionMode: selecting,
+                                    isCurrent: entry.chapter.id == currentId,
+                                    onRowTap: (shift) =>
+                                        onRowTap(entry.chapter, shift),
+                                    onSecondaryTapAt: (pos) => openMenu(
+                                      menuAnchorForPoint(context, pos),
+                                      entry.chapter,
+                                      ordered,
+                                      bulk,
+                                      () {},
+                                    ),
+                                    onOpenMenu: (rect, refocus) => openMenu(
+                                      rect,
+                                      entry.chapter,
+                                      ordered,
+                                      bulk,
+                                      refocus,
+                                    ),
+                                  ),
+                                  MissingChaptersEntry() =>
+                                    MissingChaptersListTile(
+                                      key: ValueKey('missing-${entry.id}'),
+                                      count: entry.count,
+                                    ),
+                                };
+                              },
+                              itemCount: chapterEntries.length + 1,
                             ),
-                            MissingChaptersEntry() => MissingChaptersListTile(
-                              key: ValueKey('missing-${entry.id}'),
-                              count: entry.count,
-                            ),
-                          };
-                        },
-                        itemCount: chapterEntries.length + 1,
-                      ),
                     ),
                   ],
                 );
@@ -455,7 +456,10 @@ class _ChapterHeader extends StatelessWidget {
     if (filterCount > 0) {
       subline.write(' · ${context.l10n.filtered}');
     }
-    Widget filterIcon = Icon(FluentIcons.filter_24_regular, size: desktop ? 20 : 24);
+    Widget filterIcon = Icon(
+      FluentIcons.filter_24_regular,
+      size: desktop ? 20 : 24,
+    );
     if (filterCount > 0) {
       filterIcon = Badge.count(
         count: filterCount,
@@ -491,8 +495,12 @@ class _ChapterHeader extends StatelessWidget {
             ),
           );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 8, 10)
-          .onDesktopPageLine(context, top: true),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        14,
+        8,
+        10,
+      ).onDesktopPageLine(context, top: true),
       child: Row(
         children: [
           Expanded(
@@ -517,7 +525,10 @@ class _ChapterHeader extends StatelessWidget {
           if (desktop)
             TextButton.icon(
               onPressed: onRefresh,
-              icon: const Icon(FluentIcons.arrow_clockwise_24_regular, size: 20),
+              icon: const Icon(
+                FluentIcons.arrow_clockwise_24_regular,
+                size: 20,
+              ),
               label: Text(context.l10n.refresh),
             )
           else

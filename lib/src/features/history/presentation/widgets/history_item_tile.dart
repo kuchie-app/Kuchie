@@ -14,16 +14,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
-import '../../../../utils/motion/reduce_motion.dart';
 import '../../../../widgets/desktop/desktop_page_frame.dart';
-import '../../../../widgets/ios/apple_glass_capability.dart';
-import '../../../../widgets/ios/apple_glass_popup_button.dart';
 import '../../../../widgets/server_image.dart';
 import '../../../../widgets/web_route_link.dart';
+import '../../../local_collection/data/local_reading_stats.dart';
 import '../../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
 import '../../../manga_book/presentation/manga_details/widgets/chapter_context_menu.dart';
 import '../../domain/history_item.dart';
-import '../../domain/history_menu_action.dart';
 import 'history_row_menu.dart';
 
 bool isHistoryChapterCompleted(HistoryItemDto item) {
@@ -50,6 +47,11 @@ void navigateHistoryItemToReader(
   WidgetRef ref,
   HistoryItemDto item,
 ) {
+  // On phones the reader opens above the manga page, so Back lands on the
+  // manga instead of History, as in the Local collection.
+  if (!context.usesDesktopShell) {
+    unawaited(MangaRoute(mangaId: item.mangaId).push<void>(context));
+  }
   if (isHistoryChapterCompleted(item)) {
     navigateToNextHistoryChapterAfterLoading(context, ref, item);
   } else {
@@ -97,14 +99,16 @@ Future<void> navigateToNextHistoryChapterAfterLoading(
       .read(mangaChapterListProvider(mangaId: item.mangaId).notifier)
       .refresh();
 
-  unawaited(Future.any([
-    completer.future,
-    Future.delayed(const Duration(seconds: 10)).then((_) {
-      if (!completer.isCompleted) {
-        navigateAndCleanup(item.id);
-      }
-    }),
-  ]));
+  unawaited(
+    Future.any([
+      completer.future,
+      Future.delayed(const Duration(seconds: 10)).then((_) {
+        if (!completer.isCompleted) {
+          navigateAndCleanup(item.id);
+        }
+      }),
+    ]),
+  );
 }
 
 class HistoryItemTile extends StatelessWidget {
@@ -384,98 +388,6 @@ class _ProgressLine extends StatelessWidget {
   }
 }
 
-class _PhoneMetaLine extends StatelessWidget {
-  const _PhoneMetaLine({required this.item, required this.vertical});
-
-  final HistoryItemDto item;
-  final bool vertical;
-
-  @override
-  Widget build(BuildContext context) {
-    final completed = isHistoryChapterCompleted(item);
-    final timeString = item.readAt != null
-        ? DateFormat.Hm().format(item.readAt!)
-        : '';
-    final content = Row(
-      children: [
-        if (timeString.isNotEmpty) ...[
-          Icon(
-            FluentIcons.clock_24_regular,
-            size: 14,
-            color: context.theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            timeString,
-            style: context.theme.textTheme.labelSmall?.copyWith(
-              color: context.theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-        if (item.user.lastPageRead > 0 && item.pageCount > 0) ...[
-          const SizedBox(width: 8),
-          Icon(
-            completed
-                ? FluentIcons.checkmark_circle_24_filled
-                : FluentIcons.bookmark_24_regular,
-            size: 14,
-            color: completed
-                ? context.theme.colorScheme.secondary
-                : context.theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            completed
-                ? context.l10n.historyChapterCompleted
-                : '${historyResumePage(item)}/${item.pageCount}',
-            style: context.theme.textTheme.labelSmall?.copyWith(
-              color: completed
-                  ? context.theme.colorScheme.secondary
-                  : context.theme.colorScheme.primary,
-            ),
-          ),
-        ],
-        if (item.scanlator.isNotBlank) ...[
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              item.scanlator!,
-              style: context.theme.textTheme.labelSmall?.copyWith(
-                color: context.theme.colorScheme.onSurfaceVariant,
-                fontStyle: FontStyle.italic,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ],
-    );
-    if (!vertical) return content;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        content,
-        const SizedBox(height: 3),
-        Row(
-          children: [
-            const Icon(FluentIcons.calendar_24_regular, size: 15),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                item.readDateGroup(context),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.textTheme.bodySmall,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 class _PhoneTile extends ConsumerWidget {
   const _PhoneTile({required this.item, this.onTap});
 
@@ -483,106 +395,179 @@ class _PhoneTile extends ConsumerWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final glass = supportsAppleGlass(context);
-    return Card(
-      margin: EdgeInsets.symmetric(
-        horizontal: glass ? 0 : 4,
-        vertical: glass ? 4 : 2,
-      ),
-      color: glass ? Colors.transparent : null,
-      elevation: glass ? 0 : null,
-      child: WebRouteLink(
-        // Completed entries load the next chapter dynamically, so they have no fixed link.
-        location: isHistoryChapterCompleted(item)
-            ? null
-            : ReaderRoute(mangaId: item.mangaId, chapterId: item.id).location,
-        builder: (context, openInNewTab) => InkWell(
-          onTap: () => WebRouteLink.handleTap(
-            openInNewTab,
-            onTap ?? () => navigateHistoryItemToReader(context, ref, item),
+  Widget build(BuildContext context, WidgetRef ref) => HistoryRowView(
+    cover: (size) => ServerImage(
+      imageUrl: item.manga.displayCoverUrl,
+      fallbackImageUrl: item.manga.thumbnailUrl,
+      coverVersion: item.manga.coverVersion,
+      fallbackCoverVersion: item.manga.thumbnailUrlLastFetched,
+      size: size,
+    ),
+    seriesTitle: item.manga.title,
+    chapterTitle: item.name,
+    readAt: item.readAt,
+    readingTime: LocalReadingStats.instance.timeFor(
+      serverReadingKey(item.mangaId),
+    ),
+    linkLocation: MangaRoute(mangaId: item.mangaId).location,
+    // Like Tachimanga: the row opens the series; resuming is in the sheet.
+    onTap: onTap ?? () => MangaRoute(mangaId: item.mangaId).push(context),
+    onLongPress: () =>
+        showHistoryActionsSheet(context: context, ref: ref, item: item),
+    onMore: () =>
+        showHistoryActionsSheet(context: context, ref: ref, item: item),
+  );
+}
+
+/// One read series in History, for every collection, laid out like
+/// Tachimanga: cover, title, chapter, time spent reading and when, and a
+/// remove (or more) button. The row opens the series.
+class HistoryRowView extends StatelessWidget {
+  const HistoryRowView({
+    super.key,
+    required this.cover,
+    required this.seriesTitle,
+    required this.chapterTitle,
+    required this.onTap,
+    this.readAt,
+    this.readingTime = Duration.zero,
+    this.onLongPress,
+    this.onRemove,
+    this.onMore,
+    this.linkLocation,
+  });
+
+  /// Builds the cover at the given size.
+  final Widget Function(Size size) cover;
+  final String seriesTitle;
+  final String chapterTitle;
+  final VoidCallback onTap;
+  final DateTime? readAt;
+
+  /// Time spent reading this series; shown when at least a minute.
+  final Duration readingTime;
+  final VoidCallback? onLongPress;
+
+  /// Shows a trash button; takes the place of [onMore].
+  final VoidCallback? onRemove;
+  final VoidCallback? onMore;
+  final String? linkLocation;
+
+  static const coverSize = Size(64, 92);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.theme.colorScheme;
+    final meta = context.textTheme.bodySmall?.copyWith(
+      color: cs.onSurfaceVariant,
+    );
+    final readAt = this.readAt;
+    Widget metaRow(IconData icon, String text) => Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: cs.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              style: meta,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          onLongPress: () =>
-              showHistoryActionsSheet(context: context, ref: ref, item: item),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: glass
-                ? const EdgeInsets.symmetric(horizontal: 4, vertical: 4)
-                : const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: glass
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.center,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(glass ? 12 : 8),
-                  child: ServerImage(
-                    imageUrl: item.manga.displayCoverUrl,
-                    fallbackImageUrl: item.manga.thumbnailUrl,
-                    coverVersion: item.manga.coverVersion,
-                    fallbackCoverVersion: item.manga.thumbnailUrlLastFetched,
-                    size: glass ? const Size(84, 122) : const Size(56, 80),
-                  ),
+        ],
+      ),
+    );
+    return WebRouteLink(
+      location: linkLocation,
+      builder: (context, openInNewTab) => InkWell(
+        onTap: () => WebRouteLink.handleTap(openInNewTab, onTap),
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox.fromSize(
+                  size: coverSize,
+                  child: cover(coverSize),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.manga.title,
-                        style:
-                            (glass
-                                    ? context.textTheme.titleMedium
-                                    : context.textTheme.titleSmall)
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      seriesTitle,
+                      style: context.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 4),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (chapterTitle.isNotEmpty)
                       Text(
-                        item.name,
-                        style: context.theme.textTheme.bodyMedium?.copyWith(
-                          color: context.theme.colorScheme.onSurfaceVariant,
-                        ),
+                        chapterTitle,
+                        style: meta,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      _PhoneMetaLine(item: item, vertical: glass),
-                    ],
-                  ),
+                    if (readingTime.inMinutes > 0)
+                      metaRow(
+                        FluentIcons.book_open_24_regular,
+                        formatReadingTime(readingTime),
+                      ),
+                    if (readAt != null)
+                      metaRow(
+                        FluentIcons.clock_24_regular,
+                        historyRelativeDay(context, readAt),
+                      ),
+                  ],
                 ),
-                AppleGlassPopupButton<HistoryMenuAction>(
+              ),
+              if (onRemove case final remove?)
+                IconButton(
+                  tooltip: context.l10n.delete,
+                  icon: Icon(
+                    FluentIcons.delete_24_regular,
+                    color: cs.onSurfaceVariant,
+                  ),
+                  onPressed: remove,
+                )
+              else if (onMore case final more?)
+                IconButton(
+                  tooltip: context.l10n.more,
                   icon: Icon(
                     FluentIcons.more_vertical_24_regular,
-                    color: context.theme.colorScheme.onSurfaceVariant,
+                    color: cs.onSurfaceVariant,
                   ),
-                  onSelected: (action) {
-                    switch (action) {
-                      case HistoryMenuAction.viewManga:
-                        MangaRoute(mangaId: item.mangaId).push(context);
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => HistoryMenuAction.values
-                      .map(
-                        (action) => PopupMenuItem(
-                          value: action,
-                          child: ChapterMenuRow(
-                            icon: action.icon,
-                            label: action.toLocale(context),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  popUpAnimationStyle: context.motionStyle,
+                  onPressed: more,
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+/// "Today", "Yesterday", "3 days ago", or a short date, as History shows.
+String historyRelativeDay(BuildContext context, DateTime at) {
+  final now = DateTime.now();
+  final days = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime(at.year, at.month, at.day)).inDays;
+  return switch (days) {
+    <= 0 => DateGroupKeys.today.toLocale(context),
+    1 => DateGroupKeys.yesterday.toLocale(context),
+    < 7 => context.l10n.daysAgo(days),
+    _ => MaterialLocalizations.of(context).formatShortDate(at),
+  };
 }

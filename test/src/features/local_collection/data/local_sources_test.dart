@@ -155,6 +155,50 @@ void main() {
   });
 
   test(
+    'updates count only chapters a source added since the last check',
+    () async {
+      final index = await sources.addRepository(Uri.parse('$host/index.json'));
+      final source = await sources.install(index.packages.single);
+      final manga = (await sources.browse(source.id)).first;
+      final books = [
+        LocalSeries(
+          id: localSourceSeriesId(source, manga.id),
+          title: manga.title,
+          chapters: const [],
+          source: sources.seriesReference(manga),
+        ),
+      ];
+      final baseline = _MemoryBaseline();
+      var read = <String>{};
+
+      Future<List<LocalMangaUpdate>> check() async => (await loadLocalUpdates(
+        sources,
+        books,
+        baseline: baseline,
+        readChapters: (_) async => read,
+      )).items;
+
+      // The first check only learns the chapters the title already had.
+      expect(await check(), isEmpty);
+      expect(baseline.known[books.single.id], {'chapter-1'});
+
+      server['/chapters.json'] = jsonEncode({
+        'chapters': [
+          {'id': 'chapter-2', 'title': 'Chapter 2', 'pages': 'pages.json'},
+          {'id': 'chapter-1', 'title': 'Chapter 1', 'pages': 'pages.json'},
+        ],
+      });
+      final updates = await check();
+      expect(updates.single.count, 1);
+      expect(updates.single.chapterIds, ['chapter-2', 'chapter-1']);
+
+      // A chapter read online is no longer new.
+      read = {'chapter-2'};
+      expect(await check(), isEmpty);
+    },
+  );
+
+  test(
     'installs a Keiyoushi APK, reopens its sources, and preserves page headers',
     () async {
       const package = 'eu.kanade.tachiyomi.extension.all.example';
@@ -624,6 +668,123 @@ void main() {
       await reopened.install(repo.packages.single);
       await reopened.browsePage(source.id);
       expect(runtime.seen.last, isEmpty);
+    });
+
+    test('refuses a retired store whose only entries are notices', () async {
+      final client = MockClient((request) async {
+        switch (request.url.path) {
+          case '/repo/index.min.json':
+            return http.Response(
+              jsonEncode([
+                {
+                  'name': 'Outdated App',
+                  'pkg': 'eu.kanade.tachiyomi.extension.all.keiyoushi',
+                  'apk': 'tachiyomi-all.keiyoushi-v1.4.1.apk',
+                  'lang': 'all',
+                  'code': 1,
+                  'version': '1.4.1',
+                  'nsfw': 0,
+                  'sources': [
+                    {
+                      'name': 'Outdated App',
+                      'lang': 'all',
+                      'id': '1',
+                      'baseUrl': 'https://keiyoushi.github.io',
+                    },
+                  ],
+                },
+              ]),
+              200,
+            );
+          case '/repo/repo.json':
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'name': 'Retired QA',
+                  'signingKeyFingerprint': signer.fingerprint,
+                },
+              }),
+              200,
+            );
+        }
+        return http.Response('', 404);
+      });
+      addTearDown(client.close);
+      final catalog = LocalSources(root, client: client);
+      await expectLater(
+        catalog.addRepository(
+          Uri.parse('https://retired.example/repo/index.min.json'),
+        ),
+        throwsA(
+          isA<LocalSourceRetiredStoreException>()
+              .having((error) => error.storeName, 'storeName', 'Retired QA')
+              .having((error) => error.movedToKeiyoushi, 'Keiyoushi', isTrue),
+        ),
+      );
+      expect(await catalog.repositories(), isEmpty);
+    });
+
+    test('follows the add-store link on a store web page and drops notice '
+        'entries beside real extensions', () async {
+      final client = MockClient((request) async {
+        switch (request.url.toString()) {
+          case 'https://stores.example/extensions/':
+            return http.Response(
+              '<!doctype html><a href="mihon://extension-store?url='
+              'https%3A%2F%2Fstores.example%2Frepo%2Findex.min.json">Add</a>',
+              200,
+            );
+          case 'https://stores.example/repo/index.min.json':
+            return http.Response(
+              jsonEncode([
+                {
+                  'name': 'Update to Mihon 0.20.1+',
+                  'pkg': 'eu.kanade.tachiyomi.extension.all.mihon',
+                  'apk': 'tachiyomi-all.mihon-v1.4.1.apk',
+                  'lang': 'all',
+                  'code': 1,
+                  'version': '1.4.1',
+                  'nsfw': 0,
+                  'sources': [
+                    {'id': '1', 'baseUrl': 'https://mihon.app'},
+                  ],
+                },
+                {
+                  'name': 'Tachiyomi: Example',
+                  'pkg': package,
+                  'apk': 'example.apk',
+                  'lang': 'en',
+                  'code': 1,
+                  'version': '1.4.1',
+                  'nsfw': 0,
+                  'sources': [
+                    {'id': '7', 'baseUrl': 'https://example.com'},
+                  ],
+                },
+              ]),
+              200,
+            );
+          case 'https://stores.example/repo/repo.json':
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'name': 'Page QA',
+                  'signingKeyFingerprint': signer.fingerprint,
+                },
+              }),
+              200,
+            );
+        }
+        return http.Response('', 404);
+      });
+      addTearDown(client.close);
+      final catalog = LocalSources(root, client: client);
+      final repo = await catalog.addRepository(
+        Uri.parse('https://stores.example/extensions/'),
+      );
+      expect(repo.name, 'Page QA');
+      expect(repo.url, Uri.parse('https://stores.example/repo/index.min.json'));
+      expect(repo.packages.map((package) => package.name), ['Example']);
     });
 
     test('adds a store whose key is not a SHA-256 and installs its APKs only '
@@ -1178,6 +1339,7 @@ class _SettingsRuntime extends _FixtureRuntime {
     required String query,
     required bool latest,
     required int page,
+    List<Map<String, Object?>> filterList = const [],
   }) async {
     seen.add([for (final item in source.preferences) item.toJson()]);
     return (items: const <MihonRuntimeManga>[], hasMore: false);
@@ -1210,6 +1372,7 @@ class _FixtureRuntime extends MihonRuntimeClient {
     required String query,
     required bool latest,
     required int page,
+    List<Map<String, Object?>> filterList = const [],
   }) async {
     expect(apk, expectedApk);
     expect(source.id, '5678');
@@ -1274,4 +1437,15 @@ class _FixtureRuntime extends MihonRuntimeClient {
       ),
     ];
   }
+}
+
+class _MemoryBaseline implements LocalUpdateBaseline {
+  final known = <String, Set<String>>{};
+
+  @override
+  Future<Set<String>?> read(String seriesId) async => known[seriesId];
+
+  @override
+  Future<void> write(String seriesId, Iterable<String> chapterIds) async =>
+      known[seriesId] = chapterIds.toSet();
 }

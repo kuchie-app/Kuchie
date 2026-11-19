@@ -15,6 +15,7 @@ import '../../../../../routes/router_config.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../../widgets/emoticons.dart';
+import '../../../../../widgets/scroll_bottom_inset.dart';
 import '../../../../../widgets/shell/update_banner_state.dart';
 import '../../../../manga_book/data/updates/updates_repository.dart';
 import '../../../../offline/data/server_reachability.dart';
@@ -123,6 +124,7 @@ class LibrarySectionsView extends HookConsumerWidget {
                 byCategory: byCategory,
                 showCount: showCounts,
               ),
+            const SliverBottomInset(),
           ],
         ),
       ),

@@ -305,7 +305,7 @@ void main() {
   });
 
   testWidgets(
-    'chapter picker opens near the current chapter and watches nearby rows',
+    'chapter picker opens near the current chapter and builds nearby rows only',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -360,10 +360,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Chapter 35').hitTestable(), findsOneWidget);
-      expect(watchedChapters, contains(35));
-      expect(watchedChapters.length, lessThanOrEqualTo(17));
-      expect(watchedChapters, isNot(contains(20)));
-      expect(watchedChapters, isNot(contains(55)));
+      // Server chapters download on the server only, so rows no longer watch
+      // the device copy; the list still builds only the rows near the
+      // current chapter.
+      expect(watchedChapters, isEmpty);
+      expect(find.text('Chapter 20'), findsNothing);
+      expect(find.text('Chapter 55'), findsNothing);
 
       await tester.drag(find.text('Chapter 35'), const Offset(0, 230));
       await tester.pumpAndSettle();

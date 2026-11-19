@@ -44,10 +44,95 @@ class ChapterGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lastPage = chapter.user.lastPageRead.getValueOnNullOrNegative();
+    return ChapterGridTileView(
+      key: Key("manga-${manga.id}-chapter-${chapter.id}"),
+      label: label(chapter),
+      tooltip: chapter.name,
+      isRead: chapter.user.isRead.ifNull(),
+      isBookmarked: chapter.user.isBookmarked.ifNull(),
+      isDownloaded: chapter.user.isDownloaded.ifNull(),
+      lastPageRead: lastPage,
+      isSelected: isSelected,
+      onLongPressAt: onLongPressAt,
+      onSecondaryTapDown: (position) {
+        if (onSecondaryTapAt != null) {
+          onSecondaryTapAt!(position);
+        } else {
+          toggleSelect(chapter);
+        }
+      },
+      onTap: () {
+        if (onRowTap != null) {
+          final keys = HardwareKeyboard.instance.logicalKeysPressed;
+          onRowTap!(
+            keys.contains(LogicalKeyboardKey.shiftLeft) ||
+                keys.contains(LogicalKeyboardKey.shiftRight),
+          );
+        } else if (canTapSelect) {
+          toggleSelect(chapter);
+        } else {
+          ReaderRoute(
+            mangaId: manga.id,
+            chapterId: chapter.id,
+            showReaderLayoutAnimation: true,
+          ).push(context);
+        }
+      },
+      onLongPress: () => toggleSelect(chapter),
+    );
+  }
+}
+
+/// One chapter in the number grid, for every collection. Callers pass plain
+/// state, so server and on-device series draw the same tile.
+class ChapterGridTileView extends StatelessWidget {
+  const ChapterGridTileView({
+    super.key,
+    required this.label,
+    required this.tooltip,
+    required this.isRead,
+    required this.isBookmarked,
+    required this.isDownloaded,
+    required this.lastPageRead,
+    required this.isSelected,
+    required this.onTap,
+    required this.onLongPress,
+    this.onLongPressAt,
+    this.onSecondaryTapDown,
+  });
+
+  /// Short chapter number shown in the tile, e.g. "12" or "12.5".
+  final String label;
+  final String tooltip;
+  final bool isRead;
+  final bool isBookmarked;
+  final bool isDownloaded;
+
+  /// Zero-based page the reader stopped on; 0 means not started.
+  final int lastPageRead;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  /// Used when [onLongPressAt] is null (e.g. to start selecting).
+  final VoidCallback onLongPress;
+
+  /// Opens a menu at the press point; replaces [onLongPress].
+  final ValueChanged<Offset>? onLongPressAt;
+  final ValueChanged<Offset>? onSecondaryTapDown;
+
+  /// Grid label for a chapter number, or the 1-based position without one.
+  static String numberLabel(double? number, int position) {
+    if (number == null || number < 0) return '#$position';
+    return number == number.roundToDouble()
+        ? number.toInt().toString()
+        : number.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = context.theme.colorScheme;
-    final isRead = chapter.user.isRead.ifNull();
-    final inProgress =
-        !isRead && chapter.user.lastPageRead.getValueOnNullOrNegative() != 0;
+    final inProgress = !isRead && lastPageRead != 0;
 
     final Color background;
     final Color textColor;
@@ -80,7 +165,7 @@ class ChapterGridTile extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                label(chapter),
+                label,
                 style: TextStyle(
                   color: textColor,
                   fontSize: 14,
@@ -89,7 +174,7 @@ class ChapterGridTile extends StatelessWidget {
               ),
             ),
           ),
-          if (chapter.user.isBookmarked.ifNull())
+          if (isBookmarked)
             Positioned(
               top: -1,
               right: 5,
@@ -103,9 +188,7 @@ class ChapterGridTile extends StatelessWidget {
             Positioned(
               bottom: 3,
               child: Text(
-                context.l10n.page(
-                  chapter.user.lastPageRead.getValueOnNullOrNegative() + 1,
-                ),
+                context.l10n.page(lastPageRead + 1),
                 style: TextStyle(
                   color: cs.secondary,
                   fontSize: 8,
@@ -113,7 +196,7 @@ class ChapterGridTile extends StatelessWidget {
                 ),
               ),
             )
-          else if (chapter.user.isDownloaded.ifNull())
+          else if (isDownloaded)
             Positioned(
               bottom: 5,
               child: Container(
@@ -149,43 +232,20 @@ class ChapterGridTile extends StatelessWidget {
     }
 
     return GestureDetector(
-      key: Key("manga-${manga.id}-chapter-${chapter.id}"),
       onLongPressStart: onLongPressAt == null
           ? null
           : (details) => onLongPressAt!(details.globalPosition),
-      onSecondaryTapDown: (details) {
-        if (onSecondaryTapAt != null) {
-          onSecondaryTapAt!(details.globalPosition);
-        } else {
-          toggleSelect(chapter);
-        }
-      },
+      onSecondaryTapDown: onSecondaryTapDown == null
+          ? null
+          : (details) => onSecondaryTapDown!(details.globalPosition),
       child: Tooltip(
-        message: chapter.name,
+        message: tooltip,
         waitDuration: const Duration(milliseconds: 500),
         triggerMode: onLongPressAt == null ? null : TooltipTriggerMode.manual,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            if (onRowTap != null) {
-              final keys = HardwareKeyboard.instance.logicalKeysPressed;
-              onRowTap!(
-                keys.contains(LogicalKeyboardKey.shiftLeft) ||
-                    keys.contains(LogicalKeyboardKey.shiftRight),
-              );
-            } else if (canTapSelect) {
-              toggleSelect(chapter);
-            } else {
-              ReaderRoute(
-                mangaId: manga.id,
-                chapterId: chapter.id,
-                showReaderLayoutAnimation: true,
-              ).push(context);
-            }
-          },
-          onLongPress: onLongPressAt == null
-              ? () => toggleSelect(chapter)
-              : null,
+          onTap: onTap,
+          onLongPress: onLongPressAt == null ? onLongPress : null,
           child: tile,
         ),
       ),

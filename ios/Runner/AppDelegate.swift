@@ -51,16 +51,40 @@ import UIKit
     }
   }
 
+  #if targetEnvironment(simulator) && DEBUG
+  /// The Mac-side runtime a Debug Simulator build uses, since the embedded
+  /// OpenJDK has no Simulator slice. Launch environment variables win; without
+  /// them the app reads the port and token that
+  /// tool/qa/ensure_simulator_runtime.sh writes during the Xcode build.
+  private static func simulatorRuntimeHost() -> (port: Int, token: String)? {
+    func valid(_ port: Int?, _ token: String?) -> (port: Int, token: String)? {
+      guard let port, (1...65535).contains(port), let token, token.count == 64,
+            token.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return nil }
+      return (port, token)
+    }
+    let environment = ProcessInfo.processInfo.environment
+    if let host = valid(
+      environment["KUCHIE_QA_EXTENSION_RUNTIME_PORT"].flatMap { Int($0) },
+      environment["KUCHIE_QA_EXTENSION_RUNTIME_TOKEN"]) {
+      return host
+    }
+    guard let home = environment["SIMULATOR_HOST_HOME"] else { return nil }
+    let directory = URL(fileURLWithPath: home)
+      .appendingPathComponent("development/kuchie-qa-extension-runtime", isDirectory: true)
+    func read(_ name: String) -> String? {
+      (try? String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8))?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return valid(read("runtime.port").flatMap { Int($0) }, read("runtime.token"))
+  }
+  #endif
+
   private func handleMihonRuntime(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "startServer":
       #if targetEnvironment(simulator) && DEBUG
-      let environment = ProcessInfo.processInfo.environment
-      if let value = environment["KUCHIE_QA_EXTENSION_RUNTIME_PORT"],
-         let port = Int(value), (1...65535).contains(port),
-         let token = environment["KUCHIE_QA_EXTENSION_RUNTIME_TOKEN"],
-         token.count == 64, token.allSatisfy({ $0.isASCII && $0.isHexDigit }) {
-        result(["port": port, "token": token])
+      if let host = Self.simulatorRuntimeHost() {
+        result(["port": host.port, "token": host.token])
         return
       }
       #endif

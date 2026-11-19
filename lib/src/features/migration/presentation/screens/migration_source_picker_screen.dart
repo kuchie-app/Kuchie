@@ -20,6 +20,7 @@ import '../../../../widgets/ios/apple_glass_floating_header.dart';
 import '../../../../widgets/ios/apple_glass_popup_button.dart';
 import '../../../../widgets/ios/apple_glass_search.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
+import '../../../../widgets/scroll_bottom_inset.dart';
 import '../../../../widgets/search_field.dart';
 import '../../../../widgets/server_image.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
@@ -321,6 +322,7 @@ class MigrationSourcePickerBody extends HookConsumerWidget {
                 SliverFillRemaining(child: empty)
               else
                 SliverList.builder(itemCount: groups.length, itemBuilder: row),
+              const SliverBottomInset(),
             ],
           );
         }

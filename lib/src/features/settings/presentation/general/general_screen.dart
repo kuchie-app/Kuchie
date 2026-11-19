@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -16,6 +17,7 @@ import '../../../../widgets/desktop/desktop_top_bar.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../search/settings_search_registry.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
+import '../customize_tabs/customize_tabs_screen.dart';
 import '../library/widgets/persistent_search_bar/persistent_search_bar.dart';
 import 'quick_search_toggle/quick_search_toggle_tile.dart';
 import 'widgets/force_portrait_tile.dart';
@@ -54,6 +56,17 @@ class GeneralScreen extends ConsumerWidget {
                 const DesktopPageLeadingGap(16),
                 SettingsGroupCard(
                   children: [
+                    // Phones only: wide screens show every tab in a rail.
+                    if (context.windowSizeClass < WindowSizeClass.medium)
+                      SettingsGroupRow(
+                        icon: FluentIcons.apps_list_24_regular,
+                        title: context.l10n.customizeTabs,
+                        subtitle: context.l10n.customizeTabsSubtitle,
+                        trailing: const Icon(
+                          FluentIcons.chevron_right_24_regular,
+                        ),
+                        onTap: () => openCustomizeTabs(context),
+                      ),
                     if (canForcePortrait(
                       MediaQuery.sizeOf(context).shortestSide,
                     ))

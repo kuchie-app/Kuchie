@@ -38,10 +38,7 @@ class EdgeLayout extends StatelessWidget {
           flex: smaller ? 2 : 1,
           child: Column(
             children: [
-              Expanded(
-                flex: smaller ? 3 : 2,
-                child: const SizedBox.expand(),
-              ),
+              Expanded(flex: smaller ? 3 : 2, child: const SizedBox.expand()),
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,

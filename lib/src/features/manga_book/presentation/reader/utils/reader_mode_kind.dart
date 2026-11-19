@@ -12,45 +12,38 @@ import '../../../../settings/presentation/reader/widgets/reader_tap_invert/reade
 
 /// Shared paged-mode classification for gesture routing and bottom controls.
 bool isPagedReaderMode(ReaderMode mode) => switch (mode) {
-      ReaderMode.singleHorizontalLTR ||
-      ReaderMode.singleHorizontalRTL ||
-      ReaderMode.singleVertical =>
-        true,
-      ReaderMode.defaultReader ||
-      ReaderMode.continuousVertical ||
-      ReaderMode.webtoon ||
-      ReaderMode.continuousHorizontalLTR ||
-      ReaderMode.continuousHorizontalRTL =>
-        false,
-    };
+  ReaderMode.singleHorizontalLTR ||
+  ReaderMode.singleHorizontalRTL ||
+  ReaderMode.singleVertical => true,
+  ReaderMode.defaultReader ||
+  ReaderMode.continuousVertical ||
+  ReaderMode.webtoon ||
+  ReaderMode.continuousHorizontalLTR ||
+  ReaderMode.continuousHorizontalRTL => false,
+};
 
 /// Shared RTL classification for page transitions and tap zones.
 bool isRTLReaderMode(ReaderMode mode) => switch (mode) {
-      ReaderMode.singleHorizontalRTL ||
-      ReaderMode.continuousHorizontalRTL =>
-        true,
-      ReaderMode.singleHorizontalLTR ||
-      ReaderMode.continuousHorizontalLTR ||
-      ReaderMode.singleVertical ||
-      ReaderMode.continuousVertical ||
-      ReaderMode.webtoon ||
-      ReaderMode.defaultReader =>
-        false,
-    };
+  ReaderMode.singleHorizontalRTL || ReaderMode.continuousHorizontalRTL => true,
+  ReaderMode.singleHorizontalLTR ||
+  ReaderMode.continuousHorizontalLTR ||
+  ReaderMode.singleVertical ||
+  ReaderMode.continuousVertical ||
+  ReaderMode.webtoon ||
+  ReaderMode.defaultReader => false,
+};
 
 /// Default is right-and-left for horizontal paging, L-shaped for other modes.
 ReaderNavigationLayout defaultNavigationFor(ReaderMode mode) => switch (mode) {
-      ReaderMode.singleHorizontalLTR ||
-      ReaderMode.singleHorizontalRTL ||
-      ReaderMode.continuousHorizontalLTR ||
-      ReaderMode.continuousHorizontalRTL =>
-        ReaderNavigationLayout.rightAndLeft,
-      ReaderMode.singleVertical ||
-      ReaderMode.continuousVertical ||
-      ReaderMode.webtoon ||
-      ReaderMode.defaultReader =>
-        ReaderNavigationLayout.lShaped,
-    };
+  ReaderMode.singleHorizontalLTR ||
+  ReaderMode.singleHorizontalRTL ||
+  ReaderMode.continuousHorizontalLTR ||
+  ReaderMode.continuousHorizontalRTL => ReaderNavigationLayout.rightAndLeft,
+  ReaderMode.singleVertical ||
+  ReaderMode.continuousVertical ||
+  ReaderMode.webtoon ||
+  ReaderMode.defaultReader => ReaderNavigationLayout.lShaped,
+};
 
 /// Resolves per-series, then viewer default, then the concrete default layout.
 ReaderNavigationLayout effectiveNavigationLayout(
@@ -60,7 +53,8 @@ ReaderNavigationLayout effectiveNavigationLayout(
 }) {
   var layout = seriesOverride ?? ReaderNavigationLayout.defaultNavigation;
   if (layout == ReaderNavigationLayout.defaultNavigation) {
-    layout = (isPagedReaderMode(mode)
+    layout =
+        (isPagedReaderMode(mode)
             ? ref.watch(pagedNavigationLayoutKeyProvider)
             : ref.watch(longStripNavigationLayoutKeyProvider)) ??
         ReaderNavigationLayout.defaultNavigation;
@@ -78,7 +72,8 @@ TapInvert effectiveTapInvert(
   required ReaderNavigationLayout layout,
   TapInvert? seriesOverride,
 }) {
-  final invert = seriesOverride ??
+  final invert =
+      seriesOverride ??
       (isPagedReaderMode(mode)
           ? ref.watch(pagedTapInvertKeyProvider)
           : ref.watch(longStripTapInvertKeyProvider)) ??

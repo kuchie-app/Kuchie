@@ -7,6 +7,7 @@ import '../../../../../constants/enum.dart';
 import '../../../../../routes/navigation.dart';
 import '../../../../../routes/router_config.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
+import '../../../../../utils/misc/copy_with_feedback.dart';
 import '../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../utils/theme/brand.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
@@ -166,8 +167,11 @@ class SeriesHeader extends ConsumerWidget {
                         children: [
                           const SizedBox(height: 4),
                           if (!desktop) ...[
+                            // Tap copies; press and hold searches.
                             InkWell(
                               onTap: () =>
+                                  copyWithFeedback(context, manga.title),
+                              onLongPress: () =>
                                   openGlobalSearch(context, query: manga.title),
                               child: Text(
                                 manga.title,
@@ -178,6 +182,9 @@ class SeriesHeader extends ConsumerWidget {
                           ],
                           InkWell(
                             onTap: manga.author.isNotBlank
+                                ? () => copyWithFeedback(context, manga.author!)
+                                : null,
+                            onLongPress: manga.author.isNotBlank
                                 ? () => openGlobalSearch(
                                     context,
                                     query: manga.author,

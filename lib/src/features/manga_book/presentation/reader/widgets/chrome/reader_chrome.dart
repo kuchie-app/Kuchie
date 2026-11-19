@@ -97,49 +97,45 @@ class ReaderChrome extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ReaderChromeLayout(
+    return ReaderChromeView(
       currentIndex: currentIndex,
       pageCount: totalPageCount ?? chapterPages.chapter.pageCount,
       visibility: visibility,
+      utilsBarExpanded: utilsBarExpanded,
+      useBottomSeekBar: useBottomSeekBar,
       showSideSeekBar: showSideSeekBar,
-      onChanged: onChanged,
+      scrollDirection: scrollDirection,
       onPreviousChapter: onPreviousChapter,
       onNextChapter: onNextChapter,
-      topBar: (floating) => ReaderTopBar(
-        onJump: onChanged,
-        pageCount: chapterPages.pages.length,
-        currentPage: currentIndex,
-        manga: manga,
-        chapter: chapter,
-        onBack: () => context.pop(),
-        floating: floating,
-        onOpenReaderMode: floating ? onOpenReaderMode : null,
-        onOpenChapters: floating
-            ? () => showReaderChapterPicker(
-                context: context,
-                mangaId: chapter.mangaId,
-                currentChapterId: chapter.id,
-                readerScanlatorGroup: readerScanlatorGroup,
-                transVertical: scrollDirection == Axis.vertical,
-                floating: true,
-              )
-            : null,
-        onToggleAutoScrollControls: floating && autoScrollSupported
-            ? () => utilsBarExpanded.value = !utilsBarExpanded.value
-            : null,
-        autoScrollLabel:
-            resolvedReaderMode == ReaderMode.webtoon ||
-                resolvedReaderMode == ReaderMode.continuousVertical
-            ? context.l10n.autoScroll
-            : context.l10n.autoAdvance,
-      ),
-      utilsBar: autoScrollSupported
-          ? (floating) => ReaderUtilsBar(
-              expanded: utilsBarExpanded,
-              readerMode: resolvedReaderMode,
-              floating: floating,
-            )
-          : null,
+      resolvedReaderMode: resolvedReaderMode,
+      autoScrollSupported: autoScrollSupported,
+      reverseSeekBar: reverseSeekBar,
+      onChanged: onChanged,
+      onOpenSettings: onOpenSettings,
+      onOpenReaderMode: onOpenReaderMode,
+      topBar: (floating, onToggleAutoScrollControls, autoScrollLabel) =>
+          ReaderTopBar(
+            onJump: onChanged,
+            pageCount: chapterPages.pages.length,
+            currentPage: currentIndex,
+            manga: manga,
+            chapter: chapter,
+            onBack: () => context.pop(),
+            floating: floating,
+            onOpenReaderMode: floating ? onOpenReaderMode : null,
+            onOpenChapters: floating
+                ? () => showReaderChapterPicker(
+                    context: context,
+                    mangaId: chapter.mangaId,
+                    currentChapterId: chapter.id,
+                    readerScanlatorGroup: readerScanlatorGroup,
+                    transVertical: scrollDirection == Axis.vertical,
+                    floating: true,
+                  )
+                : null,
+            onToggleAutoScrollControls: onToggleAutoScrollControls,
+            autoScrollLabel: autoScrollLabel,
+          ),
       bottomBar: (floating) => ReaderBottomControls(
         readerScanlatorGroup: readerScanlatorGroup,
         chapter: chapter,
@@ -157,6 +153,92 @@ class ReaderChrome extends HookConsumerWidget {
         onOpenSettings: onOpenSettings,
         onOpenReaderMode: onOpenReaderMode,
       ),
+    );
+  }
+}
+
+/// Builds the top bar for [ReaderChromeView]. The auto-scroll toggle and its
+/// label are null when the bar should not offer them.
+typedef ReaderTopBarBuilder =
+    Widget Function(
+      bool floating,
+      VoidCallback? onToggleAutoScrollControls,
+      String? autoScrollLabel,
+    );
+
+/// The reader chrome shared by the server and Local readers: top bar,
+/// auto-scroll utils bar, side seek bar and bottom dock, with one visibility
+/// animation. Collection adapters only supply the two bars.
+class ReaderChromeView extends StatelessWidget {
+  const ReaderChromeView({
+    super.key,
+    required this.currentIndex,
+    required this.pageCount,
+    required this.visibility,
+    required this.utilsBarExpanded,
+    required this.useBottomSeekBar,
+    required this.showSideSeekBar,
+    required this.scrollDirection,
+    required this.onPreviousChapter,
+    required this.onNextChapter,
+    required this.resolvedReaderMode,
+    required this.autoScrollSupported,
+    required this.reverseSeekBar,
+    required this.onChanged,
+    required this.onOpenSettings,
+    required this.onOpenReaderMode,
+    required this.topBar,
+    required this.bottomBar,
+  });
+
+  final int currentIndex;
+  final int pageCount;
+  final ValueNotifier<bool> visibility;
+  final ValueNotifier<bool> utilsBarExpanded;
+  final bool useBottomSeekBar;
+  final bool showSideSeekBar;
+  final Axis scrollDirection;
+  final VoidCallback? onPreviousChapter;
+  final VoidCallback? onNextChapter;
+  final ReaderMode resolvedReaderMode;
+  final bool autoScrollSupported;
+  final bool reverseSeekBar;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onOpenReaderMode;
+  final ReaderTopBarBuilder topBar;
+  final Widget Function(bool floating) bottomBar;
+
+  @override
+  Widget build(BuildContext context) {
+    final autoScrollLabel =
+        resolvedReaderMode == ReaderMode.webtoon ||
+            resolvedReaderMode == ReaderMode.continuousVertical
+        ? context.l10n.autoScroll
+        : context.l10n.autoAdvance;
+    return ReaderChromeLayout(
+      currentIndex: currentIndex,
+      pageCount: pageCount,
+      visibility: visibility,
+      showSideSeekBar: showSideSeekBar,
+      onChanged: onChanged,
+      onPreviousChapter: onPreviousChapter,
+      onNextChapter: onNextChapter,
+      topBar: (floating) => topBar(
+        floating,
+        floating && autoScrollSupported
+            ? () => utilsBarExpanded.value = !utilsBarExpanded.value
+            : null,
+        autoScrollLabel,
+      ),
+      utilsBar: autoScrollSupported
+          ? (floating) => ReaderUtilsBar(
+              expanded: utilsBarExpanded,
+              readerMode: resolvedReaderMode,
+              floating: floating,
+            )
+          : null,
+      bottomBar: bottomBar,
     );
   }
 }
@@ -212,8 +294,7 @@ class ReaderChromeLayout extends HookConsumerWidget {
 
     // Show OS bars when chrome enters and hide after dismissal; fullscreen off leaves them visible.
     final fullscreen =
-        ref.watch(readerFullscreenProvider) ??
-        DBKeys.readerFullscreen.initial;
+        ref.watch(readerFullscreenProvider) ?? DBKeys.readerFullscreen.initial;
     useEffect(() {
       void onStatus(AnimationStatus status) {
         switch (status) {

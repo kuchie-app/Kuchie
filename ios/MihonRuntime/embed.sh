@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# The OpenJDK runtime has no Simulator slice. Debug Simulator builds use the
+# same bridge on Mac loopback instead, started (or refreshed) here.
+if [ "${PLATFORM_NAME:-}" = iphonesimulator ]; then
+  case "${CONFIGURATION:-}" in
+    Debug*) /bin/sh "${SRCROOT}/../tool/qa/ensure_simulator_runtime.sh" || true ;;
+  esac
+  exit 0
+fi
 [ "${PLATFORM_NAME:-}" = iphoneos ] || exit 0
 prepared="${SRCROOT}/MihonRuntime/.prepared"
 resource_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/KuchieMihonRuntime"

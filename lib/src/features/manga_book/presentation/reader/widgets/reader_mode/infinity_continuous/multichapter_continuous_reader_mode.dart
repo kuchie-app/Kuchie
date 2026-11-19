@@ -59,6 +59,7 @@ import 'infinity_continuous_config.dart';
 import 'infinity_continuous_feedback.dart';
 import 'infinity_continuous_utils.dart';
 import 'measure_size.dart';
+import 'strip_resize_correction.dart';
 import 'tall_page_image.dart';
 
 /// Pixels to advance this auto-scroll frame. [intervalSeconds] is the pace
@@ -153,7 +154,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
     final pageHeights = useRef<Map<String, double>>(<String, double>{});
     final pageProbes = useRef(<String, Future<({String path, Size size})>>{});
     final dimensions = useMemoized(TallPageDimensionCache.new);
-    final resizeCorrectionScheduled = useRef(false);
     final prefetchAnchor = useRef<int?>(null);
     final prefetchInProgress = useRef(false);
     // Suppress neighbour loads while programmatic jumps settle so transient positions cannot shift indices.
@@ -563,8 +563,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
 
     final bool autoScrollActive = ref.watch(autoScrollActiveProvider);
     final bool smoothAutoScroll =
-        ref.watch(smoothAutoScrollProvider) ??
-        DBKeys.smoothAutoScroll.initial;
+        ref.watch(smoothAutoScrollProvider) ?? DBKeys.smoothAutoScroll.initial;
     final int autoScrollIntervalSeconds =
         ref.watch(autoScrollIntervalSecondsProvider) ??
         DBKeys.autoScrollIntervalSeconds.initial;
@@ -576,6 +575,15 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
     // Tracked between ScrollStart/ScrollEnd so a touch landing mid-coast can be
     // told from one landing on a still page.
     final stripInMotion = useRef<bool>(false);
+    final resizeCorrection = useMemoized(
+      () => StripResizeCorrection(
+        itemScrollController: itemScrollController,
+        scrollOffsetController: scrollOffsetController,
+        positionsListener: positionsListener,
+        onAdjusting: (adjusting) => programmaticScroll.value = adjusting,
+      ),
+    );
+    useEffect(() => resizeCorrection.dispose, [resizeCorrection]);
     final bool chromeVisible = ref.watch(readerChromeVisibleProvider) ?? false;
 
     Future<({String path, Size size})> probePage(String url) {
@@ -694,37 +702,11 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       prefetchPagesFrom(index);
     }
 
-    void preservePositionOnResize(int resizedIndex) {
-      if (resizeCorrectionScheduled.value || !itemScrollController.isAttached) {
-        return;
-      }
-      final positions = positionsListener.itemPositions.value.where(
-        (p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1,
-      );
-      if (positions.isEmpty) return;
-      final first = positions.reduce((a, b) => a.index < b.index ? a : b);
-      if (resizedIndex > first.index) return;
-      final loaded = loadedRef.value;
-      final position = scrollOffsetController.position;
-      final depth =
-          math.max(0.0, -first.itemLeadingEdge) * position.viewportDimension;
-      resizeCorrectionScheduled.value = true;
-      // Reuse the list's center anchor before resized pages can move the visible page.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        resizeCorrectionScheduled.value = false;
-        if (!context.mounted ||
-            loadedRef.value != loaded ||
-            !itemScrollController.isAttached) {
-          return;
-        }
-        markScrollAdjusting();
-        jumpToIndex(
-          index: first.index,
-          alignment: math.max(0.0, first.itemLeadingEdge),
-        );
-        if (depth > 0) scrollOffsetController.position.jumpTo(depth);
-      });
-    }
+    // Pages above the visible ones that resize only shift the strip by their
+    // size change; correcting that keeps the fling going, where an indexed
+    // jump rebuilt every page and stopped it.
+    void preservePositionOnResize(int resizedIndex, double delta) =>
+        resizeCorrection.onResize(resizedIndex, delta);
 
     // Clear stale extents and re-anchor after scale/width changes; skip the initial sweep.
     final lastLayoutKey = useRef<(WebtoonScaleType, double)?>(null);
@@ -1426,7 +1408,12 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       }
       page = MeasureSize(
         key: ValueKey(loc.imageUrl),
-        onResize: () => preservePositionOnResize(index),
+        onResize: (oldSize, newSize) => preservePositionOnResize(
+          index,
+          isHorizontal
+              ? newSize.width - oldSize.width
+              : newSize.height - oldSize.height,
+        ),
         child: page,
       );
       if (index != total - 1) return page;
@@ -1507,7 +1494,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
             if (!programmaticScroll.value) stripInMotion.value = true;
             return false;
           },
-          child: positionedList,
+          child: resizeCorrection.wrap(positionedList),
         ),
       ),
     );

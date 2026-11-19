@@ -147,6 +147,67 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
     _start();
   }
 
+  /// Whether any chapter is waiting or downloading.
+  bool get running => value.any(
+    (item) =>
+        item.state == LocalDownloadState.queued ||
+        item.state == LocalDownloadState.downloading,
+  );
+
+  /// Pauses every chapter, as Tachimanga's Pause button does.
+  Future<void> pauseAll() async {
+    final active = _active;
+    value = [
+      for (final item in value)
+        item.state == LocalDownloadState.queued ||
+                item.state == LocalDownloadState.downloading
+            ? LocalDownload(
+                item.request,
+                LocalDownloadState.paused,
+                done: item.done,
+                total: item.total,
+              )
+            : item,
+    ];
+    if (active != null) _client?.close();
+    await _persist();
+  }
+
+  /// Queues every paused or failed chapter again.
+  Future<void> resumeAll() async {
+    value = [
+      for (final item in value)
+        item.state == LocalDownloadState.paused ||
+                item.state == LocalDownloadState.failed
+            ? LocalDownload(
+                item.request,
+                LocalDownloadState.queued,
+                done: item.done,
+                total: item.total,
+              )
+            : item,
+    ];
+    await _persist();
+    _start();
+  }
+
+  /// Removes every chapter from the queue.
+  Future<void> clear() async {
+    final items = [...value];
+    value = const [];
+    if (_active != null) {
+      _client?.close();
+      await _worker;
+    }
+    await _persist();
+    for (final item in items) {
+      await _catalog.purgePartialRemoteChapter(
+        item.request.seriesId,
+        item.request.chapterId,
+      );
+    }
+  }
+
   Future<void> remove(String seriesId, String chapterId) async {
     final item = _find(seriesId, chapterId);
     if (item == null) return;

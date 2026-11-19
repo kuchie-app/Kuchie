@@ -22,6 +22,7 @@ import '../../../../../widgets/inline_retry_row.dart';
 import '../../../../../widgets/ios/apple_glass_capability.dart';
 import '../../../../../widgets/kuchie_character_motion.dart';
 import '../../../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import '../../../../../widgets/paging_footer.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
 import '../../../../settings/presentation/appearance/widgets/grid_cover_width_slider/grid_cover_width_slider.dart';
 import '../../../domain/source/source_model.dart';
@@ -84,8 +85,10 @@ class SourceMangaGridView extends ConsumerWidget {
         builderDelegate: PagedChildBuilderDelegate<MangaDto>(
           firstPageProgressIndicatorBuilder: (context) =>
               const CenterKuchieShimmerIndicator(),
-          newPageProgressIndicatorBuilder: (context) =>
-              const CenterKuchieShimmerIndicator(),
+          newPageProgressIndicatorBuilder: (context) => PagingFooter(
+            loading: state.isLoading,
+            child: const CenterKuchieShimmerIndicator(),
+          ),
           newPageErrorIndicatorBuilder: (context) => InlineRetryRow(
             message: state.error.toString(),
             onRetry: fetchNextPage,

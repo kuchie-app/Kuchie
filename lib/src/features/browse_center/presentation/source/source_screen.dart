@@ -13,6 +13,7 @@ import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/toast/toast.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/ios/apple_glass_floating_header.dart';
+import '../../../../widgets/scroll_bottom_inset.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../settings/presentation/library/widgets/persistent_search_bar/persistent_search_bar.dart';
 import '../browse/browse_no_search_results.dart';
@@ -225,6 +226,7 @@ class SourceScreen extends HookConsumerWidget {
                 child: SourceListTile(source: localSource!.first),
               ),
             ],
+            const SliverBottomInset(),
           ],
         ),
       );

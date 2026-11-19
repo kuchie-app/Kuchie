@@ -26,6 +26,7 @@ import '../features/hotkeys/presentation/hotkeys_settings_screen.dart';
 import '../features/library/presentation/category/edit_category_screen.dart';
 import '../features/library/presentation/duplicates/library_duplicates_screen.dart';
 import '../features/library/presentation/library/library_screen.dart';
+import '../features/local_collection/presentation/local_cloudflare_prompt.dart';
 import '../features/local_collection/presentation/local_collection_home.dart';
 import '../features/manga_book/presentation/downloads/downloads_screen.dart';
 import '../features/manga_book/presentation/manga_details/manga_details_screen.dart';
@@ -210,29 +211,32 @@ class _LocalCollectionRoute extends ConsumerWidget {
   final String? initialSection;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => LocalCollectionHome(
-    initialSection: initialSection,
-    onOpenServer: (section) async {
-      final complete = ref.read(onboardingCompleteProvider) == true;
-      if (!complete) {
-        final prefs = ref.read(sharedPreferencesProvider);
-        await prefs.setString('onboarding.returnSection', section);
-        if ((prefs.getInt('onboarding.step') ?? 0) == 0) {
-          await prefs.setInt('onboarding.step', 1);
-        }
-      }
-      if (!context.mounted) return;
-      await ref
-          .read(collectionModeProvider.notifier)
-          .select(CollectionMode.server);
-      if (!context.mounted) return;
-      context.go(
-        complete
-            ? serverCollectionLocation(section)
-            : const OnboardingRoute().location,
+  Widget build(BuildContext context, WidgetRef ref) =>
+      LocalCloudflarePromptHost(
+        child: LocalCollectionHome(
+          initialSection: initialSection,
+          onOpenServer: (section) async {
+            final complete = ref.read(onboardingCompleteProvider) == true;
+            if (!complete) {
+              final prefs = ref.read(sharedPreferencesProvider);
+              await prefs.setString('onboarding.returnSection', section);
+              if ((prefs.getInt('onboarding.step') ?? 0) == 0) {
+                await prefs.setInt('onboarding.step', 1);
+              }
+            }
+            if (!context.mounted) return;
+            await ref
+                .read(collectionModeProvider.notifier)
+                .select(CollectionMode.server);
+            if (!context.mounted) return;
+            context.go(
+              complete
+                  ? serverCollectionLocation(section)
+                  : const OnboardingRoute().location,
+            );
+          },
+        ),
       );
-    },
-  );
 }
 
 @riverpod

@@ -49,7 +49,13 @@ Future<CroppedImageData?> cropImageBytes(
 }) {
   return compute(
     _cropEntry,
-    _CropRequest(encodedBytes, threshold, targetWidth, targetHeight, textureLimit),
+    _CropRequest(
+      encodedBytes,
+      threshold,
+      targetWidth,
+      targetHeight,
+      textureLimit,
+    ),
   );
 }
 

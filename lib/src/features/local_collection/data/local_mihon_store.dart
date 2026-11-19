@@ -62,6 +62,87 @@ Object? _decodeMihonDocument(Uint8List raw) {
   );
 }
 
+final _storeLinkPattern = RegExp(
+  r'''(?:mihon://extension-store|tachiyomi://add-repo)\?url=([^"'&<>\s]+)''',
+);
+
+/// The first "add store" link on an HTML page, or null for other documents.
+Uri? _storeLinkInPage(Uint8List bytes) {
+  final first = bytes.firstWhere(
+    (byte) => byte != 0x20 && byte != 0x0a && byte != 0x0d && byte != 0x09,
+    orElse: () => -1,
+  );
+  if (first != 0x3c) return null; // '<'
+  final html = utf8.decode(bytes, allowMalformed: true);
+  for (final match in _storeLinkPattern.allMatches(html)) {
+    final String raw;
+    try {
+      raw = Uri.decodeComponent(match.group(1)!.replaceAll('&amp;', '&'));
+    } on ArgumentError {
+      continue;
+    }
+    final url = Uri.tryParse(raw);
+    if (url != null && url.scheme == 'https' && url.hasAuthority) return url;
+  }
+  return null;
+}
+
+// Sites a notice entry points at instead of a manga site.
+const _noticeHosts = {'keiyoushi.github.io', 'mihon.app', 'tachiyomi.org'};
+
+/// Whether [value] is a notice rather than an extension: retired stores keep
+/// an entry such as "Outdated App" or "Please migrate to Keiyoushi" whose
+/// sources have made-up ids and point at an app site, or whose APK link is a
+/// web page.
+bool _isMihonNotice(Map<String, Object?> value) {
+  final sources = value['sources'];
+  if (sources is! List<Object?> || sources.isEmpty) return false;
+  final resources = value['resources'];
+  final apk = value['apk'] ?? (resources is Map ? resources['apkUrl'] : null);
+  var notice = apk is String && !apk.toLowerCase().endsWith('.apk');
+  for (final source in sources) {
+    if (source is! Map) return false;
+    final id = int.tryParse('${source['id']}');
+    // Real sources use hashed ids; a few old ones picked small numbers.
+    if (id == null || id.abs() >= 1000) return false;
+    final home = Uri.tryParse(
+      '${source['homeUrl'] ?? source['baseUrl'] ?? ''}',
+    );
+    if (home != null && _noticeHosts.contains(home.host)) notice = true;
+  }
+  return notice;
+}
+
+/// Drops notice entries; a store with nothing else is retired.
+List<Object?> _withoutNotices(List<Object?> entries, String storeName) {
+  final kept = <Object?>[];
+  var keiyoushi = false;
+  var notices = 0;
+  for (final value in entries) {
+    if (value is Map<String, Object?> && _isMihonNotice(value)) {
+      notices++;
+      keiyoushi |= '${value['name']} ${value['pkg'] ?? value['packageName']}'
+          .toLowerCase()
+          .contains('keiyoushi');
+      for (final source in value['sources']! as List<Object?>) {
+        if (source is Map) {
+          final home = source['homeUrl'] ?? source['baseUrl'];
+          keiyoushi |= '$home'.contains('keiyoushi.github.io');
+        }
+      }
+    } else {
+      kept.add(value);
+    }
+  }
+  if (kept.isEmpty && notices > 0) {
+    throw LocalSourceRetiredStoreException(
+      storeName,
+      movedToKeiyoushi: keiyoushi,
+    );
+  }
+  return kept;
+}
+
 /// The store's signing key, as a lowercase SHA-256 hex digest.
 ///
 /// Like Mihon, a store whose key is missing or not a SHA-256 (some publish an

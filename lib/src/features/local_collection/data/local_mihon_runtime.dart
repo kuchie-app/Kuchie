@@ -219,17 +219,37 @@ class MihonRuntimePage {
 }
 
 class MihonRuntimeException implements Exception {
-  const MihonRuntimeException(this.message, {this.statusCode});
+  const MihonRuntimeException(this.message, {this.statusCode, this.detail});
 
   final String message;
   final int? statusCode;
+
+  /// What the extension itself reported (`HTTP error 404`, a site's
+  /// Cloudflare block...), shortened for display. Null when it said nothing.
+  final String? detail;
+
+  /// The site refused the request in a way a browser check or another user
+  /// agent can fix.
+  bool get looksBlocked {
+    final text = detail?.toLowerCase() ?? '';
+    return text.contains('cloudflare') ||
+        text.contains('error code: 10') ||
+        text.contains('http error 403') ||
+        text.contains('http error 503') ||
+        text.contains('http 403') ||
+        text.contains('http 503');
+  }
 
   @override
   String toString() => message;
 }
 
 class MihonRuntimeUnavailable extends MihonRuntimeException {
-  const MihonRuntimeUnavailable(super.message);
+  const MihonRuntimeUnavailable(super.message, {this.missing = false});
+
+  /// True when this build has no runtime at all, as opposed to a runtime that
+  /// failed to start or answer this time.
+  final bool missing;
 }
 
 /// Talks to the M-Extension-Server HTTP bridge inside this app.
@@ -238,9 +258,11 @@ class MihonRuntimeClient {
     http.Client? client,
     Future<Uri> Function()? resolveEndpoint,
     Future<Map<String, String>> Function()? webViewHeaders,
+    Future<String?> Function(Uri site)? siteCookies,
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
        _webViewHeaders = webViewHeaders,
+       _siteCookies = siteCookies,
        _resolveEndpoint = resolveEndpoint == null
            ? _startEmbeddedServer
            : (() async => (url: await resolveEndpoint(), token: null));
@@ -251,6 +273,9 @@ class MihonRuntimeClient {
   // itself; loading a large APK (dex to JVM translation) gets longer still.
   static const _timeout = Duration(seconds: 90);
   static const _loadTimeout = Duration(minutes: 3);
+  // A cold start boots the interpreter and the whole runtime; older iPhones
+  // need well over a minute for it.
+  static const _startTimeout = Duration(minutes: 3);
   static const _maxResponseBytes = 12 * 1024 * 1024;
   static const _maxApkBytes = 16 * 1024 * 1024;
   static final _sourceId = RegExp(r'^-?\d{1,19}$');
@@ -275,12 +300,51 @@ class MihonRuntimeClient {
 
   /// Offers this device's WebViews to extensions (see RemoteWebViewServer).
   final Future<Map<String, String>> Function()? _webViewHeaders;
+
+  /// The WebView's cookies for a source's site, as a `Cookie` header value.
+  /// The runtime adds them to its own jar, so a check the reader passed in
+  /// Kuchie's browser also lets the extension through.
+  final Future<String?> Function(Uri site)? _siteCookies;
   final Future<_RuntimeEndpoint> Function() _resolveEndpoint;
   final _keys = Expando<String>();
   Future<_RuntimeEndpoint>? _endpoint;
 
   void close() {
     if (_ownsClient) _client.close();
+  }
+
+  /// Starts the runtime ahead of the first request, so opening an extension
+  /// does not wait for the interpreter to boot. Failures surface later, on
+  /// the request that needs the runtime.
+  Future<void> warmUp() async {
+    try {
+      await _readyEndpoint();
+    } on Exception {
+      // Reported by the next real request.
+    }
+  }
+
+  /// Empties the cookie jar extensions share, including Cloudflare
+  /// clearance. A runtime that has not started holds no cookies.
+  Future<void> clearCookies() async {
+    final flight = _endpoint;
+    if (flight == null) return;
+    final endpoint = await flight;
+    await _send(
+      endpoint.url.replace(path: '/cookies'),
+      token: endpoint.token,
+      method: 'DELETE',
+    );
+  }
+
+  /// Loads [apk] into the runtime so its first request skips the APK upload
+  /// and translation.
+  Future<void> preload(Uint8List apk) async {
+    try {
+      await _invoke(apk, 'extensionInfo');
+    } on Exception {
+      // Reported by the next real request.
+    }
   }
 
   Future<List<MihonRuntimeSource>> inspect(
@@ -304,22 +368,45 @@ class MihonRuntimeClient {
     return [for (final entry in entries) _parseSource(_object(entry))];
   }
 
+  /// The source's search filters as the extension reports them: each entry
+  /// has a `name`, a `state` and, for selections and sorts, `values`.
+  Future<List<Map<String, Object?>>> filters(
+    Uint8List apk,
+    MihonRuntimeSource source,
+  ) async {
+    final response = await _invoke(apk, 'filtersManga', source: source);
+    final result = response.result;
+    final entries = result is Map ? result['filterList'] ?? result : result;
+    return [
+      for (final entry in _list(entries, limit: 500))
+        if (entry is Map) {for (final e in entry.entries) '${e.key}': e.value},
+    ];
+  }
+
+  /// [filterList] is the runtime's JFilterList shape, matched by filter name;
+  /// with filters, a source is searched even when [query] is empty.
   Future<({List<MihonRuntimeManga> items, bool hasMore})> browse(
     Uint8List apk,
     MihonRuntimeSource source, {
     required String query,
     required bool latest,
     required int page,
+    List<Map<String, Object?>> filterList = const [],
   }) async {
+    final search = query.isNotEmpty || filterList.isNotEmpty;
     final response = await _invoke(
       apk,
-      query.isNotEmpty
+      search
           ? 'getSearchManga'
           : latest && source.supportsLatest
           ? 'getLatestManga'
           : 'getPopularManga',
       source: source,
-      arguments: {'page': page, if (query.isNotEmpty) 'search': query},
+      arguments: {
+        'page': page,
+        if (search) 'search': query,
+        if (filterList.isNotEmpty) 'filterList': filterList,
+      },
     );
     final data = _object(response.result);
     final mangas = _list(data['mangas'], limit: 20000);
@@ -430,10 +517,31 @@ class MihonRuntimeClient {
     if (entries.isEmpty) {
       throw const MihonRuntimeException('The extension returned no pages.');
     }
+    // Pages are downloaded by Kuchie, not the runtime. Without the user
+    // agent the extension's own requests use, image servers that check it
+    // (Danbooru's CDN) refuse the generic one iOS would send.
+    final userAgent = (await _webViewHeaders?.call())?['User-Agent'];
     return [
       for (final entry in entries)
-        _parsePage(_object(entry), response.endpoint),
+        _withUserAgent(
+          _parsePage(_object(entry), response.endpoint),
+          userAgent,
+        ),
     ];
+  }
+
+  static MihonRuntimePage _withUserAgent(
+    MihonRuntimePage page,
+    String? userAgent,
+  ) {
+    if (userAgent == null ||
+        page.headers.keys.any((key) => key.toLowerCase() == 'user-agent')) {
+      return page;
+    }
+    return MihonRuntimePage(
+      url: page.url,
+      headers: Map.unmodifiable({...page.headers, 'User-Agent': userAgent}),
+    );
   }
 
   Future<_RuntimeEndpoint> _readyEndpoint() async {
@@ -448,7 +556,13 @@ class MihonRuntimeClient {
 
   Future<_RuntimeEndpoint> _connect() async {
     try {
-      return await _checkRuntime();
+      try {
+        return await _checkRuntime();
+      } on http.ClientException {
+        // iOS closes a suspended app's listener. Asking again makes the
+        // runtime notice and open a new one.
+        return await _checkRuntime();
+      }
     } on http.ClientException {
       throw const MihonRuntimeUnavailable(
         'Could not reach the extension runtime.',
@@ -461,7 +575,7 @@ class MihonRuntimeClient {
   }
 
   Future<_RuntimeEndpoint> _checkRuntime() async {
-    final endpoint = await _resolveEndpoint().timeout(_timeout);
+    final endpoint = await _resolveEndpoint().timeout(_startTimeout);
     final url = endpoint.url;
     if (url.scheme != 'http' ||
         url.host != '127.0.0.1' ||
@@ -519,10 +633,14 @@ class MihonRuntimeClient {
     } on MissingPluginException {
       throw const MihonRuntimeUnavailable(
         'The extension runtime is unavailable on this device.',
+        missing: true,
       );
     } on PlatformException catch (error) {
+      final message = error.message ?? 'The extension runtime did not start.';
       throw MihonRuntimeUnavailable(
-        error.message ?? 'The extension runtime did not start.',
+        message,
+        // The native bridge reports a build without the embedded runtime.
+        missing: message.contains('unavailable on this build'),
       );
     }
   }
@@ -554,7 +672,15 @@ class MihonRuntimeClient {
       _RuntimeEndpoint endpoint,
     ) async {
       final target = endpoint.url.replace(path: '/dalvik');
-      final extraHeaders = await _webViewHeaders?.call() ?? const {};
+      final site = source?.homepage;
+      final cookies = site == null ? null : await _siteCookies?.call(site);
+      final extraHeaders = {
+        ...await _webViewHeaders?.call() ?? const {},
+        if (site != null && cookies != null && cookies.isNotEmpty) ...{
+          'Cookie': cookies,
+          'Source-Base-Url': site.origin,
+        },
+      };
       try {
         return (
           endpoint: endpoint.url,
@@ -583,7 +709,8 @@ class MihonRuntimeClient {
     try {
       return await execute(endpoint);
     } on http.ClientException {
-      // The iOS bridge may pause its listener while the app is in background.
+      // iOS closes the listener while the app is suspended; the runtime opens
+      // a new one when asked to start again.
       _endpoint = null;
       return execute(await _readyEndpoint());
     }
@@ -594,11 +721,13 @@ class MihonRuntimeClient {
     required String? token,
     Map<String, Object?>? jsonBody,
     Map<String, String> extraHeaders = const {},
+    String? method,
   }) async {
-    final request = http.Request(jsonBody == null ? 'GET' : 'POST', uri)
-      ..followRedirects = false
-      ..headers.addAll(extraHeaders)
-      ..headers['Accept'] = 'application/json';
+    final request =
+        http.Request(method ?? (jsonBody == null ? 'GET' : 'POST'), uri)
+          ..followRedirects = false
+          ..headers.addAll(extraHeaders)
+          ..headers['Accept'] = 'application/json';
     if (token != null) request.headers['X-Kuchie-Runtime-Token'] = token;
     if (jsonBody != null) {
       // The runtime's HTTP server reads a body without a charset as ASCII,
@@ -613,10 +742,10 @@ class MihonRuntimeClient {
         : _timeout;
     final response = await _client.send(request).timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      await response.stream.listen(null).cancel();
       throw MihonRuntimeException(
         'The extension could not complete the request.',
         statusCode: response.statusCode,
+        detail: await _errorDetail(response, timeout),
       );
     }
     final bytes = BytesBuilder(copy: false);
@@ -628,10 +757,44 @@ class MihonRuntimeClient {
       }
       bytes.add(chunk);
     }
+    final body = bytes.takeBytes();
+    if (body.isEmpty && response.statusCode == 204) return null;
     try {
-      return jsonDecode(utf8.decode(bytes.takeBytes()));
+      return jsonDecode(utf8.decode(body));
     } on FormatException {
       throw const MihonRuntimeException('The extension returned invalid data.');
+    }
+  }
+
+  /// The `error` the runtime sends with a failed call, trimmed to one line.
+  static Future<String?> _errorDetail(
+    http.StreamedResponse response,
+    Duration timeout,
+  ) async {
+    const limit = 16 * 1024;
+    final bytes = BytesBuilder(copy: false);
+    try {
+      await for (final chunk in response.stream.timeout(timeout)) {
+        bytes.add(chunk);
+        if (bytes.length >= limit) break;
+      }
+      final body = jsonDecode(
+        utf8.decode(bytes.takeBytes(), allowMalformed: true),
+      );
+      final error = body is Map ? body['error'] : null;
+      if (error is! String) return null;
+      // Drop the runtime's wrapping ("canceled due to ...: ") and stack lines.
+      var text = error.split('\n').first.trim();
+      const wrappers = ['canceled due to ', 'java.io.IOException: '];
+      for (final wrapper in wrappers) {
+        if (text.startsWith(wrapper)) text = text.substring(wrapper.length);
+      }
+      if (error.contains('error code: 1010')) text = 'Cloudflare error 1010';
+      text = text.replaceAll(RegExp(r'[\x00-\x1F]'), ' ').trim();
+      if (text.isEmpty) return null;
+      return text.length > 160 ? '${text.substring(0, 160)}…' : text;
+    } catch (_) {
+      return null;
     }
   }
 

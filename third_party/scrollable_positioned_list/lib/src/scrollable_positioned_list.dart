@@ -210,6 +210,12 @@ class ItemScrollController {
 
   _ScrollablePositionedListState? _scrollableListState;
 
+  /// Index of the item the visible list is anchored on (its center sliver),
+  /// or null when detached. Items before it are laid out growing away from
+  /// it, so only items from this index up to the first visible one can push
+  /// the visible items when they change extent.
+  int? get anchorIndex => _scrollableListState?.primary.target;
+
   /// Immediately, without animation, reconfigure the list so that the item at
   /// [index]'s leading edge is at the given [alignment].
   ///

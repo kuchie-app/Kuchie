@@ -16,7 +16,7 @@ import '../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../controller/manga_details_controller.dart';
 import 'tag_actions_menu.dart';
 
-Future<void> _showAddTagDialog(
+Future<void> showAddUserTagDialog(
   BuildContext context,
   WidgetRef ref,
   int mangaId,
@@ -61,7 +61,7 @@ class AddUserTagChip extends ConsumerWidget {
     final cs = context.theme.colorScheme;
     return HoverTapTarget(
       builder: (context, hovered) => GestureDetector(
-        onTap: () => _showAddTagDialog(context, ref, mangaId),
+        onTap: () => showAddUserTagDialog(context, ref, mangaId),
         child: AnimatedContainer(
           duration: Duration(milliseconds: context.reduceMotion ? 0 : 120),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -102,14 +102,18 @@ class MangaUserTagsRow extends ConsumerWidget {
           for (final tag in tags)
             Builder(
               builder: (chipContext) => InputChip(
-                avatar: Icon(FluentIcons.tag_24_regular,
-                    size: 16,
-                    color: context.theme.colorScheme.onSecondaryContainer),
+                avatar: Icon(
+                  FluentIcons.tag_24_regular,
+                  size: 16,
+                  color: context.theme.colorScheme.onSecondaryContainer,
+                ),
                 label: Text(tag),
                 backgroundColor: context.theme.colorScheme.secondaryContainer,
-                onPressed: () =>
-                    showTagActionsMenu(chipContext, ref, tag: tag),
-                deleteIcon: const Icon(FluentIcons.dismiss_24_regular, size: 16),
+                onPressed: () => showTagActionsMenu(chipContext, ref, tag: tag),
+                deleteIcon: const Icon(
+                  FluentIcons.dismiss_24_regular,
+                  size: 16,
+                ),
                 onDeleted: () => notifier.remove(tag),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

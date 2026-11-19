@@ -185,10 +185,12 @@ PagedDisplayWindow buildPagedDisplayWindow({
   for (var c = 0; c < chapters.length; c++) {
     final chapter = chapters[c];
     if (c > 0 && (forceTransition || chapter.hasGapBefore)) {
-      items.add(TransitionDisplay(
-        fromChapterId: chapters[c - 1].chapterId,
-        toChapterId: chapter.chapterId,
-      ));
+      items.add(
+        TransitionDisplay(
+          fromChapterId: chapters[c - 1].chapterId,
+          toChapterId: chapter.chapterId,
+        ),
+      );
     }
     for (final entry in chapter.mapping.entries) {
       items.add(SpreadDisplay(chapterId: chapter.chapterId, entry: entry));

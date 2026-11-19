@@ -8,25 +8,11 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../../constants/enum.dart';
 import '../../../domain/chapter_page/chapter_page_model.dart';
 
-enum SwipeDirection {
-  left,
-  right,
-  up,
-  down,
-}
+enum SwipeDirection { left, right, up, down }
 
-enum NavigationAction {
-  pageNavigation,
-  nextChapter,
-  previousChapter,
-}
+enum NavigationAction { pageNavigation, nextChapter, previousChapter }
 
-enum PagePosition {
-  firstPage,
-  middlePage,
-  lastPage,
-  singlePage,
-}
+enum PagePosition { firstPage, middlePage, lastPage, singlePage }
 
 class LastPageSwipeUtils {
   LastPageSwipeUtils._();
@@ -84,9 +70,7 @@ class LastPageSwipeUtils {
     return currentIndex >= chapterPages.pages.length - 1;
   }
 
-  static bool isAtFirstPage({
-    required int currentIndex,
-  }) {
+  static bool isAtFirstPage({required int currentIndex}) {
     return currentIndex <= 0;
   }
 

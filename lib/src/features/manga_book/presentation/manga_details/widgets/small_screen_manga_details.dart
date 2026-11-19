@@ -16,7 +16,6 @@ import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../../widgets/emoticons.dart';
 import '../../../../../widgets/ios/apple_glass_capability.dart';
-import '../../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../offline/data/offline_download_providers.dart';
 import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/manga/manga_model.dart';
@@ -119,14 +118,14 @@ class SmallScreenMangaDetails extends HookConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ChapterListModeToggle(mangaId: mangaId),
-                    if (onOpenChapterFilters != null)
-                      AppleGlassToolbarButton(
-                        id: 'manga-chapter-filters',
-                        symbol: 'line.3.horizontal.decrease',
-                        label: context.l10n.filter,
-                        fallbackIcon: FluentIcons.filter_24_regular,
-                        onPressed: onOpenChapterFilters,
+                    if (onOpenChapterFilters case final openFilters?) ...[
+                      const SizedBox(width: 6),
+                      ChapterHeaderButton(
+                        icon: FluentIcons.filter_24_regular,
+                        tooltip: context.l10n.filter,
+                        onPressed: openFilters,
                       ),
+                    ],
                   ],
                 ),
               ),

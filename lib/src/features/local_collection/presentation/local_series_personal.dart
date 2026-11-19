@@ -4,13 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../widgets/app_bottom_sheet.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
-import '../../manga_book/presentation/manga_details/widgets/manga_rating_bar.dart';
+import '../../manga_book/presentation/manga_details/widgets/series_personal_section.dart';
 import '../data/local_catalog.dart';
 import 'local_ui.dart';
 
@@ -100,96 +99,23 @@ class _LocalSeriesPersonalState extends State<LocalSeriesPersonal> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final colors = context.theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        RatingStars(
-          rating: _meta.rating,
-          onChanged: (rating) =>
-              _save(() => widget.catalog.setRating(widget.seriesId, rating)),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ActionChip(
-                avatar: const Icon(FluentIcons.note_24_regular, size: 18),
-                label: Text(
-                  _meta.notes.isEmpty
-                      ? context.l10n.notes
-                      : context.l10n.editNotes,
-                ),
-                onPressed: _editNotes,
-              ),
-              if (widget.categories != null)
-                ActionChip(
-                  avatar: const Icon(FluentIcons.folder_24_regular, size: 18),
-                  label: Text(
-                    widget.categories!.isEmpty
-                        ? context.l10n.categories
-                        : widget.categories!.join(', '),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onPressed: _editCategories,
-                ),
-              for (final tag in _meta.tags)
-                InputChip(
-                  avatar: Icon(
-                    FluentIcons.tag_24_regular,
-                    size: 16,
-                    color: colors.onSecondaryContainer,
-                  ),
-                  label: Text(tag),
-                  backgroundColor: colors.secondaryContainer,
-                  deleteIcon: const Icon(
-                    FluentIcons.dismiss_24_regular,
-                    size: 16,
-                  ),
-                  onDeleted: () => _save(
-                    () => widget.catalog.setTags(widget.seriesId, [
-                      for (final other in _meta.tags)
-                        if (other != tag) other,
-                    ]),
-                  ),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ActionChip(
-                avatar: const Icon(FluentIcons.add_24_regular, size: 18),
-                label: Text(context.l10n.addTag),
-                onPressed: _addTag,
-              ),
-            ],
-          ),
-        ),
-        if (_meta.notes.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: InkWell(
-              onTap: _editNotes,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _meta.notes,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.bodyMedium,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => SeriesPersonalSection(
+    rating: _meta.rating,
+    onRate: (rating) =>
+        _save(() => widget.catalog.setRating(widget.seriesId, rating)),
+    notes: _meta.notes,
+    onEditNotes: _editNotes,
+    categories: widget.categories,
+    onEditCategories: widget.categories == null ? null : _editCategories,
+    tags: _meta.tags,
+    onAddTag: _addTag,
+    onRemoveTag: (tag) => _save(
+      () => widget.catalog.setTags(widget.seriesId, [
+        for (final other in _meta.tags)
+          if (other != tag) other,
+      ]),
+    ),
+  );
 }
 
 /// Returns the edited text, or null when cancelled. An empty result clears.

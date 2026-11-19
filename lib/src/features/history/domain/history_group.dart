@@ -35,10 +35,11 @@ abstract class HistoryGroup with _$HistoryGroup {
         .where((item) => item.readAt != null)
         .map((item) => item.readAt!)
         .fold<DateTime?>(
-            null,
-            (previous, current) => previous == null
-                ? current
-                : DateTimeExtensions.max(previous, current));
+          null,
+          (previous, current) => previous == null
+              ? current
+              : DateTimeExtensions.max(previous, current),
+        );
   }
 
   String? getLastReadDescription(BuildContext context) {

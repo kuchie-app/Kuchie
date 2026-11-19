@@ -8,7 +8,11 @@ import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
 import 'package:kuchie/src/features/local_collection/presentation/local_reader.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/controller/reader_settings_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_bottom_controls.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_chrome.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_top_bar.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_reader_viewport.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_navigation_layout/reader_navigation_layout.dart';
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
@@ -124,6 +128,11 @@ void main() {
       await tester.pump();
       expect(find.byType(ScrollablePositionedList), findsOneWidget);
       expect(find.byType(PagedReaderViewport), findsNothing);
+      // Same chrome, bars and tap zones as the server reader.
+      expect(find.byType(ReaderChromeView), findsOneWidget);
+      expect(find.byType(ReaderTopBarView), findsOneWidget);
+      expect(find.byType(ReaderBottomControlsView), findsOneWidget);
+      expect(find.byType(ReaderNavigationLayoutWidget), findsOneWidget);
       await container
           .read(settings.notifier)
           .setReaderMode(ReaderMode.singleHorizontalLTR);

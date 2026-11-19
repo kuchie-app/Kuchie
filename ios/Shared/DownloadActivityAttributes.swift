@@ -7,16 +7,29 @@
 import ActivityKit
 
 enum DownloadIslandVariant: String, Codable, Hashable {
-  case kiriRing = "wajah-kiri-ring"
-  case kiriPercentage = "wajah-kiri-persen"
-  case scarf = "syal-penanda"
-  case mangaPanel = "panel-manga"
+  case kiriRing = "kiri-face-ring"
+  case kiriPercentage = "kiri-face-percentage"
+  case scarf = "bookmark-scarf"
+  case mangaPanel = "manga-panel"
 
   static let defaultValue = Self.kiriRing
 
+  // IDs saved by Kuchie 1.0.0, before the assets had English names.
+  private static let legacyIDs: [String: Self] = [
+    "wajah-kiri-ring": .kiriRing,
+    "wajah-kiri-persen": .kiriPercentage,
+    "syal-penanda": .scarf,
+    "panel-manga": .mangaPanel,
+  ]
+
+  init?(id: String) {
+    guard let variant = Self(rawValue: id) ?? Self.legacyIDs[id] else { return nil }
+    self = variant
+  }
+
   init(from decoder: Decoder) throws {
     let value = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: value) ?? Self.defaultValue
+    self = Self(id: value) ?? Self.defaultValue
   }
 }
 

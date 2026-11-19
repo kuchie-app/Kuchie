@@ -22,6 +22,7 @@ import 'features/notifications/data/background/notification_worker.dart';
 import 'features/notifications/data/local_notification_service.dart';
 import 'features/offline/data/download_live_activity.dart';
 import 'features/onboarding/data/collection_mode.dart';
+import 'features/security/app_security.dart';
 import 'features/settings/presentation/appearance/widgets/app_theme_selector/app_theme_providers.dart';
 import 'features/settings/presentation/appearance/widgets/is_true_black/is_true_black_tile.dart';
 import 'features/settings/presentation/appearance/widgets/liquid_glass/liquid_glass_tile.dart';
@@ -146,37 +147,39 @@ class KuchieApp extends HookConsumerWidget {
                   : const ScrollbarThemeData(),
               child: ReduceMotionScope(
                 child: DesktopWindowScaffold(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      DownloadLiveActivityHost(
-                        enabled: !sessionChanging,
-                        serverEnabled: serverEnabled,
-                      ),
-                      Offstage(
-                        offstage: sessionChanging,
-                        child: TickerMode(
+                  child: AppSecurityGate(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        DownloadLiveActivityHost(
                           enabled: !sessionChanging,
-                          child: ReauthBannerHost(
-                            enabled: serverEnabled,
-                            child: kIsWeb
-                                ? _WebTitleBridge(
-                                    routes: routes,
-                                    child: _IncognitoNotificationBridge(
+                          serverEnabled: serverEnabled,
+                        ),
+                        Offstage(
+                          offstage: sessionChanging,
+                          child: TickerMode(
+                            enabled: !sessionChanging,
+                            child: ReauthBannerHost(
+                              enabled: serverEnabled,
+                              child: kIsWeb
+                                  ? _WebTitleBridge(
+                                      routes: routes,
+                                      child: _IncognitoNotificationBridge(
+                                        child: toastWrapped,
+                                      ),
+                                    )
+                                  : _IncognitoNotificationBridge(
                                       child: toastWrapped,
                                     ),
-                                  )
-                                : _IncognitoNotificationBridge(
-                                    child: toastWrapped,
-                                  ),
+                            ),
                           ),
                         ),
-                      ),
-                      if (sessionChanging)
-                        const Scaffold(
-                          body: Center(child: CircularProgressIndicator()),
-                        ),
-                    ],
+                        if (sessionChanging)
+                          const Scaffold(
+                            body: Center(child: CircularProgressIndicator()),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),

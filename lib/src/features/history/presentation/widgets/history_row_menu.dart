@@ -211,7 +211,9 @@ Future<void> showHistoryActionsSheet({
                     openChapterInBrowser(context, ref, item, null);
                   },
                 ),
-              if (offlineEnabled)
+              // Only removing a copy already on the device; downloads go
+              // through the server.
+              if (offlineEnabled && onDevice)
                 ListTile(
                   leading: Icon(
                     onDevice

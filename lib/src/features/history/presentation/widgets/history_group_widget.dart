@@ -13,10 +13,7 @@ import '../../domain/history_item.dart';
 import 'history_item_tile.dart';
 
 class HistoryGroupWidget extends StatelessWidget {
-  const HistoryGroupWidget({
-    super.key,
-    required this.group,
-  });
+  const HistoryGroupWidget({super.key, required this.group});
 
   final HistoryGroup group;
 
@@ -28,9 +25,9 @@ class HistoryGroupWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         HistoryGroupHeader(group: group),
-        ...group.items.map((HistoryItemDto item) => HistoryItemTile(
-              item: item,
-            )),
+        ...group.items.map(
+          (HistoryItemDto item) => HistoryItemTile(item: item),
+        ),
         const SizedBox(height: 16),
       ],
     );
@@ -38,45 +35,46 @@ class HistoryGroupWidget extends StatelessWidget {
 }
 
 class HistoryGroupHeader extends StatelessWidget {
-  const HistoryGroupHeader({super.key, required this.group, this.first = false});
+  const HistoryGroupHeader({
+    super.key,
+    required this.group,
+    this.first = false,
+  });
 
   final HistoryGroup group;
   final bool first;
 
   @override
   Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 12,
-      ).onDesktopPageLine(context, top: first),
-      child: Row(
-        children: [
-          Text(
-            group.getLocalizedTitle(context),
-            style: context.theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: context.theme.colorScheme.primary,
+    padding: const EdgeInsets.symmetric(
+      horizontal: 8,
+      vertical: 12,
+    ).onDesktopPageLine(context, top: first),
+    child: Row(
+      children: [
+        Text(
+          group.getLocalizedTitle(context),
+          style: context.theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: context.theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: context.theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '${group.itemCount}',
+            style: context.theme.textTheme.labelSmall?.copyWith(
+              color: context.theme.colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 2,
-            ),
-            decoration: BoxDecoration(
-              color: context.theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '${group.itemCount}',
-              style: context.theme.textTheme.labelSmall?.copyWith(
-                color: context.theme.colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
 }

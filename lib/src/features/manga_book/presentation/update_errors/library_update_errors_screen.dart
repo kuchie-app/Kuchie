@@ -35,10 +35,7 @@ class LibraryUpdateErrorsScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
-              title: title,
-            ),
+          : AppBar(leading: detailNavigationBackButton(context), title: title),
       body: failed.showUiWhenData(
         context,
         (mangas) => RefreshIndicator(
@@ -50,9 +47,7 @@ class LibraryUpdateErrorsScreen extends ConsumerWidget {
               ? Stack(
                   children: [
                     ListView(),
-                    Emoticons(
-                      title: context.l10n.libraryUpdateErrorsEmpty,
-                    ),
+                    Emoticons(title: context.l10n.libraryUpdateErrorsEmpty),
                   ],
                 )
               : ListView.builder(
@@ -64,10 +59,8 @@ class LibraryUpdateErrorsScreen extends ConsumerWidget {
                       onPressed: () =>
                           MangaRoute(mangaId: manga.id).push(context),
                       trailing: _MigrateButton(
-                        onPressed: () => startMigration(
-                          context,
-                          mangaIds: [manga.id],
-                        ),
+                        onPressed: () =>
+                            startMigration(context, mangaIds: [manga.id]),
                       ),
                     );
                   },
@@ -111,7 +104,11 @@ class _MigrateButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FluentIcons.arrow_swap_24_regular, size: 17, color: accent),
+                Icon(
+                  FluentIcons.arrow_swap_24_regular,
+                  size: 17,
+                  color: accent,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   context.l10n.migrate,

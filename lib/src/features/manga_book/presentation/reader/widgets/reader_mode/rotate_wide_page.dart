@@ -41,8 +41,9 @@ class _RotateWidePageState extends State<RotateWidePage> {
   }
 
   void _resolve() {
-    final stream =
-        widget.imageProvider.resolve(createLocalImageConfiguration(context));
+    final stream = widget.imageProvider.resolve(
+      createLocalImageConfiguration(context),
+    );
     if (stream.key == _stream?.key) return;
     _stream?.removeListener(_listener);
     _stream = stream..addListener(_listener);

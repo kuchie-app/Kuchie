@@ -2,17 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 enum DownloadIslandVariant {
-  kiriRing('wajah-kiri-ring'),
-  kiriPercentage('wajah-kiri-persen'),
-  scarf('syal-penanda'),
-  mangaPanel('panel-manga');
+  kiriRing('kiri-face-ring', 'wajah-kiri-ring'),
+  kiriPercentage('kiri-face-percentage', 'wajah-kiri-persen'),
+  scarf('bookmark-scarf', 'syal-penanda'),
+  mangaPanel('manga-panel', 'panel-manga');
 
-  const DownloadIslandVariant(this.id);
+  const DownloadIslandVariant(this.id, this._legacyId);
 
   final String id;
 
-  static DownloadIslandVariant fromId(String? id) =>
-      values.firstWhere((variant) => variant.id == id, orElse: () => kiriRing);
+  /// The ID Kuchie 1.0.0 saved, before the assets had English names.
+  final String _legacyId;
+
+  static DownloadIslandVariant fromId(String? id) => values.firstWhere(
+    (variant) => variant.id == id || variant._legacyId == id,
+    orElse: () => kiriRing,
+  );
 }
 
 final class DownloadIslandPreference {

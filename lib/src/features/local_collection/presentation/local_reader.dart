@@ -13,7 +13,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../constants/enum.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
-import '../../../utils/theme/brand.dart';
 import '../../../widgets/app_bottom_sheet.dart';
 import '../../../widgets/custom_circular_progress_indicator.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
@@ -30,17 +29,20 @@ import '../../manga_book/presentation/reader/utils/reader_mode_kind.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_bottom_controls.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_chrome.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_page_actions_sheet.dart';
-import '../../manga_book/presentation/reader/widgets/chrome/reader_settings_dialog.dart';
+import '../../manga_book/presentation/reader/widgets/chrome/reader_quick_settings_sheet.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_top_bar.dart';
-import '../../manga_book/presentation/reader/widgets/chrome/reader_utils_bar.dart';
+import '../../manga_book/presentation/reader/widgets/reader_edge_swipe_back.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_config.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_feedback.dart';
+import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/measure_size.dart';
+import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/strip_resize_correction.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/tall_page_image.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/paged_display_window.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/paged_reader_viewport.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/paged_spread_mapping.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_page_file.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_zoom_view.dart';
+import '../../manga_book/presentation/reader/widgets/reader_navigation_layout/reader_navigation_layout.dart';
 import '../../manga_book/presentation/reader/widgets/reader_wrapper.dart';
 import '../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
@@ -51,6 +53,9 @@ import '../../settings/presentation/reader/widgets/reader_keep_screen_on_tile/re
 import '../../settings/presentation/reader/widgets/reader_mode_tile/reader_mode_tile.dart';
 import '../../settings/presentation/reader/widgets/reader_orientation/reader_orientation.dart';
 import '../data/local_catalog.dart';
+import '../data/local_preferences.dart';
+import '../data/local_reading_stats.dart';
+import 'local_ui.dart';
 
 class LocalReaderChapterEntry {
   const LocalReaderChapterEntry({
@@ -110,9 +115,18 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     scrollOffsetController: _scrollOffset,
   );
   final _positions = ItemPositionsListener.create();
+  late final _resizeCorrection = StripResizeCorrection(
+    itemScrollController: _scroll,
+    scrollOffsetController: _scrollOffset,
+    positionsListener: _positions,
+  );
   final _wide = <int, bool>{};
   late LocalChapter _chapter = widget.chapter;
   late bool _ephemeral = widget.ephemeral;
+
+  /// Saved chapters read to the end, removed when the reader closes if
+  /// Delete after reading is on.
+  final _readToDelete = <String>{};
   late final ReaderFormatMetadata _format =
       widget.readerFormat ??
       (
@@ -142,6 +156,8 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   Timer? _autoScrollTimer;
   bool _wakeLock = false;
   bool _showingPageActions = false;
+  bool _stripInMotion = false;
+  bool _tapArrestsFling = false;
   late final _visibility = ValueNotifier(
     ref.read(readerInitialOverlayProvider).ifNull(),
   );
@@ -150,6 +166,23 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   bool _finished = false;
   bool _pending = false;
   bool _incognito = false;
+
+  /// Time on screen since the reader opened or came back to the front.
+  final _reading = Stopwatch()..start();
+
+  void _recordReading() {
+    final elapsed = _reading.elapsed;
+    _reading.reset();
+    if (_incognito) return;
+    unawaited(
+      LocalReadingStats.instance.add(
+        widget.series.id,
+        widget.series.title,
+        elapsed,
+      ),
+    );
+  }
+
   bool _opened = false;
   Timer? _saveTimer;
 
@@ -172,8 +205,16 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   @override
   void initState() {
     super.initState();
+    unawaited(LocalPreferences.instance.load());
     _positions.itemPositions.addListener(_positionChanged);
-    _lifecycle = AppLifecycleListener(onHide: _pause);
+    _lifecycle = AppLifecycleListener(
+      onHide: () {
+        _pause();
+        _recordReading();
+        _reading.stop();
+      },
+      onShow: _reading.start,
+    );
     ref.listenManual(_settingsProvider, (previous, next) {
       if (previous?.readerOrientation != next.readerOrientation) {
         _applyOrientation(next.readerOrientation);
@@ -188,13 +229,23 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       _wakeLock = keepScreenOn;
       WakelockPlus.toggle(enable: keepScreenOn).ignore();
     }, fireImmediately: true);
+    _prefetch(_index);
   }
 
   @override
   void dispose() {
     _positions.itemPositions.removeListener(_positionChanged);
+    _resizeCorrection.dispose();
     _saveTimer?.cancel();
     _save();
+    _recordReading();
+    for (final chapterId in _readToDelete) {
+      unawaited(
+        widget.catalog
+            .removeChapter(widget.series.id, chapterId)
+            .catchError((Object _) {}),
+      );
+    }
     _autoScrollTimer?.cancel();
     _clearOrientation?.call();
     unawaited(setDrawUnderCutout(false));
@@ -350,6 +401,9 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       if (!_finished) {
         setState(() => _finished = true);
         if (!_incognito) unawaited(_markRead(_chapter.id));
+        if (!_ephemeral && LocalPreferences.instance.deleteAfterReading.value) {
+          _readToDelete.add(_chapter.id);
+        }
       }
       return;
     }
@@ -361,10 +415,29 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     _index = raw;
     _finished = false;
     _pageIndex.value = raw;
+    _prefetch(raw);
     if (_incognito) return;
     _pending = true;
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 550), _save);
+  }
+
+  static const _prefetchAhead = 4;
+
+  /// Online chapters download a page only when asked. Ask a few pages ahead so
+  /// a fast fling lands on measured pages instead of placeholders that then
+  /// grow and shove the strip. prepare() dedupes, so the page widget reuses it.
+  void _prefetch(int from) {
+    final prepare = _preparePage;
+    if (prepare == null) return;
+    final pages = _pages;
+    for (
+      var i = from + 1;
+      i <= from + _prefetchAhead && i < pages.length;
+      i++
+    ) {
+      unawaited(prepare(pages[i]).then<void>((_) {}, onError: (_) {}));
+    }
   }
 
   void _positionChanged() {
@@ -390,6 +463,32 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     _onPage(target);
   }
 
+  /// Tap-zone navigation in the strip: scroll by the configured share of the
+  /// viewport, the same amount the server reader uses.
+  void _scrollViewport({required bool forward}) {
+    if (!_scroll.isAttached) return;
+    final position = _scrollOffset.position;
+    final offset =
+        position.viewportDimension *
+        _settings.readerScrollAmount.fraction *
+        (forward ? 1 : -1);
+    final target = (position.pixels + offset).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (_settings.animatePageTransitions && !context.reduceMotion) {
+      unawaited(
+        _scrollOffset.animateScroll(
+          offset: target - position.pixels,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        ),
+      );
+    } else {
+      position.jumpTo(target);
+    }
+  }
+
   void _openChapter(LocalReaderChapterEntry entry) {
     if (entry.id == _chapter.id || entry.id == _loadingChapter) return;
     if (entry.saved case final chapter?) {
@@ -402,12 +501,14 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
         try {
           final content = await load(entry.id);
           if (mounted && request == _chapterRequest) _showChapter(content);
-        } catch (_) {
+        } catch (error) {
           if (!mounted || request != _chapterRequest) return;
           setState(() => _loadingChapter = null);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(context.l10n.errorSomethingWentWrong),
+              content: Text(
+                '${entry.title}: ${localErrorMessage(context, error)}',
+              ),
               action: SnackBarAction(
                 label: context.l10n.retry,
                 onPressed: () => _openChapter(entry),
@@ -440,6 +541,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       _finished = false;
     });
     _pageIndex.value = _index;
+    _prefetch(_index);
   }
 
   Future<void> _bookmark() async {
@@ -456,6 +558,12 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   }
 
   void _toggleOverlay() => _visibility.value = !_visibility.value;
+
+  /// A tap that stops a fling only stops it, like the server reader.
+  void _onStripTap() {
+    if (_tapArrestsFling) return;
+    _toggleOverlay();
+  }
 
   Future<void> _pickChapter() async {
     if (_pickingChapter) return;
@@ -544,7 +652,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   void _openSettings() {
     _readerPadding.value = _settings.sidePadding;
     unawaited(
-      showReaderSettingsSheet(
+      showReaderQuickSettings(
         context: context,
         ref: ref,
         mangaId: 0,
@@ -592,35 +700,6 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     _retryCount.value++;
     unawaited(retryFailedReaderPages(ref));
   }
-
-  List<AppleGlassToolbarMenuItem> _menu(
-    BuildContext context,
-    ReaderMode mode,
-  ) => [
-    AppleGlassToolbarMenuItem(
-      id: 'readingMode',
-      title: context.l10n.readerMode,
-      symbol: 'book',
-      fallbackIcon: FluentIcons.book_open_24_regular,
-      onSelected: _pickMode,
-    ),
-    AppleGlassToolbarMenuItem(
-      id: 'autoScrollControls',
-      title: mode == ReaderMode.webtoon || mode == ReaderMode.continuousVertical
-          ? context.l10n.autoScroll
-          : context.l10n.autoAdvance,
-      symbol: 'timer',
-      fallbackIcon: FluentIcons.timer_24_regular,
-      onSelected: () => _utilsExpanded.value = !_utilsExpanded.value,
-    ),
-    AppleGlassToolbarMenuItem(
-      id: 'retry',
-      title: context.l10n.retryErroredPages,
-      symbol: 'arrow.clockwise',
-      fallbackIcon: FluentIcons.replay_24_regular,
-      onSelected: _retryPages,
-    ),
-  ];
 
   Widget _bookmarkButton(BuildContext context, {required bool floating}) =>
       _ephemeral
@@ -732,7 +811,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       final scrollAxis = horizontal ? Axis.horizontal : Axis.vertical;
       final strip = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _toggleOverlay,
+        onTap: _onStripTap,
         onLongPress: settings.readWithLongTap ? _openPageActions : null,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -759,9 +838,19 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
                               ) /
                               100,
                   );
-            return ScrollablePositionedList.builder(
+            final list = ScrollablePositionedList.builder(
               key: key,
               itemCount: pages.length + 1,
+              // Same page window as the server reader: decode a viewport ahead
+              // so fast flings don't land on blank placeholders.
+              cacheExtent: defaultTargetPlatform == TargetPlatform.iOS
+                  ? (horizontal ? screenWidth : screenHeight)
+                  : null,
+              minCacheExtent: horizontal
+                  ? screenWidth *
+                        InfinityContinuousConfig.horizontalCacheMultiplier
+                  : screenHeight *
+                        InfinityContinuousConfig.verticalCacheMultiplier,
               initialScrollIndex: _index,
               itemScrollController: _scroll,
               scrollOffsetController: _scrollOffset,
@@ -774,33 +863,64 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
                       ? SizedBox(width: constraints.maxWidth, child: edge)
                       : edge;
                 }
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: mode == ReaderMode.continuousVertical
-                        ? kLongStripPageGap
-                        : 0,
+                return MeasureSize(
+                  key: ValueKey(('measure', pages[page])),
+                  // A page above the visible ones that grows from its
+                  // placeholder must not shove the strip or stop a fling.
+                  onResize: (oldSize, newSize) => _resizeCorrection.onResize(
+                    page,
+                    horizontal
+                        ? newSize.width - oldSize.width
+                        : newSize.height - oldSize.height,
                   ),
-                  child: Center(
-                    child: SizedBox(
-                      width: horizontal ? screenWidth : stripWidth,
-                      child: _LocalStripPage(
-                        key: ValueKey(pages[page]),
-                        url: pages[page],
-                        prepare: preparePage,
-                        dimensions: _dimensions,
-                        measuredSizes: _measuredSizes,
-                        retryCount: _retryCount,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: mode == ReaderMode.continuousVertical
+                          ? kLongStripPageGap
+                          : 0,
+                    ),
+                    child: Center(
+                      child: SizedBox(
                         width: horizontal ? screenWidth : stripWidth,
-                        height: screenHeight,
-                        horizontal: horizontal,
-                        originalSize: originalSize,
-                        cropBorders: settings.cropBordersWebtoon,
-                        dpr: dpr,
+                        child: _LocalStripPage(
+                          key: ValueKey(pages[page]),
+                          url: pages[page],
+                          prepare: preparePage,
+                          dimensions: _dimensions,
+                          measuredSizes: _measuredSizes,
+                          retryCount: _retryCount,
+                          width: horizontal ? screenWidth : stripWidth,
+                          height: screenHeight,
+                          horizontal: horizontal,
+                          originalSize: originalSize,
+                          cropBorders: settings.cropBordersWebtoon,
+                          dpr: dpr,
+                        ),
                       ),
                     ),
                   ),
                 );
               },
+            );
+            return Listener(
+              onPointerDown: (_) => _tapArrestsFling = _stripInMotion,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification.depth != 0) return false;
+                  if (notification is ScrollStartNotification) {
+                    _stripInMotion = true;
+                  } else if (notification is ScrollEndNotification) {
+                    _stripInMotion = false;
+                  }
+                  return false;
+                },
+                child: ReaderHideMenuOnUserScroll(
+                  onHide: () {
+                    if (_visibility.value) _visibility.value = false;
+                  },
+                  child: _resizeCorrection.wrap(list),
+                ),
+              ),
             );
           },
         ),
@@ -919,6 +1039,38 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
         ),
       );
     }
+    final zonesLayout = effectiveNavigationLayout(
+      ref,
+      mode: mode,
+      seriesOverride: settings.navigationLayout,
+    );
+    final zonesInvert = effectiveTapInvert(
+      ref,
+      mode: mode,
+      layout: zonesLayout,
+      seriesOverride: settings.tapInvert == TapInvert.none
+          ? null
+          : settings.tapInvert,
+    );
+    final pageContent = Stack(
+      fit: StackFit.expand,
+      children: [
+        content,
+        IgnorePointer(
+          ignoring: !_continuous,
+          child: ReaderNavigationLayoutWidget(
+            navigationLayout: zonesLayout,
+            tapInvert: zonesInvert,
+            onNext: _continuous
+                ? () => _scrollViewport(forward: true)
+                : _paged.next,
+            onPrevious: _continuous
+                ? () => _scrollViewport(forward: false)
+                : _paged.previous,
+          ),
+        ),
+      ],
+    );
     final size = MediaQuery.sizeOf(context);
     final landscapePhone = size.shortestSide < 600 && size.width > size.height;
     final showSideSeekBar =
@@ -944,7 +1096,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
           children: [
             ValueListenableBuilder<double>(
               valueListenable: _readerPadding,
-              child: content,
+              child: ReaderEdgeSwipeBack(child: pageContent),
               builder: (context, padding, child) => Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: horizontal ? 0 : size.width * padding,
@@ -955,98 +1107,53 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
             ),
             ValueListenableBuilder<int>(
               valueListenable: _pageIndex,
-              builder: (context, pageIndex, _) => ReaderChromeLayout(
+              builder: (context, pageIndex, _) => ReaderChromeView(
                 currentIndex: pageIndex,
                 pageCount: _pages.length,
                 visibility: _visibility,
+                utilsBarExpanded: _utilsExpanded,
+                useBottomSeekBar: !showSideSeekBar,
                 showSideSeekBar: showSideSeekBar,
-                onChanged: _seek,
+                scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
                 onPreviousChapter: previousChapter,
                 onNextChapter: nextChapter,
-                topBar: (floating) {
-                  final menu = _menu(context, mode);
-                  if (floating) {
-                    return FloatingReaderTopBar(
+                resolvedReaderMode: mode,
+                autoScrollSupported: true,
+                // Page 1 sits at the left in every reading direction.
+                reverseSeekBar: false,
+                onChanged: _seek,
+                onOpenSettings: _openSettings,
+                onOpenReaderMode: _pickMode,
+                topBar: (floating, onToggleAutoScroll, autoScrollLabel) =>
+                    ReaderTopBarView(
+                      seriesTitle: widget.series.title,
                       chapterTitle: _chapter.title,
                       onBack: goBack,
-                      onOpenChapters: _pickChapter,
-                      menu: menu,
-                    );
-                  }
-                  return Material(
-                    color: readerNavSurface(context.theme.colorScheme),
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        top: MediaQuery.viewPaddingOf(context).top,
-                      ),
-                      child: Row(
-                        children: [
-                          ReaderToolbarBack(onBack: goBack),
-                          Expanded(
-                            child: ListTile(
-                              title: Text(
-                                widget.series.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                _chapter.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              contentPadding: EdgeInsets.zero,
-                              trailing: const Icon(
-                                FluentIcons.chevron_down_16_regular,
-                              ),
-                              onTap: _pickChapter,
-                            ),
-                          ),
-                          _bookmarkButton(context, floating: false),
-                          ReaderToolbarMore(floating: false, menu: menu),
-                        ],
-                      ),
+                      onRetry: _retryPages,
+                      floating: floating,
+                      bookmark: _bookmarkButton(context, floating: false),
+                      onOpenReaderMode: floating ? _pickMode : null,
+                      onOpenChapters: floating ? _pickChapter : null,
+                      onToggleAutoScrollControls: onToggleAutoScroll,
+                      autoScrollLabel: autoScrollLabel,
                     ),
-                  );
-                },
-                utilsBar: (floating) => ReaderUtilsBar(
-                  expanded: _utilsExpanded,
-                  readerMode: mode,
-                  floating: floating,
-                ),
-                bottomBar: (floating) => ReaderBottomDock(
+                bottomBar: (floating) => ReaderBottomControlsView(
+                  settingsMangaId: 0,
+                  localSeriesId: widget.series.id,
                   currentIndex: pageIndex,
                   pageCount: _pages.length,
                   useBottomSeekBar: !showSideSeekBar,
-                  floating: floating,
+                  scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
+                  onPreviousChapter: previousChapter,
+                  onNextChapter: nextChapter,
                   resolvedReaderMode: mode,
-                  // Page 1 sits at the left in every reading direction.
                   reverseSeekBar: false,
                   onChanged: _seek,
-                  onNextChapter: nextChapter,
-                  onPreviousChapter: previousChapter,
                   onOpenSettings: _openSettings,
+                  onOpenReaderMode: _pickMode,
+                  onOpenChapters: _pickChapter,
                   bookmark: _bookmarkButton(context, floating: floating),
-                  actions: [
-                    AppleGlassToolbarAction(
-                      id: 'reader-chapters',
-                      symbol: 'list.number',
-                      label: context.l10n.includeChapters,
-                      fallbackIcon: FluentIcons.text_number_list_ltr_24_regular,
-                      onPressed: _pickChapter,
-                    ),
-                    AppleGlassToolbarAction(
-                      id: 'reader-mode',
-                      symbol: 'book',
-                      label: context.l10n.readerMode,
-                      fallbackIcon: FluentIcons.book_open_24_regular,
-                      onPressed: _pickMode,
-                    ),
-                    AppleGlassToolbarAction(
-                      id: 'reader-settings',
-                      symbol: 'gearshape',
-                      label: context.l10n.settings,
-                      fallbackIcon: FluentIcons.settings_24_regular,
-                      onPressed: _openSettings,
-                    ),
-                  ],
+                  floating: floating,
                 ),
               ),
             ),

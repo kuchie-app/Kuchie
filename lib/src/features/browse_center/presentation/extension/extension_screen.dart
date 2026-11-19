@@ -15,6 +15,7 @@ import '../../../../utils/misc/app_utils.dart';
 import '../../../../utils/misc/toast/toast.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/ios/apple_glass_floating_header.dart';
+import '../../../../widgets/scroll_bottom_inset.dart';
 import '../../../../widgets/search_field.dart';
 import '../../domain/extension/extension_model.dart';
 import '../browse/browse_no_search_results.dart';
@@ -189,6 +190,7 @@ class ExtensionScreen extends HookConsumerWidget {
                 extensions: extensionMap[k],
                 desktop: desktop,
               ),
+          if (!desktop) const SliverBottomInset(),
         ],
       );
       return RefreshIndicator(

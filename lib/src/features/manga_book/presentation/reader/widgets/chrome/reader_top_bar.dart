@@ -20,6 +20,7 @@ import '../../../../../../utils/theme/reader_overlay_colors.dart';
 import '../../../../../../widgets/in_app_web_view.dart';
 import '../../../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../../../widgets/server_image.dart';
+import '../../../../../security/app_security.dart';
 import '../../../../../settings/presentation/koreader_sync/data/koreader_sync_repository.dart';
 import '../../../../domain/chapter/chapter_model.dart';
 import '../../../../domain/manga/manga_model.dart';
@@ -29,6 +30,8 @@ import '../../utils/koreader_progress_actions.dart';
 import 'reader_bookmark_button.dart';
 
 /// Measure this bar together with ReaderUtilsBar so expanded controls are included in the top inset.
+/// Server adapter: derives titles, links, bookmark and KOReader actions from
+/// the server DTOs and renders the shared [ReaderTopBarView].
 class ReaderTopBar extends HookConsumerWidget {
   const ReaderTopBar({
     super.key,
@@ -59,7 +62,6 @@ class ReaderTopBar extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Status-bar inset the reader's SafeArea hasn't already applied.
     final connected =
         koSyncOnline(ref) &&
         ref.watch(koSyncStatusProvider).value?.isLoggedIn == true;
@@ -71,138 +73,183 @@ class ReaderTopBar extends HookConsumerWidget {
             '${serverMangaUrl.substring(0, serverMangaUrl.lastIndexOf('/manga/'))}/api/v1',
             link,
           );
-    Future<void> selectMenuItem(String action) async {
-      switch (action) {
-        case 'source':
-          if (chapter.realUrl.isNotBlank) {
-            await launchUrlInWeb(
-              context,
-              chapter.realUrl!,
-              ref.read(toastProvider),
-            );
-          }
-        case 'readingMode':
-          onOpenReaderMode?.call();
-        case 'autoScrollControls':
-          onToggleAutoScrollControls?.call();
-        case 'retry':
-          await retryFailedReaderPages(ref);
-        case 'web':
-          if (link.isNotBlank) {
-            await openInAppWebView(
-              context,
-              link!,
-              serverWebViewUrl: serverWebView,
-              toast: ref.read(toastProvider),
-            );
-          }
-        case 'share':
-          if (link.isBlank) return;
-          if (kIsWeb || isDesktopPlatform) {
-            await Clipboard.setData(ClipboardData(text: link!));
-            if (context.mounted) {
-              ref.read(toastProvider)?.show(context.l10n.copiedToClipboard);
-            }
-          } else {
-            await SharePlus.instance.share(
-              ShareParams(uri: Uri.parse(link!), title: chapter.name),
-            );
-          }
-        case 'push':
-        case 'pull':
-          await syncKoReaderChapter(
-            context: context,
-            ref: ref,
-            chapter: chapter,
-            push: action == 'push',
-            pageCount: pageCount,
-            currentPage: currentPage,
-            onJump: onJump,
-          );
+    Future<void> sync({required bool push}) => syncKoReaderChapter(
+      context: context,
+      ref: ref,
+      chapter: chapter,
+      push: push,
+      pageCount: pageCount,
+      currentPage: currentPage,
+      onJump: onJump,
+    );
+    return ReaderTopBarView(
+      seriesTitle: manga.title,
+      chapterTitle: chapter.name,
+      sourceUrl: chapter.realUrl.isNotBlank ? chapter.realUrl : null,
+      webLink: link.isNotBlank ? link : null,
+      serverWebViewUrl: serverWebView,
+      onBack: onBack,
+      floating: floating,
+      onOpenChapters: onOpenChapters,
+      onOpenReaderMode: onOpenReaderMode,
+      onToggleAutoScrollControls: onToggleAutoScrollControls,
+      autoScrollLabel: autoScrollLabel,
+      onRetry: () => retryFailedReaderPages(ref),
+      bookmark: ReaderBookmarkButton(
+        chapterId: chapter.id,
+        fallbackIsBookmarked: chapter.user.isBookmarked,
+      ),
+      extraMenu: [
+        if (connected) ...[
+          AppleGlassToolbarMenuItem(
+            id: 'push',
+            title: context.l10n.pushKoReaderProgress,
+            symbol: 'icloud.and.arrow.up',
+            fallbackIcon: FluentIcons.cloud_arrow_up_24_regular,
+            onSelected: () => sync(push: true),
+          ),
+          AppleGlassToolbarMenuItem(
+            id: 'pull',
+            title: context.l10n.pullKoReaderProgress,
+            symbol: 'icloud.and.arrow.down',
+            fallbackIcon: FluentIcons.cloud_arrow_down_24_regular,
+            onSelected: () => sync(push: false),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The reader's top bar for every collection (server and on-device): the
+/// floating Liquid Glass bar on iOS, the Material bar elsewhere, and one
+/// overflow menu. Callers pass plain data, so the Local reader and the server
+/// reader render exactly the same widget.
+class ReaderTopBarView extends ConsumerWidget {
+  const ReaderTopBarView({
+    super.key,
+    required this.seriesTitle,
+    required this.chapterTitle,
+    required this.onBack,
+    required this.onRetry,
+    this.sourceUrl,
+    this.webLink,
+    this.serverWebViewUrl,
+    this.bookmark,
+    this.extraMenu = const [],
+    this.floating = false,
+    this.onOpenChapters,
+    this.onOpenReaderMode,
+    this.onToggleAutoScrollControls,
+    this.autoScrollLabel,
+  });
+
+  final String seriesTitle;
+  final String chapterTitle;
+  final VoidCallback onBack;
+  final VoidCallback onRetry;
+
+  /// The chapter on the source's own site; adds "Open in browser".
+  final String? sourceUrl;
+
+  /// Link for the in-app web view and sharing.
+  final String? webLink;
+  final String? serverWebViewUrl;
+
+  /// Shown in the Material bar; the floating dock carries its own.
+  final Widget? bookmark;
+
+  /// Collection-specific entries appended to the overflow menu.
+  final List<AppleGlassToolbarMenuItem> extraMenu;
+  final bool floating;
+  final VoidCallback? onOpenChapters;
+  final VoidCallback? onOpenReaderMode;
+  final VoidCallback? onToggleAutoScrollControls;
+  final String? autoScrollLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final source = sourceUrl;
+    final link = webLink;
+    Future<void> share(String link) async {
+      if (!contentSharingAllowed(context)) return;
+      if (kIsWeb || isDesktopPlatform) {
+        await Clipboard.setData(ClipboardData(text: link));
+        if (context.mounted) {
+          ref.read(toastProvider)?.show(context.l10n.copiedToClipboard);
+        }
+      } else {
+        await SharePlus.instance.share(
+          ShareParams(uri: Uri.parse(link), title: chapterTitle),
+        );
       }
     }
 
-    AppleGlassToolbarMenuItem menuItem(
-      String id,
-      String title,
-      String symbol,
-      IconData fallbackIcon, {
-      bool enabled = true,
-    }) => AppleGlassToolbarMenuItem(
-      id: id,
-      title: title,
-      symbol: symbol,
-      fallbackIcon: fallbackIcon,
-      onSelected: enabled ? () => selectMenuItem(id) : null,
-    );
     final menu = [
-      if (onOpenReaderMode != null)
-        menuItem(
-          'readingMode',
-          context.l10n.readerMode,
-          'book',
-          FluentIcons.book_open_24_regular,
+      if (onOpenReaderMode case final open?)
+        AppleGlassToolbarMenuItem(
+          id: 'readingMode',
+          title: context.l10n.readerMode,
+          symbol: 'book',
+          fallbackIcon: FluentIcons.book_open_24_regular,
+          onSelected: open,
         ),
-      if (floating && chapter.realUrl.isNotBlank)
-        menuItem(
-          'source',
-          context.l10n.openSourceInBrowser,
-          'safari',
-          FluentIcons.globe_24_regular,
+      if (floating && source != null)
+        AppleGlassToolbarMenuItem(
+          id: 'source',
+          title: context.l10n.openSourceInBrowser,
+          symbol: 'safari',
+          fallbackIcon: FluentIcons.globe_24_regular,
+          onSelected: () =>
+              launchUrlInWeb(context, source, ref.read(toastProvider)),
         ),
-      if (onToggleAutoScrollControls != null)
-        menuItem(
-          'autoScrollControls',
-          autoScrollLabel!,
-          'timer',
-          FluentIcons.timer_24_regular,
+      if (onToggleAutoScrollControls case final toggle?)
+        AppleGlassToolbarMenuItem(
+          id: 'autoScrollControls',
+          title: autoScrollLabel!,
+          symbol: 'timer',
+          fallbackIcon: FluentIcons.timer_24_regular,
+          onSelected: toggle,
         ),
-      menuItem(
-        'retry',
-        context.l10n.retryErroredPages,
-        'arrow.clockwise',
-        FluentIcons.replay_24_regular,
+      AppleGlassToolbarMenuItem(
+        id: 'retry',
+        title: context.l10n.retryErroredPages,
+        symbol: 'arrow.clockwise',
+        fallbackIcon: FluentIcons.replay_24_regular,
+        onSelected: onRetry,
       ),
-      menuItem(
-        'web',
-        context.l10n.openChapterInWebView,
-        'globe',
-        FluentIcons.globe_24_regular,
-        enabled: link.isNotBlank,
-      ),
-      if (link.isNotBlank)
-        menuItem(
-          'share',
-          context.l10n.shareChapterLink,
-          'square.and.arrow.up',
-          FluentIcons.share_24_regular,
+      if (link != null) ...[
+        AppleGlassToolbarMenuItem(
+          id: 'web',
+          title: context.l10n.openChapterInWebView,
+          symbol: 'globe',
+          fallbackIcon: FluentIcons.globe_24_regular,
+          onSelected: () => openInAppWebView(
+            context,
+            link,
+            serverWebViewUrl: serverWebViewUrl,
+            toast: ref.read(toastProvider),
+          ),
         ),
-      if (connected) ...[
-        menuItem(
-          'push',
-          context.l10n.pushKoReaderProgress,
-          'icloud.and.arrow.up',
-          FluentIcons.cloud_arrow_up_24_regular,
-        ),
-        menuItem(
-          'pull',
-          context.l10n.pullKoReaderProgress,
-          'icloud.and.arrow.down',
-          FluentIcons.cloud_arrow_down_24_regular,
+        AppleGlassToolbarMenuItem(
+          id: 'share',
+          title: context.l10n.shareChapterLink,
+          symbol: 'square.and.arrow.up',
+          fallbackIcon: FluentIcons.share_24_regular,
+          onSelected: () => share(link),
         ),
       ],
+      ...extraMenu,
     ];
-    final more = ReaderToolbarMore(floating: floating, menu: menu);
     if (floating) {
       return FloatingReaderTopBar(
-        chapterTitle: chapter.name.isNotBlank ? chapter.name : manga.title,
+        chapterTitle: chapterTitle.isNotBlank ? chapterTitle : seriesTitle,
         onBack: onBack,
         onOpenChapters: onOpenChapters,
         menu: menu,
       );
     }
     final systemTopInset = MediaQuery.viewPaddingOf(context).top;
-    final back = ReaderToolbarBack(onBack: onBack);
     return Material(
       color: readerNavSurface(context.theme.colorScheme),
       elevation: 0,
@@ -210,35 +257,33 @@ class ReaderTopBar extends HookConsumerWidget {
         padding: EdgeInsets.only(top: systemTopInset),
         child: Row(
           children: [
-            back,
+            ReaderToolbarBack(onBack: onBack),
             Expanded(
               child: ListTile(
-                title: manga.title.isNotBlank
-                    ? Text(manga.title, overflow: TextOverflow.ellipsis)
+                title: seriesTitle.isNotBlank
+                    ? Text(seriesTitle, overflow: TextOverflow.ellipsis)
                     : null,
-                subtitle: chapter.name.isNotBlank
-                    ? Text(chapter.name, overflow: TextOverflow.ellipsis)
+                subtitle: chapterTitle.isNotBlank
+                    ? Text(chapterTitle, overflow: TextOverflow.ellipsis)
                     : null,
                 contentPadding: EdgeInsets.zero,
+                trailing: onOpenChapters == null
+                    ? null
+                    : const Icon(FluentIcons.chevron_down_16_regular),
+                onTap: onOpenChapters,
               ),
             ),
-            if (chapter.realUrl.isNotBlank)
+            if (source != null)
               AppleGlassToolbarButton(
                 id: 'reader-open-source',
                 symbol: 'globe',
                 label: context.l10n.openSourceInBrowser,
-                onPressed: () => launchUrlInWeb(
-                  context,
-                  chapter.realUrl!,
-                  ref.read(toastProvider),
-                ),
+                onPressed: () =>
+                    launchUrlInWeb(context, source, ref.read(toastProvider)),
                 fallbackIcon: FluentIcons.globe_24_regular,
               ),
-            ReaderBookmarkButton(
-              chapterId: chapter.id,
-              fallbackIsBookmarked: chapter.user.isBookmarked,
-            ),
-            more,
+            ?bookmark,
+            ReaderToolbarMore(floating: false, menu: menu),
           ],
         ),
       ),

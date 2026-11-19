@@ -41,10 +41,7 @@ class RecommendsScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
-              title: title,
-            ),
+          : AppBar(leading: detailNavigationBackButton(context), title: title),
       body: setup.when(
         loading: () => const RecommendationLoading(),
         error: (_, _) => Emoticons(title: context.l10n.errorSomethingWentWrong),
@@ -132,10 +129,7 @@ class _ProviderSection extends ConsumerWidget {
       children: [
         recs.when(
           loading: () => section(
-            child: const SizedBox(
-              height: 200,
-              child: RecommendationLoading(),
-            ),
+            child: const SizedBox(height: 200, child: RecommendationLoading()),
           ),
           error: (e, _) => section(
             child: _SectionMessage(

@@ -365,6 +365,9 @@ void main() {
           )
           .first,
     );
+    // Bring the row fully on screen; the scroll above stops at its edge.
+    await tester.ensureVisible(find.text('Chapter 2'));
+    await tester.pumpAndSettle();
     await tester.longPress(find.text('Chapter 2'));
     await tester.pumpAndSettle();
     final selectAll = find.descendant(

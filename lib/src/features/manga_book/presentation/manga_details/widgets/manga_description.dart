@@ -30,8 +30,6 @@ import '../../../../../widgets/ios/apple_glass_popup_button.dart';
 import '../../../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
 import '../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../widgets/server_image.dart';
-import '../../../../offline/data/offline_repository.dart';
-import '../../../../offline/presentation/series_offline_button.dart';
 import '../../../../settings/presentation/appearance/widgets/manga_thumbnail_backdrop/manga_thumbnail_backdrop_tile.dart';
 import '../../../../tracking/presentation/hub/track_sheet.dart';
 import '../../../domain/manga/manga_model.dart';
@@ -45,10 +43,10 @@ import 'chapter_download_presets_button.dart';
 import 'edit_manga_category_dialog.dart';
 import 'manga_action_button.dart';
 import 'manga_cover_hero.dart';
-import 'manga_rating_bar.dart';
 import 'manga_user_tags_row.dart';
 import 'series_header.dart';
 import 'series_info_column.dart';
+import 'series_personal_section.dart';
 import 'tag_actions_menu.dart';
 
 MarkdownStyleSheet _markdownStyleSheetFromTheme(ThemeData theme) {
@@ -298,12 +296,13 @@ class MangaDescription extends HookConsumerWidget {
     Widget descriptionSection(bool expanded, bool showToggle) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (manga.description.isNotBlank || notes.isNotBlank)
+        if (manga.description.isNotBlank || (twoColumn && notes.isNotBlank))
           Padding(
             padding: KEdgeInsets.a16.size.onDesktopPageLine(context),
             child: MangaDescriptionBody(
               description: manga.description ?? '',
-              notes: notes,
+              // Phones show notes in the personal section under the tags.
+              notes: twoColumn ? notes : null,
               onEditNotes: !twoColumn && inLibrary
                   ? () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
@@ -325,50 +324,14 @@ class MangaDescription extends HookConsumerWidget {
                   launchUrlInWeb(context, url, ref.read(toastProvider)),
             ),
           ),
-        if (expanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              0,
-              16,
-              12,
-            ).onDesktopPageLine(context),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                AddUserTagChip(mangaId: manga.id),
-                ...manga.genre
-                    .where((e) => e.isNotBlank)
-                    .map<Widget>(
-                      (e) => Builder(
-                        builder: (chipContext) => _SeriesGenreChip(
-                          label: e,
-                          onTap: () =>
-                              showTagActionsMenu(chipContext, ref, tag: e),
-                        ),
-                      ),
-                    ),
-              ],
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              0,
-              16,
-              12,
-            ).onDesktopPageLine(context),
-            child: CollapsedSeriesTags(
-              tags: manga.genre.where((e) => e.isNotBlank).toList(),
-              leading: AddUserTagChip(mangaId: manga.id),
-              onExpand: toggleExpanded,
-              onTagTap: (chipContext, tag) =>
-                  showTagActionsMenu(chipContext, ref, tag: tag),
-            ),
-          ),
+        SeriesTagsSection(
+          tags: manga.genre.where((e) => e.isNotBlank).toList(),
+          leading: twoColumn ? AddUserTagChip(mangaId: manga.id) : null,
+          expanded: expanded,
+          onExpand: toggleExpanded,
+          onTagTap: (chipContext, tag) =>
+              showTagActionsMenu(chipContext, ref, tag: tag),
+        ),
       ],
     );
 
@@ -499,7 +462,6 @@ class MangaDescription extends HookConsumerWidget {
           ),
         Builder(
           builder: (context) {
-            final offlineEnabled = ref.watch(offlineEnabledProvider);
             return Padding(
               padding:
                   (twoColumn
@@ -518,7 +480,9 @@ class MangaDescription extends HookConsumerWidget {
                   ],
                   Row(
                     children: [
-                      if (!twoColumn && (!compactGlass || showBackdrop))
+                      // Phones: Add to library, Tracking, Web View, the same
+                      // three as on-device series.
+                      if (!twoColumn)
                         Expanded(
                           child: MangaActionButton(
                             active: inLibrary,
@@ -547,18 +511,16 @@ class MangaDescription extends HookConsumerWidget {
                           ),
                         ),
                       ),
-                      if (compactGlass)
+                      if (!twoColumn)
                         Expanded(
                           child: MangaActionButton(
                             icon: const Icon(FluentIcons.globe_24_regular),
                             label: context.l10n.webView,
-                            horizontal: true,
+                            horizontal: compactGlass,
                             onPressed: () => openWebView(context, ref, manga),
                           ),
                         ),
-                      if (!compactGlass && offlineEnabled)
-                        Expanded(child: SeriesOfflineButton(mangaId: manga.id)),
-                      if (!compactGlass && !manga.isLocalSource)
+                      if (twoColumn && !manga.isLocalSource)
                         Expanded(
                           child: ChapterDownloadPresetsButton(
                             actionRow: true,
@@ -627,14 +589,11 @@ class MangaDescription extends HookConsumerWidget {
                         ),
                     ],
                   ),
-                  if (compactGlass && offlineEnabled)
-                    SeriesOfflineButton(mangaId: manga.id),
                 ],
               ),
             );
           },
         ),
-        if (!twoColumn) MangaRatingBar(mangaId: manga.id),
         if (expansion == null)
           descriptionSection(expanded, true)
         else
@@ -654,8 +613,45 @@ class MangaDescription extends HookConsumerWidget {
               ),
             ],
           ),
-        MangaUserTagsRow(mangaId: manga.id),
+        if (twoColumn)
+          MangaUserTagsRow(mangaId: manga.id)
+        else
+          _ServerPersonalSection(manga: manga, notes: notes ?? ''),
       ],
+    );
+  }
+}
+
+/// Rating, notes and your tags for a server series, under its tags.
+class _ServerPersonalSection extends ConsumerWidget {
+  const _ServerPersonalSection({required this.manga, required this.notes});
+
+  final MangaDto manga;
+  final String notes;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rating = mangaRatingProvider(mangaId: manga.id);
+    final tags = mangaUserTagsProvider(mangaId: manga.id);
+    return SeriesPersonalSection(
+      rating: ref.watch(rating),
+      onRate: (next) => ref.read(rating.notifier).update(next),
+      notes: notes,
+      onEditNotes: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => MangaNotesScreen(
+            mangaId: manga.id,
+            seriesTitle: manga.title,
+            initialNotes: notes,
+            existingMetas: {for (final meta in manga.meta) meta.key: meta.value},
+          ),
+        ),
+      ),
+      tags: ref.watch(tags),
+      onAddTag: () => showAddUserTagDialog(context, ref, manga.id),
+      onRemoveTag: (tag) => ref.read(tags.notifier).remove(tag),
+      onTagTap: (chipContext, tag) =>
+          showTagActionsMenu(chipContext, ref, tag: tag),
     );
   }
 }
@@ -792,6 +788,67 @@ class MangaDescriptionBody extends StatelessWidget {
   }
 }
 
+/// Series tags under the description, for every collection: one fitted row
+/// with a "+N more" chip while collapsed, every tag when expanded.
+class SeriesTagsSection extends StatelessWidget {
+  const SeriesTagsSection({
+    super.key,
+    required this.tags,
+    required this.expanded,
+    required this.onExpand,
+    required this.onTagTap,
+    this.leading,
+  });
+
+  final List<String> tags;
+  final bool expanded;
+  final VoidCallback onExpand;
+  final void Function(BuildContext, String) onTagTap;
+
+  /// E.g. the add-your-own-tag chip; on-device series have none.
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tags.isEmpty && leading == null) return const SizedBox.shrink();
+    final padding = const EdgeInsets.fromLTRB(
+      16,
+      0,
+      16,
+      12,
+    ).onDesktopPageLine(context);
+    if (!expanded) {
+      return Padding(
+        padding: padding,
+        child: CollapsedSeriesTags(
+          tags: tags,
+          leading: leading,
+          onExpand: onExpand,
+          onTagTap: onTagTap,
+        ),
+      );
+    }
+    return Padding(
+      padding: padding,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          ?leading,
+          for (final tag in tags)
+            Builder(
+              builder: (chipContext) => SeriesGenreChip(
+                label: tag,
+                onTap: () => onTagTap(chipContext, tag),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class CollapsedSeriesTags extends StatelessWidget {
   const CollapsedSeriesTags({
     super.key,
@@ -802,7 +859,7 @@ class CollapsedSeriesTags extends StatelessWidget {
   });
 
   final List<String> tags;
-  final Widget leading;
+  final Widget? leading;
   final VoidCallback onExpand;
   final void Function(BuildContext, String) onTagTap;
 
@@ -831,7 +888,7 @@ class CollapsedSeriesTags extends StatelessWidget {
                   30
             : 0;
         final width =
-            38 +
+            (leading == null ? 0 : 38) +
             tags
                 .take(count)
                 .fold<double>(0, (sum, tag) => sum + 8 + textWidth(tag) + 30) +
@@ -841,11 +898,11 @@ class CollapsedSeriesTags extends StatelessWidget {
       }
       return Row(
         children: [
-          leading,
-          for (final tag in tags.take(count)) ...[
-            const SizedBox(width: 8),
+          ?leading,
+          for (final (index, tag) in tags.take(count).indexed) ...[
+            if (leading != null || index > 0) const SizedBox(width: 8),
             Builder(
-              builder: (chipContext) => _SeriesGenreChip(
+              builder: (chipContext) => SeriesGenreChip(
                 label: tag,
                 onTap: () => onTagTap(chipContext, tag),
               ),
@@ -887,8 +944,8 @@ class CollapsedSeriesTags extends StatelessWidget {
   );
 }
 
-class _SeriesGenreChip extends StatelessWidget {
-  const _SeriesGenreChip({required this.label, required this.onTap});
+class SeriesGenreChip extends StatelessWidget {
+  const SeriesGenreChip({super.key, required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;

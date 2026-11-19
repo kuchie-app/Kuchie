@@ -171,7 +171,8 @@ Future<void> showChapterContextMenu({
         label: context.l10n.selectAll,
       ),
     );
-    final PopupMenuItem<void>? keepOfflineItem = offlineEnabled
+    // Server series download on the server; the device copy can only go.
+    final PopupMenuItem<void>? keepOfflineItem = offlineEnabled && onDevice
         ? PopupMenuItem(
             enabled: !onDevice || canDownload,
             onTap: () async {
@@ -444,19 +445,6 @@ Future<void> showChapterContextMenu({
         ),
       ),
       const PopupMenuDivider(),
-      PopupMenuItem(
-        enabled: canDownload,
-        onTap: () => keepChaptersOffline(
-          context: context,
-          ref: ref,
-          chapters: targets,
-          refresh: (_) => refresh(),
-        ),
-        child: ChapterMenuRow(
-          icon: FluentIcons.arrow_circle_down_24_regular,
-          label: context.l10n.keepOffline,
-        ),
-      ),
       PopupMenuItem(
         enabled: canDownload,
         onTap: () => queueServerDownload(

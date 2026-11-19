@@ -17,6 +17,32 @@ import 'darwin_request_interceptor.dart';
 import 'remote_webview_channel.dart';
 import 'remote_webview_config.dart';
 
+/// A Cloudflare check in an extension's hidden WebView that has not cleared
+/// on its own, so it probably needs a tap.
+class RemoteWebViewChallenge {
+  RemoteWebViewChallenge._(this.url, this.userAgent, this._session);
+
+  /// The page showing the check.
+  final Uri url;
+
+  /// The user agent of the hidden WebView, or null for the engine's own.
+  /// Cloudflare ties its clearance to it, so a browser opened to pass the
+  /// check must send the same one.
+  final String? userAgent;
+
+  final RemoteWebViewSession _session;
+
+  /// Completes once the hidden page has moved past the check.
+  Future<void> get cleared => _session._cleared.future;
+
+  /// Reloads the hidden page, so a check passed in another WebView (they
+  /// share cookies) lets the extension continue.
+  Future<void> retry() async {
+    if (_session._disposed) return;
+    await _session._controller?.reload();
+  }
+}
+
 /// One `android.webkit.WebView` of an extension, hosted here as a headless
 /// WebView.
 ///
@@ -38,6 +64,17 @@ class RemoteWebViewSession {
   final void Function(RemoteWebViewSession session)? onClosed;
 
   static const _decisionTimeout = Duration(seconds: 30);
+
+  /// How long a Cloudflare check may run unattended before Kuchie asks the
+  /// reader; automatic checks usually clear in a few seconds.
+  static const _challengePatience = Duration(seconds: 7);
+
+  /// Shows a Cloudflare check that needs the reader. Set by the app.
+  static void Function(RemoteWebViewChallenge challenge)? onChallenge;
+
+  Timer? _challengeTimer;
+  Completer<void> _cleared = Completer<void>();
+  bool _reportedChallenge = false;
 
   HeadlessInAppWebView? _webView;
   InAppWebViewController? _controller;
@@ -239,13 +276,16 @@ class RemoteWebViewSession {
       },
       onLoadStart: (controller, url) =>
           _emit('pageStarted', () async => {'url': url?.toString()}),
-      onLoadStop: (controller, url) => _emit(
-        'pageFinished',
-        () async => {
-          'url': url?.toString(),
-          'cookies': await _cookies(controller, url),
-        },
-      ),
+      onLoadStop: (controller, url) {
+        unawaited(_watchChallenge(controller, url));
+        _emit(
+          'pageFinished',
+          () async => {
+            'url': url?.toString(),
+            'cookies': await _cookies(controller, url),
+          },
+        );
+      },
       onProgressChanged: (controller, progress) =>
           _emit('progressChanged', () async => {'progress': progress}),
       onTitleChanged: (controller, title) =>
@@ -353,7 +393,56 @@ class RemoteWebViewSession {
       ),
   ];
 
+  // ---------------------------------------------------------------------------
+  // Cloudflare checks that need a person
+  // ---------------------------------------------------------------------------
+
+  static const _challengeProbe = '''
+(function () {
+  if (/^just a moment/i.test(document.title)) return true;
+  return document.querySelector(
+    '#challenge-form, #challenge-running, #challenge-stage, ' +
+    '#cf-challenge-running, .cf-turnstile, ' +
+    'iframe[src*="challenges.cloudflare.com"], ' +
+    'script[src*="/cdn-cgi/challenge-platform/"]') !== null;
+})()
+''';
+
+  Future<void> _watchChallenge(
+    InAppWebViewController controller,
+    WebUri? url,
+  ) async {
+    bool challenge;
+    try {
+      challenge =
+          await controller.evaluateJavascript(source: _challengeProbe) == true;
+    } catch (_) {
+      return;
+    }
+    if (_disposed) return;
+    if (!challenge) {
+      _challengeTimer?.cancel();
+      _challengeTimer = null;
+      if (!_cleared.isCompleted) _cleared.complete();
+      return;
+    }
+    if (_cleared.isCompleted) _cleared = Completer<void>();
+    final page = url == null ? null : Uri.tryParse(url.toString());
+    if (page == null || _reportedChallenge || _challengeTimer != null) return;
+    _challengeTimer = Timer(_challengePatience, () {
+      _challengeTimer = null;
+      if (_disposed || _cleared.isCompleted || _reportedChallenge) return;
+      _reportedChallenge = true;
+      onChallenge?.call(
+        RemoteWebViewChallenge._(page, _config.userAgent, this),
+      );
+    });
+  }
+
   Future<void> _disposeWebView() async {
+    _challengeTimer?.cancel();
+    _challengeTimer = null;
+    if (!_cleared.isCompleted) _cleared.complete();
     final webView = _webView;
     _webView = null;
     _controller = null;

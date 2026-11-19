@@ -975,11 +975,11 @@ final class DownloadIslandAppearanceUITests: XCTestCase {
         app.launch()
 
         openPicker(in: app)
-        let defaultOption = option("wajah-kiri-ring", in: app)
-        let panel = option("panel-manga", in: app)
+        let defaultOption = option("kiri-face-ring", in: app)
+        let panel = option("manga-panel", in: app)
         XCTAssertTrue(defaultOption.waitForExistence(timeout: 8))
-        XCTAssertTrue(option("wajah-kiri-persen", in: app).exists)
-        XCTAssertTrue(option("syal-penanda", in: app).exists)
+        XCTAssertTrue(option("kiri-face-percentage", in: app).exists)
+        XCTAssertTrue(option("bookmark-scarf", in: app).exists)
         if !panel.isSelected { panel.tap() }
         assertSelected(panel)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

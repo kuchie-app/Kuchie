@@ -24,17 +24,20 @@ class MangaThumbnailViewer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customCover = ref.watch(
-      mangaCustomCoverProvider(mangaId: manga.id),
-    );
+    final customCover = ref.watch(mangaCustomCoverProvider(mangaId: manga.id));
     final custom = customCover?.trim();
     final hasCustom = custom != null && custom.isNotEmpty;
     final imageUrl = hasCustom ? custom : manga.thumbnailUrl ?? '';
     final coverVersion = hasCustom ? null : manga.thumbnailUrlLastFetched;
-    final mediaButtons =
-        coverShareSaveButtons(context, ref, imageUrl, coverVersion);
-    final editButton =
-        manga.user.inLibrary ? coverEditButton(context, ref, manga) : null;
+    final mediaButtons = coverShareSaveButtons(
+      context,
+      ref,
+      imageUrl,
+      coverVersion,
+    );
+    final editButton = manga.user.inLibrary
+        ? coverEditButton(context, ref, manga)
+        : null;
     final deleteButton =
         manga.user.inLibrary && custom != null && custom.isNotEmpty
         ? coverDeleteButton(context, ref, manga, custom)

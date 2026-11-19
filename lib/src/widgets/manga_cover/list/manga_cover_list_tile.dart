@@ -17,7 +17,10 @@ import '../widgets/manga_badges.dart';
 class MangaCoverListTile extends StatefulWidget {
   const MangaCoverListTile({
     super.key,
-    required this.manga,
+    this.manga,
+    this.titleOverride,
+    this.coverImage,
+    this.fallbackCoverImage,
     this.onPressed,
     this.onLongPress,
     this.onContinueReading,
@@ -32,7 +35,11 @@ class MangaCoverListTile extends StatefulWidget {
 
   final String? linkLocation;
 
-  final MangaDto manga;
+  /// Null for on-device series, which pass the overrides below instead.
+  final MangaDto? manga;
+  final String? titleOverride;
+  final ImageProvider? coverImage;
+  final ImageProvider? fallbackCoverImage;
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
 
@@ -90,6 +97,45 @@ class _MangaCoverListTileState extends State<MangaCoverListTile> {
       !_pointerFocused &&
       FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
 
+  Widget _cover(BuildContext context) {
+    final width = kCompactCoverWidth * widget.scale;
+    final size = Size(width, mangaCoverBoxHeight(width, coverInset: 0));
+    final cacheWidth = (width * MediaQuery.devicePixelRatioOf(context))
+        .round()
+        .clamp(1, 1 << 16);
+    final manga = widget.manga;
+    final cover = widget.coverImage;
+    if (manga != null && cover == null) {
+      return ServerImage(
+        imageUrl: manga.displayCoverUrl,
+        fallbackImageUrl: manga.thumbnailUrl,
+        coverVersion: manga.coverVersion,
+        fallbackCoverVersion: manga.thumbnailUrlLastFetched,
+        memCacheWidth: cacheWidth,
+        size: size,
+      );
+    }
+    final placeholder = SizedBox.fromSize(
+      size: size,
+      child: const Icon(Icons.book_outlined),
+    );
+    Widget image(ImageProvider provider, ImageErrorWidgetBuilder onError) =>
+        Image(
+          image: ResizeImage.resizeIfNeeded(cacheWidth, null, provider),
+          width: size.width,
+          height: size.height,
+          fit: BoxFit.cover,
+          errorBuilder: onError,
+        );
+    final fallback = widget.fallbackCoverImage;
+    Widget useFallback() => fallback == null || fallback == cover
+        ? placeholder
+        : image(fallback, (_, _, _) => placeholder);
+    return cover == null
+        ? useFallback()
+        : image(cover, (_, _, _) => useFallback());
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -134,23 +180,7 @@ class _MangaCoverListTileState extends State<MangaCoverListTile> {
                       : null,
                   child: ClipRRect(
                     borderRadius: KBorderRadius.r8.radius,
-                    child: ServerImage(
-                      imageUrl: widget.manga.displayCoverUrl,
-                      fallbackImageUrl: widget.manga.thumbnailUrl,
-                      coverVersion: widget.manga.coverVersion,
-                      fallbackCoverVersion:
-                          widget.manga.thumbnailUrlLastFetched,
-                      memCacheWidth: (kCompactCoverWidth *
-                              widget.scale *
-                              MediaQuery.devicePixelRatioOf(context))
-                          .round()
-                          .clamp(1, 1 << 16),
-                      size: Size(
-                        kCompactCoverWidth * widget.scale,
-                        mangaCoverBoxHeight(kCompactCoverWidth * widget.scale,
-                            coverInset: 0),
-                      ),
-                    ),
+                    child: _cover(context),
                   ),
                 ),
               ),
@@ -159,7 +189,7 @@ class _MangaCoverListTileState extends State<MangaCoverListTile> {
                   padding: KEdgeInsets.h8.size,
                   // Skia uncapped ellipsis collapses to one line; use clip for wrapping.
                   child: Text(
-                    widget.manga.title,
+                    widget.titleOverride ?? widget.manga?.title ?? '',
                     softWrap: true,
                     overflow: widget.limitTitleLines
                         ? TextOverflow.ellipsis
@@ -168,9 +198,9 @@ class _MangaCoverListTileState extends State<MangaCoverListTile> {
                   ),
                 ),
               ),
-              if (widget.showBadges)
+              if (widget.showBadges && widget.manga != null)
                 MangaBadgesRow(
-                  manga: widget.manga,
+                  manga: widget.manga!,
                   showCountBadges: widget.showCountBadges),
               if (widget.onContinueReading != null)
                 Padding(

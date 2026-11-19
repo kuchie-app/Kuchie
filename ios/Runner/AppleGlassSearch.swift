@@ -62,6 +62,12 @@ private final class AppleGlassSearchView: NSObject, FlutterPlatformView, UITextF
     field.backgroundColor = .clear
     field.borderStyle = .none
     field.returnKeyType = .search
+    // Titles and source names are not dictionary words; autocorrect would
+    // swap them (Honeytoon → Honeymoon) when the field loses focus.
+    field.autocorrectionType = .no
+    field.spellCheckingType = .no
+    field.smartQuotesType = .no
+    field.smartDashesType = .no
     field.adjustsFontForContentSizeCategory = true
     field.font = .preferredFont(forTextStyle: .body)
     field.clearButtonMode = .always

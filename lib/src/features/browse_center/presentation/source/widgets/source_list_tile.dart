@@ -27,73 +27,120 @@ class SourceListTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    void remember() =>
+        ref.read(sourceLastUsedProvider.notifier).update(source.id);
+    final popular = SourceTypeRoute(
+      sourceId: source.id,
+      sourceType: SourceType.POPULAR,
+    );
+    final latest = SourceTypeRoute(
+      sourceId: source.id,
+      sourceType: SourceType.LATEST,
+    );
+    return SourceListTileView(
+      name: source.name,
+      language: source.language?.displayName,
+      icon: ServerImage(imageUrl: source.iconUrl, size: const Size.square(48)),
+      popularLocation: popular.location,
+      latestLocation: source.supportsLatest.ifNull() ? latest.location : null,
+      onOpen: () {
+        remember();
+        popular.go(context);
+      },
+      onOpenLatest: source.supportsLatest.ifNull()
+          ? () {
+              remember();
+              latest.go(context);
+            }
+          : null,
+      pin: _PinButton(source: source),
+    );
+  }
+}
+
+/// One source in the Sources list, for every collection: icon, name,
+/// language, a Latest button and the pin. Server and on-device sources draw
+/// the same row.
+class SourceListTileView extends StatelessWidget {
+  const SourceListTileView({
+    super.key,
+    required this.name,
+    required this.icon,
+    required this.onOpen,
+    required this.pin,
+    this.language,
+    this.onOpenLatest,
+    this.onOpenSettings,
+    this.popularLocation,
+    this.latestLocation,
+  });
+
+  final String name;
+  final Widget icon;
+  final String? language;
+  final VoidCallback onOpen;
+
+  /// Null when the source has no Latest listing.
+  final VoidCallback? onOpenLatest;
+
+  /// Null when the source has no settings of its own.
+  final VoidCallback? onOpenSettings;
+  final Widget pin;
+
+  /// Web routes, so a modifier-click can open a new tab.
+  final String? popularLocation;
+  final String? latestLocation;
+
+  /// Icon slot for sources without a server icon URL.
+  static Widget iconFor(Uri? url) => url == null
+      ? const SizedBox.square(
+          dimension: 48,
+          child: Icon(FluentIcons.puzzle_piece_24_regular, size: 28),
+        )
+      : ServerImage(imageUrl: url.toString(), size: const Size.square(48));
+
+  @override
+  Widget build(BuildContext context) {
     final glass = supportsAppleGlass(context);
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (source.supportsLatest.ifNull())
+        if (onOpenSettings case final openSettings?)
+          IconButton(
+            onPressed: openSettings,
+            tooltip: context.l10n.settings,
+            icon: const Icon(FluentIcons.settings_24_regular),
+          ),
+        pin,
+        if (onOpenLatest case final openLatest?)
           WebRouteLink(
-            location: SourceTypeRoute(
-              sourceId: source.id,
-              sourceType: SourceType.LATEST,
-            ).location,
+            location: latestLocation,
             builder: (context, openLatestInNewTab) {
-              void openLatest() {
-                ref.read(sourceLastUsedProvider.notifier).update(source.id);
-                WebRouteLink.handleTap(openLatestInNewTab, () {
-                  SourceTypeRoute(
-                    sourceId: source.id,
-                    sourceType: SourceType.LATEST,
-                  ).go(context);
-                });
-              }
-
+              void open() =>
+                  WebRouteLink.handleTap(openLatestInNewTab, openLatest);
               return glass
                   ? IconButton(
-                      onPressed: openLatest,
+                      onPressed: open,
                       tooltip: context.l10n.latest,
                       icon: const Icon(FluentIcons.news_24_regular),
                     )
                   : TextButton(
-                      onPressed: openLatest,
+                      onPressed: open,
                       child: Text(context.l10n.latest),
                     );
             },
           ),
-        _PinButton(source: source),
       ],
     );
     Widget tile(VoidCallback? openInNewTab, Widget? trailing) => ListTile(
-      onTap: () {
-        ref.read(sourceLastUsedProvider.notifier).update(source.id);
-        WebRouteLink.handleTap(openInNewTab, () {
-          SourceTypeRoute(
-            sourceId: source.id,
-            sourceType: SourceType.POPULAR,
-          ).go(context);
-        });
-      },
-      leading: ClipRRect(
-        borderRadius: KBorderRadius.r8.radius,
-        child: ServerImage(
-          imageUrl: source.iconUrl,
-          size: const Size.square(48),
-        ),
-      ),
-      title: Text(
-        source.name,
-        style: glass ? context.textTheme.titleMedium : null,
-      ),
-      subtitle: (source.language?.displayName).isNotBlank
-          ? Text(source.language?.displayName ?? "")
-          : null,
+      onTap: () => WebRouteLink.handleTap(openInNewTab, onOpen),
+      leading: ClipRRect(borderRadius: KBorderRadius.r8.radius, child: icon),
+      title: Text(name, style: glass ? context.textTheme.titleMedium : null),
+      subtitle: language.isNotBlank ? Text(language!) : null,
       trailing: trailing,
     );
     final popular = WebRouteLink(
-      location: SourceTypeRoute(
-        sourceId: source.id,
-        sourceType: SourceType.POPULAR,
-      ).location,
+      location: popularLocation,
       builder: (context, openInNewTab) =>
           tile(openInNewTab, kIsWeb ? null : actions),
     );
@@ -108,6 +155,26 @@ class SourceListTile extends ConsumerWidget {
   }
 }
 
+/// Pin toggle used by [SourceListTileView].
+class SourcePinButton extends StatelessWidget {
+  const SourcePinButton({
+    super.key,
+    required this.pinned,
+    required this.onPressed,
+  });
+
+  final bool pinned;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: pinned ? context.l10n.unpinSource : context.l10n.pinSource,
+    icon: Icon(pinned ? FluentIcons.pin_24_filled : FluentIcons.pin_24_regular),
+    color: pinned ? context.theme.colorScheme.primary : null,
+    onPressed: onPressed,
+  );
+}
+
 class _PinButton extends ConsumerWidget {
   const _PinButton({required this.source});
 
@@ -116,12 +183,8 @@ class _PinButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pinned = source.isPinned;
-    return IconButton(
-      tooltip: pinned ? context.l10n.unpinSource : context.l10n.pinSource,
-      icon: Icon(
-        pinned ? FluentIcons.pin_24_filled : FluentIcons.pin_24_regular,
-      ),
-      color: pinned ? context.theme.colorScheme.primary : null,
+    return SourcePinButton(
+      pinned: pinned,
       onPressed: () async {
         try {
           await ref

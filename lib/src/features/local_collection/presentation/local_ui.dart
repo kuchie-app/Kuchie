@@ -1,3 +1,6 @@
+import 'dart:async' show TimeoutException;
+import 'dart:io' show HttpException, SocketException;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../../widgets/popup_widgets/app_dialog.dart';
@@ -83,30 +86,68 @@ String localSecurityMessage(
         'Ekstensi ini gagal pemeriksaan keamanan dan tidak dipasang.',
       );
 
+/// Why [error] happened, in words a reader can act on.
+String localErrorMessage(BuildContext context, Object error) => switch (error) {
+  LocalSourceSecurityException() => localSecurityMessage(context, error),
+  MihonRuntimeUnavailable(missing: true) => localText(
+    context,
+    'Extensions need the extension runtime, which this build does not include.',
+    'Ekstensi butuh runtime ekstensi, yang tidak ada di build ini.',
+  ),
+  // Startup failed or timed out this time; the next attempt usually works.
+  MihonRuntimeUnavailable() => localText(
+    context,
+    'The extension runtime is still starting or stopped responding. Try again.',
+    'Runtime ekstensi masih memulai atau tidak merespons. Coba lagi.',
+  ),
+  TimeoutException() => localText(
+    context,
+    'The source took too long to respond. Try again.',
+    'Sumber terlalu lama merespons. Coba lagi.',
+  ),
+  MihonRuntimeException(looksBlocked: true, :final detail) => localText(
+    context,
+    'The site blocked the request ($detail). Open it in WebView to pass the check, or change the user agent in Settings → Advanced.',
+    'Situs memblokir permintaan ($detail). Buka di WebView untuk lolos pemeriksaan, atau ganti user agent di Pengaturan → Lanjutan.',
+  ),
+  MihonRuntimeException(:final detail?) => localText(
+    context,
+    'The extension could not complete this request: $detail',
+    'Ekstensi gagal memproses permintaan ini: $detail',
+  ),
+  MihonRuntimeException() => localText(
+    context,
+    'The extension could not complete this request.',
+    'Ekstensi gagal memproses permintaan ini.',
+  ),
+  SocketException() || HttpException() => localText(
+    context,
+    'Could not reach the site. Check your connection and try again.',
+    'Tidak dapat menghubungi situs. Periksa koneksi lalu coba lagi.',
+  ),
+  LocalSourceRetiredStoreException(:final storeName) => localText(
+    context,
+    '$storeName no longer publishes extensions. Remove it and add Keiyoushi '
+        'instead.',
+    '$storeName sudah tidak menerbitkan ekstensi. Hapus store ini dan '
+        'tambahkan Keiyoushi.',
+  ),
+  FormatException() => localText(
+    context,
+    'This file or repository is invalid or unsupported.',
+    'File atau repositori ini tidak valid atau belum didukung.',
+  ),
+  StateError(:final message) => message,
+  _ => localText(
+    context,
+    'Could not complete the action. Try again.',
+    'Tindakan gagal. Silakan coba lagi.',
+  ),
+};
+
 void localFailure(BuildContext context, Object error) {
   if (!context.mounted) return;
-  final message = switch (error) {
-    LocalSourceSecurityException() => localSecurityMessage(context, error),
-    MihonRuntimeUnavailable() => localText(
-      context,
-      'The extension runtime is unavailable on this build.',
-      'Runtime ekstensi belum tersedia di build ini.',
-    ),
-    MihonRuntimeException() => localText(
-      context,
-      'The extension could not complete this request.',
-      'Ekstensi gagal memproses permintaan ini.',
-    ),
-    FormatException() => localText(
-      context,
-      'This file or repository is invalid or unsupported.',
-      'File atau repositori ini tidak valid atau belum didukung.',
-    ),
-    _ => localText(
-      context,
-      'Could not complete the action. Try again.',
-      'Tindakan gagal. Silakan coba lagi.',
-    ),
-  };
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(localErrorMessage(context, error))));
 }

@@ -44,4 +44,30 @@ void main() {
     );
     expect(notSuwayomi, isEmpty);
   });
+
+  test('scans the Wi-Fi subnet, not cellular or VPN interfaces', () {
+    expect(
+      pickLanAddress([
+        ('pdp_ip0', '10.64.12.7'),
+        ('utun3', '10.8.0.2'),
+        ('en0', '192.168.1.23'),
+      ]),
+      '192.168.1.23',
+    );
+    expect(pickLanAddress([('pdp_ip0', '10.64.12.7')]), isNull);
+    expect(
+      pickLanAddress([('bridge100', '192.168.2.1'), ('en1', '10.0.0.4')]),
+      '10.0.0.4',
+    );
+  });
+
+  test('treats private, .local and link-local hosts as local network', () {
+    expect(isLocalNetworkHost('192.168.1.10'), isTrue);
+    expect(isLocalNetworkHost('10.0.0.5'), isTrue);
+    expect(isLocalNetworkHost('172.20.1.1'), isTrue);
+    expect(isLocalNetworkHost('suwayomi.local'), isTrue);
+    expect(isLocalNetworkHost('169.254.3.4'), isTrue);
+    expect(isLocalNetworkHost('100.101.102.103'), isFalse);
+    expect(isLocalNetworkHost('example.com'), isFalse);
+  });
 }

@@ -11,7 +11,6 @@ import 'package:flutter/widgets.dart';
   required bool isRtl,
   required VoidCallback? onPreviousChapter,
   required VoidCallback? onNextChapter,
-}) =>
-    isRtl
-        ? (leading: onNextChapter, trailing: onPreviousChapter)
-        : (leading: onPreviousChapter, trailing: onNextChapter);
+}) => isRtl
+    ? (leading: onNextChapter, trailing: onPreviousChapter)
+    : (leading: onPreviousChapter, trailing: onNextChapter);

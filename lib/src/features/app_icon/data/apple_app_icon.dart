@@ -1,14 +1,20 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// The icons bundled with Kuchie, named after what each one shows.
 enum AppIconDesign {
-  kiri(null, 'Kiri', 'kiri'),
-  panelKiri('AppIcon-PanelKiri', 'Panel Kiri', 'panel-kiri'),
-  capKertas('AppIcon-CapKertas', 'Cap Kertas', 'cap-kertas'),
-  syalPenanda('AppIcon-SyalPenanda', 'Syal Penanda', 'syal-penanda'),
-  openFrame('AppIcon-OpenFrame', 'Open Frame', 'open-frame');
+  /// The primary icon: a purple bookmark ribbon.
+  bookmarkScarf(null, 'Bookmark Scarf', 'bookmark-scarf'),
+
+  /// Kiri, the mascot, in a hood and scarf.
+  kiri('AppIcon-Kiri', 'Kiri', 'kiri'),
+
+  /// Kiri looking out of a manga panel frame.
+  framePeek('AppIcon-FramePeek', 'Frame Peek', 'frame-peek'),
+
+  /// Kiri on a round seal stamped on cream paper.
+  paperSeal('AppIcon-PaperSeal', 'Paper Seal', 'paper-seal');
 
   const AppIconDesign(this.alternateName, this.title, this._assetName);
 
@@ -44,7 +50,6 @@ class AppleAppIcon {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   static const _platform = MethodChannel('kuchie/app_icon');
-  static const _imageFileName = 'Kuchie-Icon.png';
 
   Future<AppleAppIconState> load() async {
     final data = await _platform.invokeMapMethod<String, Object?>('state');
@@ -57,30 +62,6 @@ class AppleAppIcon {
       design.alternateName,
     );
     return AppleAppIconState.fromPlatform(data);
-  }
-
-  Future<Uint8List?> pickImage() async {
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp'],
-    );
-    if (file == null) return null;
-    final path = file.path;
-    if (path == null) throw const FormatException('Picker returned no path');
-    final bytes = await _platform.invokeMethod<Uint8List>('prepareImage', path);
-    if (bytes == null || bytes.isEmpty) {
-      throw const FormatException('Icon image is empty');
-    }
-    return bytes;
-  }
-
-  Future<bool> saveImage(Uint8List image) async {
-    final saved = await FilePicker.saveFile(
-      fileName: _imageFileName,
-      bytes: image,
-      mimeType: 'image/png',
-    );
-    return saved != null;
   }
 
   Future<bool> openShortcuts() => launchUrl(

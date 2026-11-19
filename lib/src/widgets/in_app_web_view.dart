@@ -37,6 +37,7 @@ Future<void> openInAppWebView(
   String url, {
   String? serverWebViewUrl,
   Toast? toast,
+  String? userAgent,
 }) async {
   final serverUri = _pageUri(serverWebViewUrl);
   final uri = _pageUri(url) ?? serverUri;
@@ -51,6 +52,7 @@ Future<void> openInAppWebView(
           initial: uri,
           serverWebView: serverUri == uri ? null : serverUri,
           toast: toast,
+          userAgent: userAgent,
         ),
       ),
     );
@@ -79,11 +81,20 @@ String? serverWebViewLink(String apiBase, String? sourceUrl) {
 }
 
 class _InAppWebView extends StatefulWidget {
-  const _InAppWebView({required this.initial, this.serverWebView, this.toast});
+  const _InAppWebView({
+    required this.initial,
+    this.serverWebView,
+    this.toast,
+    this.userAgent,
+  });
 
   final Uri initial;
   final Uri? serverWebView;
   final Toast? toast;
+
+  /// Sent instead of Safari's own, so cookies a site ties to the user agent
+  /// (Cloudflare clearance) also work for extensions.
+  final String? userAgent;
 
   @override
   State<_InAppWebView> createState() => _InAppWebViewState();
@@ -289,6 +300,7 @@ class _InAppWebViewState extends State<_InAppWebView> {
                       creationParams: {
                         'url': widget.initial.toString(),
                         'bottomInset': _bottomInset,
+                        'userAgent': ?widget.userAgent,
                       },
                       gestureBlockingPolicy:
                           UiKitViewGestureBlockingPolicy.doNotBlockGesture,

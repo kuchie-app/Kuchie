@@ -20,6 +20,7 @@ import '../../../../utils/motion/reduce_motion.dart';
 import '../../../../widgets/cover_cache/cover_cache.dart';
 import '../../../../widgets/server_image.dart';
 import '../../../auth/data/auth_credentials_store.dart';
+import '../../../security/app_security.dart';
 import '../../domain/manga/manga_model.dart';
 import '../manga_details/controller/manga_details_controller.dart';
 import '../manga_details/widgets/edit_cover_picker.dart';
@@ -33,35 +34,34 @@ void openCoverViewer(BuildContext context, MangaDto manga) {
         fullscreenDialog: true,
         opaque: false,
         pageBuilder: (context, _, _) => MangaThumbnailViewer(manga: manga),
-        transitionsBuilder:
-            (context, animation, secondaryAnimation, child) {
-              if (context.reduceMotion) {
-                return ReducedRouteTransition(
-                  animation: animation,
-                  child: child,
-                );
-              }
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          if (context.reduceMotion) {
+            return ReducedRouteTransition(animation: animation, child: child);
+          }
 
-              const begin = Offset(-1.0, 0.0);
-              const end = Offset.zero;
-              const curve = Curves.ease;
+          const begin = Offset(-1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.ease;
 
-              final tween = Tween(begin: begin, end: end);
-              final curvedAnimation = CurvedAnimation(
-                parent: animation,
-                curve: curve,
-              );
+          final tween = Tween(begin: begin, end: end);
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: curve,
+          );
 
-              return SlideTransition(
-                position: tween.animate(curvedAnimation),
-                child: child,
-              );
-            },
+          return SlideTransition(
+            position: tween.animate(curvedAnimation),
+            child: child,
+          );
+        },
       ),
     );
     return;
   }
-  showDialog<void>(context: context, builder: (_) => _CoverDialog(manga: manga));
+  showDialog<void>(
+    context: context,
+    builder: (_) => _CoverDialog(manga: manga),
+  );
 }
 
 bool _isShareSavePlatform() =>
@@ -101,6 +101,7 @@ Future<void> _shareCover(
   String imageUrl,
   String? coverVersion,
 ) async {
+  if (!contentSharingAllowed(context)) return;
   final toast = ref.read(toastProvider);
   final errorMsg = context.l10n.errorSomethingWentWrong;
   final sessionCurrent = ref
@@ -282,9 +283,7 @@ class _CoverDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customCover = ref.watch(
-      mangaCustomCoverProvider(mangaId: manga.id),
-    );
+    final customCover = ref.watch(mangaCustomCoverProvider(mangaId: manga.id));
     final custom = customCover?.trim();
     final hasCustom = custom != null && custom.isNotEmpty;
     final imageUrl = hasCustom ? custom : manga.thumbnailUrl ?? '';
@@ -326,16 +325,8 @@ class _CoverDialog extends ConsumerWidget {
                 ),
                 if (manga.user.inLibrary)
                   coverEditButton(context, ref, manga, labeled: true),
-                if (manga.user.inLibrary &&
-                    custom != null &&
-                    custom.isNotEmpty)
-                  coverDeleteButton(
-                    context,
-                    ref,
-                    manga,
-                    custom,
-                    labeled: true,
-                  ),
+                if (manga.user.inLibrary && custom != null && custom.isNotEmpty)
+                  coverDeleteButton(context, ref, manga, custom, labeled: true),
               ],
             ),
           ],

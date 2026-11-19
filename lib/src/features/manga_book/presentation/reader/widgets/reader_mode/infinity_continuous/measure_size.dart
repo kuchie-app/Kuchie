@@ -17,7 +17,9 @@ class MeasureSize extends SingleChildRenderObjectWidget {
   }) : super(child: child);
 
   final ValueChanged<Size>? onChange;
-  final VoidCallback? onResize;
+  /// Called during layout when the child's size changes after the first
+  /// layout, with the previous and the new size.
+  final void Function(Size oldSize, Size newSize)? onResize;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -35,7 +37,7 @@ class _MeasureSizeRenderObject extends RenderProxyBox {
   _MeasureSizeRenderObject(this.onChange, this.onResize);
 
   ValueChanged<Size>? onChange;
-  VoidCallback? onResize;
+  void Function(Size oldSize, Size newSize)? onResize;
   Size? _oldSize;
 
   @override
@@ -43,11 +45,13 @@ class _MeasureSizeRenderObject extends RenderProxyBox {
     super.performLayout();
     final newSize = child?.size ?? Size.zero;
     if (_oldSize == newSize) return;
-    if (_oldSize != null) onResize?.call();
+    if (_oldSize case final old?) onResize?.call(old, newSize);
     _oldSize = newSize;
     // Defer out of the layout phase — onChange mutates a cache the list reads.
     if (onChange != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => onChange?.call(newSize));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => onChange?.call(newSize),
+      );
     }
   }
 }

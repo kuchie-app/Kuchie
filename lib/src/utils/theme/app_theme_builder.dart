@@ -1,4 +1,5 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -88,8 +89,10 @@ ThemeData buildAppTheme({
 
   return ThemeData(
     useMaterial3: true,
-    // Leave platform font fallback available for scripts Inter does not cover.
-    fontFamily: 'Inter',
+    // Apple platforms use the system font (SF Pro), as native apps and
+    // Tachimanga do; elsewhere Inter, with platform fallback for scripts it
+    // does not cover.
+    fontFamily: _usesSystemFont ? null : 'Inter',
     colorScheme: scheme,
     extensions: [brandColors],
     scaffoldBackgroundColor: scheme.surface,
@@ -270,3 +273,7 @@ ScrollbarThemeData wideScreenScrollbarTheme(ColorScheme scheme) =>
             : scheme.onSurface.withValues(alpha: 0.22),
       ),
     );
+
+bool get _usesSystemFont =>
+    defaultTargetPlatform == TargetPlatform.iOS ||
+    defaultTargetPlatform == TargetPlatform.macOS;

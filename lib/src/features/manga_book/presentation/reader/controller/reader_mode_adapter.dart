@@ -18,40 +18,37 @@ enum ReadingModeChip {
   longStripGaps;
 
   String toLocale(BuildContext context) => switch (this) {
-        ReadingModeChip.defaultChip => context.l10n.readerModeChipDefault,
-        ReadingModeChip.pagedLTR => context.l10n.readerModeChipPagedLtr,
-        ReadingModeChip.pagedRTL => context.l10n.readerModeChipPagedRtl,
-        ReadingModeChip.pagedVertical =>
-          context.l10n.readerModeChipPagedVertical,
-        ReadingModeChip.longStrip => context.l10n.readerModeChipLongStrip,
-        ReadingModeChip.longStripGaps =>
-          context.l10n.readerModeChipLongStripGaps,
-      };
+    ReadingModeChip.defaultChip => context.l10n.readerModeChipDefault,
+    ReadingModeChip.pagedLTR => context.l10n.readerModeChipPagedLtr,
+    ReadingModeChip.pagedRTL => context.l10n.readerModeChipPagedRtl,
+    ReadingModeChip.pagedVertical => context.l10n.readerModeChipPagedVertical,
+    ReadingModeChip.longStrip => context.l10n.readerModeChipLongStrip,
+    ReadingModeChip.longStripGaps => context.l10n.readerModeChipLongStripGaps,
+  };
 }
 
 abstract final class ReaderModeAdapter {
   /// Legacy continuous-horizontal modes have no matching chip.
   static ReadingModeChip? toChip(ReaderMode mode) => switch (mode) {
-        ReaderMode.defaultReader => ReadingModeChip.defaultChip,
-        ReaderMode.singleHorizontalLTR => ReadingModeChip.pagedLTR,
-        ReaderMode.singleHorizontalRTL => ReadingModeChip.pagedRTL,
-        ReaderMode.singleVertical => ReadingModeChip.pagedVertical,
-        ReaderMode.webtoon => ReadingModeChip.longStrip,
-        ReaderMode.continuousVertical => ReadingModeChip.longStripGaps,
-        ReaderMode.continuousHorizontalLTR ||
-        ReaderMode.continuousHorizontalRTL =>
-          null,
-      };
+    ReaderMode.defaultReader => ReadingModeChip.defaultChip,
+    ReaderMode.singleHorizontalLTR => ReadingModeChip.pagedLTR,
+    ReaderMode.singleHorizontalRTL => ReadingModeChip.pagedRTL,
+    ReaderMode.singleVertical => ReadingModeChip.pagedVertical,
+    ReaderMode.webtoon => ReadingModeChip.longStrip,
+    ReaderMode.continuousVertical => ReadingModeChip.longStripGaps,
+    ReaderMode.continuousHorizontalLTR ||
+    ReaderMode.continuousHorizontalRTL => null,
+  };
 
   /// Never emits an orphan: tapping a parity chip is the only path off one.
   static ReaderMode fromChip(ReadingModeChip chip) => switch (chip) {
-        ReadingModeChip.defaultChip => ReaderMode.defaultReader,
-        ReadingModeChip.pagedLTR => ReaderMode.singleHorizontalLTR,
-        ReadingModeChip.pagedRTL => ReaderMode.singleHorizontalRTL,
-        ReadingModeChip.pagedVertical => ReaderMode.singleVertical,
-        ReadingModeChip.longStrip => ReaderMode.webtoon,
-        ReadingModeChip.longStripGaps => ReaderMode.continuousVertical,
-      };
+    ReadingModeChip.defaultChip => ReaderMode.defaultReader,
+    ReadingModeChip.pagedLTR => ReaderMode.singleHorizontalLTR,
+    ReadingModeChip.pagedRTL => ReaderMode.singleHorizontalRTL,
+    ReadingModeChip.pagedVertical => ReaderMode.singleVertical,
+    ReadingModeChip.longStrip => ReaderMode.webtoon,
+    ReadingModeChip.longStripGaps => ReaderMode.continuousVertical,
+  };
 
   static bool isLegacyOrphan(ReaderMode mode) => toChip(mode) == null;
 }

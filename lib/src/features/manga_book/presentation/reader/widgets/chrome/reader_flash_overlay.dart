@@ -24,12 +24,13 @@ class ReaderFlashOverlay extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final enabled = ref.watch(flashOnPageChangeProvider).ifNull(false);
-    final durationTicks = ref.watch(flashDurationProvider) ??
-        DBKeys.flashDuration.initial;
-    final interval = ref.watch(flashPageIntervalProvider) ??
+    final durationTicks =
+        ref.watch(flashDurationProvider) ?? DBKeys.flashDuration.initial;
+    final interval =
+        ref.watch(flashPageIntervalProvider) ??
         DBKeys.flashPageInterval.initial;
-    final flashColor = ref.watch(flashColorKeyProvider) ??
-        DBKeys.flashColor.initial;
+    final flashColor =
+        ref.watch(flashColorKeyProvider) ?? DBKeys.flashColor.initial;
 
     final color = useState<Color?>(null);
     final prevIndex = useRef<int?>(null);
@@ -56,10 +57,10 @@ class ReaderFlashOverlay extends HookConsumerWidget {
 
       halfTimer.value?.cancel();
       endTimer.value?.cancel();
-      color.value =
-          flashColor == FlashColor.black ? Colors.black : Colors.white;
-      final half =
-          Duration(milliseconds: durationTicks * kFlashMsPerTick ~/ 2);
+      color.value = flashColor == FlashColor.black
+          ? Colors.black
+          : Colors.white;
+      final half = Duration(milliseconds: durationTicks * kFlashMsPerTick ~/ 2);
       if (flashColor == FlashColor.whiteBlack) {
         halfTimer.value = Timer(half, () => color.value = Colors.black);
       }

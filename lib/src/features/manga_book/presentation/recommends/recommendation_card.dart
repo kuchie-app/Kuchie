@@ -112,7 +112,8 @@ class RecommendationCard extends HookConsumerWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: context.textTheme.bodySmall?.copyWith(
-                color: context.windowSizeClass >= WindowSizeClass.large &&
+                color:
+                    context.windowSizeClass >= WindowSizeClass.large &&
                         hovered.value
                     ? cs.primary
                     : null,

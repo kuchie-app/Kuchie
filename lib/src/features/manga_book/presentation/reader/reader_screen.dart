@@ -21,6 +21,7 @@ import '../../../../widgets/kuchie_character_motion.dart';
 import '../../../history/presentation/history_controller.dart';
 import '../../../library/presentation/library/controller/library_controller.dart';
 import '../../../library/presentation/library/controller/library_manga_list.dart';
+import '../../../local_collection/data/local_reading_stats.dart';
 import '../../../offline/data/offline_download_providers.dart';
 import '../../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../../settings/presentation/incognito/incognito_mode.dart';
@@ -98,6 +99,37 @@ class ReaderScreen extends HookConsumerWidget {
       }
       return null;
     }, [autoReaderMode]);
+
+    // Reading time for Reading Insights, shared with the Local collection.
+    final readingTitle = useRef<(String, String?)?>(null);
+    if (mangaData != null) {
+      readingTitle.value = (mangaData.title, mangaData.thumbnailUrl);
+    }
+    final reading = useMemoized(() => Stopwatch()..start());
+    void recordReading() {
+      final elapsed = reading.elapsed;
+      reading.reset();
+      final titled = readingTitle.value;
+      if (incognitoMode || titled == null) return;
+      unawaited(
+        LocalReadingStats.instance.add(
+          serverReadingKey(mangaId),
+          titled.$1,
+          elapsed,
+          cover: titled.$2,
+        ),
+      );
+    }
+
+    useOnAppLifecycleStateChange((_, state) {
+      if (state == AppLifecycleState.resumed) {
+        reading.start();
+      } else if (state == AppLifecycleState.hidden) {
+        recordReading();
+        reading.stop();
+      }
+    });
+    useEffect(() => recordReading, const []);
 
     final debounce = useRef<Timer?>(null);
     // Keep the latest page for an exit flush before the debounce fires.
@@ -243,8 +275,7 @@ class ReaderScreen extends HookConsumerWidget {
 
     useEffect(() {
       final fullscreen =
-          ref.read(readerFullscreenProvider) ??
-          DBKeys.readerFullscreen.initial;
+          ref.read(readerFullscreenProvider) ?? DBKeys.readerFullscreen.initial;
       SystemChrome.setEnabledSystemUIMode(
         hiddenChromeUiMode(fullscreen: fullscreen),
       );
@@ -253,8 +284,7 @@ class ReaderScreen extends HookConsumerWidget {
     }, []);
 
     final underCutout =
-        ref.watch(drawUnderCutoutProvider) ??
-        DBKeys.drawUnderCutout.initial;
+        ref.watch(drawUnderCutoutProvider) ?? DBKeys.drawUnderCutout.initial;
     useEffect(() {
       setDrawUnderCutout(underCutout);
       return () => setDrawUnderCutout(false);
@@ -302,10 +332,12 @@ class ReaderScreen extends HookConsumerWidget {
     return PopScope(
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) {
-          unawaited(SystemChrome.setEnabledSystemUIMode(
-            SystemUiMode.manual,
-            overlays: SystemUiOverlay.values,
-          ));
+          unawaited(
+            SystemChrome.setEnabledSystemUIMode(
+              SystemUiMode.manual,
+              overlays: SystemUiOverlay.values,
+            ),
+          );
           // Await the progress flush before invalidating lists so they refetch the saved read state.
           debounce.value?.cancel();
           try {

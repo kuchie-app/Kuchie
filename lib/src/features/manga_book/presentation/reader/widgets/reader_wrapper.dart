@@ -45,9 +45,10 @@ import '../utils/last_page_swipe_utils.dart';
 import '../utils/reader_mode_kind.dart';
 import 'chrome/reader_chrome.dart';
 import 'chrome/reader_page_actions_sheet.dart';
-import 'chrome/reader_settings_dialog.dart';
+import 'chrome/reader_quick_settings_sheet.dart';
 import 'directional_swipe_gesture_handler.dart';
 import 'reader_chapter_gap_warning.dart';
+import 'reader_edge_swipe_back.dart';
 import 'reader_gesture_state.dart';
 import 'reader_navigation_layout/reader_navigation_layout.dart';
 
@@ -438,7 +439,6 @@ class ReaderWrapper extends HookConsumerWidget {
       ],
     );
 
-
     final canSwipeAcrossChapterBoundary =
         lastPageSwipeEnabled || readerSwipeChapterToggle;
 
@@ -691,18 +691,27 @@ class ReaderWrapper extends HookConsumerWidget {
                     ToggleOffsetDoublePagesIntent:
                         CallbackAction<ToggleOffsetDoublePagesIntent>(
                           onInvoke: (intent) {
-                            final s = ref.read(readerSettingsModelProvider(manga.id));
+                            final s = ref.read(
+                              readerSettingsModelProvider(manga.id),
+                            );
                             if (!isPagedReaderMode(resolvedReaderMode) ||
                                 !s.pageLayout.showsDoublePages(
-                                  horizontal: scrollDirection == Axis.horizontal,
+                                  horizontal:
+                                      scrollDirection == Axis.horizontal,
                                   landscape: context.width > context.height,
                                   trueDualPageSpread: s.trueDualPageSpread,
                                 )) {
                               return null;
                             }
-                            unawaited(ref
-                                .read(readerSettingsModelProvider(manga.id).notifier)
-                                .setOffsetDoublePages(!s.offsetDoublePages));
+                            unawaited(
+                              ref
+                                  .read(
+                                    readerSettingsModelProvider(
+                                      manga.id,
+                                    ).notifier,
+                                  )
+                                  .setOffsetDoublePages(!s.offsetDoublePages),
+                            );
                             return null;
                           },
                         ),
@@ -757,7 +766,7 @@ class ReaderWrapper extends HookConsumerWidget {
                   },
                   child: Focus(
                     focusNode: readerFocusNode,
-                    child: Listener(
+                    child: ReaderEdgeSwipeBack(
                       child: RepaintBoundary(
                         child: ReaderView(
                           onNextChapterCommand: () => pushNextChapter(),
@@ -813,8 +822,9 @@ class ReaderWrapper extends HookConsumerWidget {
                             onHideMenu: () {
                               if (visibility.value) visibility.value = false;
                             },
-                            hideMenuOnScroll:
-                                !isPagedReaderMode(resolvedReaderMode),
+                            hideMenuOnScroll: !isPagedReaderMode(
+                              resolvedReaderMode,
+                            ),
                           ),
                         ),
                       ),
@@ -848,7 +858,7 @@ class ReaderWrapper extends HookConsumerWidget {
                 reverseSeekBar: false,
                 onChanged: onChanged,
                 onOpenSettings: () async {
-                  await showReaderSettingsSheet(
+                  await showReaderQuickSettings(
                     context: context,
                     ref: ref,
                     mangaId: manga.id,
@@ -885,7 +895,7 @@ class ReaderWrapper extends HookConsumerWidget {
     required bool hideMenuOnScroll,
   }) {
     final Widget scrolledChild = hideMenuOnScroll
-        ? _HideMenuOnUserScroll(onHide: onHideMenu, child: child)
+        ? ReaderHideMenuOnUserScroll(onHide: onHideMenu, child: child)
         : child;
     if (childHandlesGestures ||
         !lastPageSwipeEnabled ||
@@ -905,17 +915,24 @@ class ReaderWrapper extends HookConsumerWidget {
   }
 }
 
-class _HideMenuOnUserScroll extends StatefulWidget {
-  const _HideMenuOnUserScroll({required this.onHide, required this.child});
+/// Hides the reader chrome once a finger drag has scrolled past a threshold.
+class ReaderHideMenuOnUserScroll extends StatefulWidget {
+  const ReaderHideMenuOnUserScroll({
+    super.key,
+    required this.onHide,
+    required this.child,
+  });
 
   final VoidCallback onHide;
   final Widget child;
 
   @override
-  State<_HideMenuOnUserScroll> createState() => _HideMenuOnUserScrollState();
+  State<ReaderHideMenuOnUserScroll> createState() =>
+      _ReaderHideMenuOnUserScrollState();
 }
 
-class _HideMenuOnUserScrollState extends State<_HideMenuOnUserScroll> {
+class _ReaderHideMenuOnUserScrollState
+    extends State<ReaderHideMenuOnUserScroll> {
   var _armed = false;
   var _accum = 0.0;
 

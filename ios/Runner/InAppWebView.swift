@@ -32,7 +32,8 @@ final class InAppWebViewFactory: NSObject, FlutterPlatformViewFactory {
       frame: frame,
       channel: FlutterMethodChannel(name: "\(Self.viewType)/\(viewId)", binaryMessenger: messenger),
       initialURL: (parameters?["url"] as? String).flatMap { URL(string: $0) },
-      bottomInset: (parameters?["bottomInset"] as? NSNumber)?.doubleValue ?? 0
+      bottomInset: (parameters?["bottomInset"] as? NSNumber)?.doubleValue ?? 0,
+      userAgent: parameters?["userAgent"] as? String
     )
   }
 }
@@ -44,13 +45,19 @@ private final class InAppWebView: NSObject, FlutterPlatformView, WKNavigationDel
   private var lastAttemptedURL: URL?
   private var failed = false
 
-  init(frame: CGRect, channel: FlutterMethodChannel, initialURL: URL?, bottomInset: Double) {
+  init(
+    frame: CGRect, channel: FlutterMethodChannel, initialURL: URL?, bottomInset: Double,
+    userAgent: String?
+  ) {
     let configuration = WKWebViewConfiguration()
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     webView = WKWebView(frame: frame, configuration: configuration)
     self.channel = channel
     super.init()
 
+    if let userAgent, !userAgent.isEmpty {
+      webView.customUserAgent = userAgent
+    }
     webView.isOpaque = false
     webView.backgroundColor = .clear
     webView.scrollView.contentInsetAdjustmentBehavior = .never

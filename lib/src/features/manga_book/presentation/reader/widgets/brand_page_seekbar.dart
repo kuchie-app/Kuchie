@@ -92,8 +92,10 @@ class BrandPageSeekBar extends StatelessWidget {
       color: cs.onSurface,
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
-    final current =
-        Text("${(currentValue + 1).clamp(1, maxValue)}", style: numStyle);
+    final current = Text(
+      "${(currentValue + 1).clamp(1, maxValue)}",
+      style: numStyle,
+    );
     final total = Text("$maxValue", style: numStyle);
     const thickness = 26.0;
     const gap = SizedBox.square(dimension: 10);
@@ -103,7 +105,9 @@ class BrandPageSeekBar extends StatelessWidget {
             children: [
               inverted ? total : current,
               gap,
-              Expanded(child: SizedBox(height: thickness, child: bar)),
+              Expanded(
+                child: SizedBox(height: thickness, child: bar),
+              ),
               gap,
               inverted ? current : total,
             ],
@@ -112,14 +116,17 @@ class BrandPageSeekBar extends StatelessWidget {
             children: [
               current,
               gap,
-              Expanded(child: SizedBox(width: thickness, child: bar)),
+              Expanded(
+                child: SizedBox(width: thickness, child: bar),
+              ),
               gap,
               total,
             ],
           );
 
     return Card(
-      color: capsuleColor ??
+      color:
+          capsuleColor ??
           context.theme.appBarTheme.backgroundColor?.withValues(alpha: .7),
       shape: RoundedRectangleBorder(borderRadius: KBorderRadius.r32.radius),
       child: Padding(
@@ -196,10 +203,12 @@ class _SeekPainter extends CustomPainter {
     final pos = marker;
     const half = 13.0;
     const mkt = 4.0;
-    final p1 =
-        horizontal ? Offset(pos, cross - half) : Offset(cross - half, pos);
-    final p2 =
-        horizontal ? Offset(pos, cross + half) : Offset(cross + half, pos);
+    final p1 = horizontal
+        ? Offset(pos, cross - half)
+        : Offset(cross - half, pos);
+    final p2 = horizontal
+        ? Offset(pos, cross + half)
+        : Offset(cross + half, pos);
     canvas.drawLine(
       p1,
       p2,

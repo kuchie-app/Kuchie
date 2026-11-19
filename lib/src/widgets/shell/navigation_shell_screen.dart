@@ -29,6 +29,7 @@ import '../desktop/desktop_top_bar.dart';
 import '../ios/apple_glass_capability.dart';
 import 'big_screen_navigation_bar.dart';
 import 'incognito_banner.dart';
+import 'nav_tabs_preference.dart';
 import 'small_screen_navigation_bar.dart';
 import 'update_banner_state.dart';
 import 'update_progress_banner.dart';
@@ -150,11 +151,13 @@ class NavigationShellScreen extends HookConsumerWidget {
 
     final compact = context.windowSizeClass < WindowSizeClass.medium;
     final glass = supportsAppleGlass(context);
-    final branchOrder = switch ((compact, glass)) {
-      (true, true) => const [0, 1, 3, 2, 5],
-      (true, false) => const [0, 1, 3, 4, 5],
-      (false, _) => const [0, 1, 2, 3, 4, 5],
-    };
+    // Phones follow Settings › Customize tabs; wide screens show every
+    // branch in its route order.
+    final navTabs = ref.watch(navTabsProvider);
+    final phoneTabs = navTabs.visible;
+    final branchOrder = compact
+        ? [for (final tab in phoneTabs) tab.branch]
+        : const [0, 1, 2, 3, 4, 5];
     // Downloads opens from More on the Liquid Glass tab bar.
     final branchSelection = branchOrder.indexOf(child.currentIndex);
     final tabSelection = branchSelection < 0
@@ -251,6 +254,10 @@ class NavigationShellScreen extends HookConsumerWidget {
         bottomNavigationBar: SmallScreenNavigationBar(
           selectedIndex: tabSelection,
           glassLayout: glass,
+          tabs: [
+            for (final tab in phoneTabs)
+              navTabData(tab, labels: navTabs.labels),
+          ],
           onDestinationSelected: switchTo,
         ),
       );

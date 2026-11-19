@@ -165,7 +165,9 @@ struct EmbeddedRuntime {
       @"-Dfile.encoding=UTF-8",
       @"-Djava.net.preferIPv4Stack=true",
       @"-Dorg.slf4j.simpleLogger.defaultLogLevel=warn",
-      @"-Xverify:all",
+      // No -Xverify:all: the JVM's default still verifies every class outside
+      // the JDK, including extension code. Re-verifying the signed JDK image
+      // on each launch only slowed the interpreter's startup.
       @"-XX:+UseSerialGC",
       @"-Xms128m",
       @"-Xmx512m",

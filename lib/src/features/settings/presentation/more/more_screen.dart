@@ -7,6 +7,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../constants/enum.dart';
 import '../../../../constants/urls.dart';
@@ -24,11 +25,13 @@ import '../../../account/data/account_providers.dart';
 import '../../../account/presentation/sign_out_action.dart';
 import '../../../auth/data/auth_session_status.dart';
 import '../../../auth/data/auth_state.dart';
+import '../../../local_collection/presentation/local_settings.dart';
 import '../../../onboarding/data/collection_mode.dart';
 import '../../../onboarding/presentation/collection_mode_picker.dart';
 import '../../../quick_open/presentation/unified_search/desktop_search_field.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../quick_open/presentation/unified_search/unified_search_providers.dart';
+import '../../../security/security_settings_screen.dart';
 import '../../data/server_connection/server_port.dart';
 import '../../data/server_connection/server_url.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
@@ -192,6 +195,8 @@ class MoreScreen extends ConsumerWidget {
                   const Divider(height: 16)
                 else
                   SettingsGroupHeading(label: context.l10n.library),
+                // The same order as the Local collection's More tab, so both
+                // collections read alike.
                 group([
                   SettingsGroupRow(
                     icon: FluentIcons.incognito_24_regular,
@@ -206,43 +211,16 @@ class MoreScreen extends ConsumerWidget {
                         .read(incognitoModeProvider.notifier)
                         .set(!incognito),
                   ),
-                  SettingsGroupRow(
-                    icon: FluentIcons.tag_24_regular,
-                    title: context.l10n.categories,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const EditCategoriesRoute().push(context),
-                  ),
-                  routeRow(
-                    FluentIcons.arrow_download_24_regular,
-                    context.l10n.downloads,
-                    () => const DownloadsRoute().go(context),
-                  ),
-                  SettingsGroupRow(
-                    icon: FluentIcons.history_24_regular,
-                    title: context.l10n.history,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const HistoryRoute().push(context),
-                  ),
-                  SettingsGroupRow(
-                    icon: FluentIcons.arrow_counterclockwise_24_regular,
-                    title: context.l10n.backup,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const BackupRoute().push(context),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                group([
                   if (compactIOS)
                     routeRow(
                       FluentIcons.options_24_regular,
                       context.l10n.general,
                       () => const GeneralSettingsRoute().push(context),
                     ),
-                  SettingsGroupRow(
-                    icon: FluentIcons.color_24_regular,
-                    title: context.l10n.appearance,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const AppearanceSettingsRoute().push(context),
+                  routeRow(
+                    FluentIcons.color_24_regular,
+                    context.l10n.appearance,
+                    () => const AppearanceSettingsRoute().push(context),
                   ),
                   if (compactIOS) ...[
                     routeRow(
@@ -266,35 +244,69 @@ class MoreScreen extends ConsumerWidget {
                       () => const TrackingSettingsRoute().push(context),
                     ),
                     routeRow(
-                      FluentIcons.compass_northwest_24_regular,
-                      context.l10n.browse,
+                      FluentIcons.puzzle_piece_24_regular,
+                      context.l10n.extensions,
                       () => const BrowseSettingsRoute().push(context),
                     ),
-                  ],
-                  SettingsGroupRow(
-                    icon: FluentIcons.settings_24_regular,
-                    title: context.l10n.settings,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const SettingsRoute().push(context),
+                  ] else
+                    routeRow(
+                      FluentIcons.tag_24_regular,
+                      context.l10n.categories,
+                      () => const EditCategoriesRoute().push(context),
+                    ),
+                  routeRow(
+                    FluentIcons.arrow_counterclockwise_24_regular,
+                    context.l10n.backup,
+                    () => const BackupRoute().push(context),
+                  ),
+                  routeRow(
+                    FluentIcons.shield_lock_24_regular,
+                    context.l10n.securityAndPrivacy,
+                    () => openSecuritySettings(context),
+                  ),
+                  routeRow(
+                    FluentIcons.data_trending_24_regular,
+                    context.l10n.readingInsights,
+                    () => openReadingInsights(context),
+                  ),
+                  routeRow(
+                    FluentIcons.arrow_download_24_regular,
+                    context.l10n.downloads,
+                    () => const DownloadsRoute().go(context),
                   ),
                 ]),
                 const SizedBox(height: 16),
                 group([
-                  SettingsGroupRow(
-                    icon: FluentIcons.info_24_regular,
-                    title: context.l10n.about,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => const AboutRoute().push(context),
+                  // Server, network and data settings; Local keeps these
+                  // under General.
+                  routeRow(
+                    FluentIcons.settings_24_regular,
+                    context.l10n.settings,
+                    () => const SettingsRoute().push(context),
                   ),
-                  SettingsGroupRow(
-                    icon: FluentIcons.question_circle_24_regular,
-                    title: context.l10n.help,
-                    trailing: const Icon(FluentIcons.chevron_right_24_regular),
-                    onTap: () => launchUrlInWeb(
+                  routeRow(
+                    FluentIcons.share_ios_24_regular,
+                    context.l10n.share,
+                    () => SharePlus.instance.share(
+                      ShareParams(
+                        uri: Uri.parse(KuchieLinks.project),
+                        title: 'Kuchie',
+                      ),
+                    ),
+                  ),
+                  routeRow(
+                    FluentIcons.question_circle_24_regular,
+                    context.l10n.help,
+                    () => launchUrlInWeb(
                       context,
                       AppUrls.serverHelp.url,
                       ref.read(toastProvider),
                     ),
+                  ),
+                  routeRow(
+                    FluentIcons.info_24_regular,
+                    context.l10n.about,
+                    () => const AboutRoute().push(context),
                   ),
                 ]),
                 const SizedBox(height: 16),

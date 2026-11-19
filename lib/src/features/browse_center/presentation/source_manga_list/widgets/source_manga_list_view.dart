@@ -20,6 +20,7 @@ import '../../../../../widgets/emoticons.dart';
 import '../../../../../widgets/inline_retry_row.dart';
 import '../../../../../widgets/kuchie_character_motion.dart';
 import '../../../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
+import '../../../../../widgets/paging_footer.dart';
 import '../../../../manga_book/domain/manga/manga_model.dart';
 import '../../../domain/source/source_model.dart';
 import '../controller/source_manga_controller.dart';
@@ -68,45 +69,49 @@ class SourceMangaListView extends ConsumerWidget {
         builderDelegate: PagedChildBuilderDelegate<MangaDto>(
           firstPageProgressIndicatorBuilder: (context) =>
               const CenterKuchieShimmerIndicator(),
-          newPageProgressIndicatorBuilder: (context) => Row(
-            children: [
-              // Matches the list tiles' inset that the desktop bleed clips.
-              if (isOnDesktopPage(context))
-                const SizedBox(width: kListTilePadding),
-              SizedBox(
-                height: 80,
-                width: 80,
-                child: ClipRRect(
-                  borderRadius: KBorderRadius.r8.radius,
-                  child: const KuchieShimmerIndicator(),
+          newPageProgressIndicatorBuilder: (context) => PagingFooter(
+            loading: state.isLoading,
+            child: Row(
+              children: [
+                // Matches the list tiles' inset that the desktop bleed clips.
+                if (isOnDesktopPage(context))
+                  const SizedBox(width: kListTilePadding),
+                SizedBox(
+                  height: 80,
+                  width: 80,
+                  child: ClipRRect(
+                    borderRadius: KBorderRadius.r8.radius,
+                    child: const KuchieShimmerIndicator(),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: KEdgeInsets.h8.size,
-                child: context.reduceMotion
-                    ? Container(
-                        width: context.width * .3,
-                        decoration: BoxDecoration(
-                          borderRadius: KBorderRadius.r8.radius,
-                          color: context.colorScheme.surfaceContainerHighest,
-                        ),
-                        height: 12,
-                      )
-                    : Shimmer.fromColors(
-                        baseColor: context.colorScheme.surface,
-                        highlightColor: context.theme.colorScheme.primary,
-                        child: Container(
+                Padding(
+                  padding: KEdgeInsets.h8.size,
+                  child: context.reduceMotion
+                      ? Container(
                           width: context.width * .3,
                           decoration: BoxDecoration(
                             borderRadius: KBorderRadius.r8.radius,
                             color: context.colorScheme.surfaceContainerHighest,
                           ),
                           height: 12,
+                        )
+                      : Shimmer.fromColors(
+                          baseColor: context.colorScheme.surface,
+                          highlightColor: context.theme.colorScheme.primary,
+                          child: Container(
+                            width: context.width * .3,
+                            decoration: BoxDecoration(
+                              borderRadius: KBorderRadius.r8.radius,
+                              color:
+                                  context.colorScheme.surfaceContainerHighest,
+                            ),
+                            height: 12,
+                          ),
                         ),
-                      ),
-              ),
-              const Spacer(),
-            ],
+                ),
+                const Spacer(),
+              ],
+            ),
           ),
           newPageErrorIndicatorBuilder: (context) => InlineRetryRow(
             message: state.error.toString(),

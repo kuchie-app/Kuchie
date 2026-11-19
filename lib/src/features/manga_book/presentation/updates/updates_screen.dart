@@ -25,6 +25,8 @@ import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/inline_retry_row.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../widgets/ios/apple_page_title.dart';
+import '../../../../widgets/paging_footer.dart';
+import '../../../../widgets/scroll_bottom_inset.dart';
 import '../../../library/presentation/library/controller/library_controller.dart';
 import '../../../library/presentation/library/widgets/desktop_library_panels.dart';
 import '../../../library/presentation/library/widgets/desktop_library_toolbar.dart';
@@ -350,19 +352,22 @@ class _UpdatesPagedListState extends State<_UpdatesPagedList> {
         final delegate = PagedChildBuilderDelegate<ChapterWithMangaDto>(
           firstPageProgressIndicatorBuilder: (context) =>
               const CenterKuchieShimmerIndicator(),
-          newPageProgressIndicatorBuilder: (context) => Row(
-            children: [
-              if (isOnDesktopPage(context))
-                const SizedBox(width: kListTilePadding),
-              SizedBox(
-                height: 80,
-                width: 80,
-                child: ClipRRect(
-                  borderRadius: KBorderRadius.r8.radius,
-                  child: const KuchieShimmerIndicator(),
+          newPageProgressIndicatorBuilder: (context) => PagingFooter(
+            loading: state.isLoading,
+            child: Row(
+              children: [
+                if (isOnDesktopPage(context))
+                  const SizedBox(width: kListTilePadding),
+                SizedBox(
+                  height: 80,
+                  width: 80,
+                  child: ClipRRect(
+                    borderRadius: KBorderRadius.r8.radius,
+                    child: const KuchieShimmerIndicator(),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           newPageErrorIndicatorBuilder: (context) => InlineRetryRow(
             message: state.error.toString(),
@@ -998,6 +1003,7 @@ class UpdatesScreen extends HookConsumerWidget {
                     refetchChapter: (id) => refetchChapter(ref, id),
                     lastUpdatedAboveList: showLastUpdated,
                   ),
+                  const SliverBottomInset(),
                 ],
               ),
             ),

@@ -14,12 +14,12 @@ void main() {
     final requested = <String?>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == 'state') {
-        return {'available': true, 'current': 'AppIcon-PanelKiri'};
+        return {'available': true, 'current': 'AppIcon-FramePeek'};
       }
       expect(call.method, 'setAlternateIcon');
       final name = call.arguments as String?;
       requested.add(name);
-      if (name == 'AppIcon-CapKertas') {
+      if (name == 'AppIcon-PaperSeal') {
         throw PlatformException(code: 'icon_change_failed');
       }
       return {'available': true, 'current': name};
@@ -39,25 +39,28 @@ void main() {
     ListTile tile(String name) => tester.widget<ListTile>(
       find.ancestor(of: find.text(name), matching: find.byType(ListTile)),
     );
-    expect(tile('Panel Kiri').selected, isTrue);
-    expect(tile('Open Frame').selected, isFalse);
+    expect(tile('Frame Peek').selected, isTrue);
+    expect(tile('Kiri').selected, isFalse);
 
-    await tester.tap(find.text('Cap Kertas'));
+    await tester.tap(find.text('Paper Seal'));
     await tester.pumpAndSettle();
-    expect(tile('Panel Kiri').selected, isTrue);
+    expect(tile('Frame Peek').selected, isTrue);
     expect(
       find.text('iOS could not change the app icon. Try again.'),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Open Frame'));
-    await tester.pumpAndSettle();
-    expect(tile('Open Frame').selected, isTrue);
-
     await tester.tap(find.text('Kiri'));
     await tester.pumpAndSettle();
     expect(tile('Kiri').selected, isTrue);
-    expect(requested, ['AppIcon-CapKertas', 'AppIcon-OpenFrame', null]);
+
+    await tester.tap(find.text('Bookmark Scarf'));
+    await tester.pumpAndSettle();
+    expect(tile('Bookmark Scarf').selected, isTrue);
+    expect(requested, ['AppIcon-PaperSeal', 'AppIcon-Kiri', null]);
+    // A custom picture goes through Shortcuts; there is no upload control.
+    expect(find.text('Choose image'), findsNothing);
+    expect(find.text('Set up in Shortcuts'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

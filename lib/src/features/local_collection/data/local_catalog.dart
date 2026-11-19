@@ -285,6 +285,72 @@ class LocalCatalog {
   Directory get _imports => Directory(p.join(_root.path, 'imports'));
   Directory get _downloads => Directory(p.join(_root.path, 'downloads'));
   Directory get _covers => Directory(p.join(_root.path, 'covers'));
+  Directory get _sourceCovers =>
+      Directory(p.join(_root.path, 'covers', 'source'));
+
+  /// Where the source's own cover for [seriesId] is kept on this iPhone.
+  ///
+  /// Extensions that need cookies or a referrer serve covers through the
+  /// runtime's loopback proxy, whose address changes every launch, so History
+  /// and the library show this copy instead. The file may not exist.
+  File sourceCoverFile(String seriesId) =>
+      File(p.join(_sourceCovers.path, '${_hash(seriesId)}.img'));
+
+  /// Names of the kept source covers, read once so lists never touch the
+  /// disk while they build or scroll.
+  Set<String>? _keptCovers;
+  Future<void>? _keptCoversLoading;
+
+  /// Reads which source covers are kept; [keptCover] answers from memory.
+  Future<void> loadKeptCovers() => _keptCoversLoading ??= () async {
+    final names = <String>{};
+    try {
+      if (await _sourceCovers.exists()) {
+        await for (final entry in _sourceCovers.list()) {
+          if (entry is File && entry.path.endsWith('.img')) {
+            names.add(p.basename(entry.path));
+          }
+        }
+      }
+    } on FileSystemException {
+      // No covers are known; History falls back to source links.
+    }
+    _keptCovers = {...?_keptCovers, ...names};
+  }();
+
+  /// The kept source cover of [seriesId], without disk access, or null when
+  /// there is none or [loadKeptCovers] has not finished yet.
+  File? keptCover(String seriesId) {
+    final file = sourceCoverFile(seriesId);
+    return _keptCovers?.contains(p.basename(file.path)) ?? false ? file : null;
+  }
+
+  /// Keeps [bytes] as the source cover for [seriesId], replacing any older one.
+  /// The folder of source covers kept for History and the library.
+  Directory get sourceCoverDirectory => _sourceCovers;
+
+  /// Deletes every kept source cover; History and the library fall back to
+  /// the source link or the first saved page.
+  Future<void> clearSourceCovers() async {
+    try {
+      _keptCovers?.clear();
+      if (await _sourceCovers.exists()) {
+        await _sourceCovers.delete(recursive: true);
+      }
+    } on FileSystemException {
+      // A cover written meanwhile is harmless.
+    }
+  }
+
+  Future<void> saveSourceCover(String seriesId, Uint8List bytes) async {
+    if (bytes.isEmpty || bytes.length > _maxCoverBytes) return;
+    final target = sourceCoverFile(seriesId);
+    await target.parent.create(recursive: true);
+    final partial = File('${target.path}.partial');
+    await partial.writeAsBytes(bytes, flush: true);
+    await partial.rename(target.path);
+    (_keptCovers ??= {}).add(p.basename(target.path));
+  }
 
   Future<_CatalogDatabase> _open() async {
     await _pages.create(recursive: true);
@@ -753,6 +819,25 @@ class LocalCatalog {
     );
   });
 
+  /// Takes a series off History. Saved pages and reading progress stay.
+  Future<void> removeFromHistory(String seriesId) => _metadata.run(() async {
+    final db = await _database;
+    await db.customStatement('DELETE FROM remote_history WHERE series_id = ?', [
+      seriesId,
+    ]);
+    await db.customStatement(
+      'UPDATE chapters SET last_read_at = NULL WHERE series_id = ?',
+      [seriesId],
+    );
+  });
+
+  /// Empties History. Saved pages and reading progress stay.
+  Future<void> clearHistory() => _metadata.run(() async {
+    final db = await _database;
+    await db.customStatement('DELETE FROM remote_history');
+    await db.customStatement('UPDATE chapters SET last_read_at = NULL');
+  });
+
   /// Newest first.
   Future<List<LocalRemoteRead>> remoteHistory() => _metadata.run(() async {
     final db = await _database;
@@ -761,21 +846,34 @@ class LocalCatalog {
           'SELECT * FROM remote_history ORDER BY last_read_at DESC LIMIT 500',
         )
         .get();
-    return [
-      for (final row in rows)
-        LocalRemoteRead(
-          seriesId: row.read<String>('series_id'),
-          seriesTitle: row.read<String>('series_title'),
-          source: _decodeSeriesSource(row.readNullable<String>('source')),
-          chapterId: row.read<String>('chapter_id'),
-          chapterTitle: row.read<String>('chapter_title'),
-          progress: row.read<int>('progress'),
-          lastReadAt: DateTime.fromMillisecondsSinceEpoch(
-            row.read<int>('last_read_at'),
-          ),
-        ),
-    ];
+    return [for (final row in rows) _remoteRead(row)];
   });
+
+  /// The chapter of [seriesId] last read online, if any.
+  Future<LocalRemoteRead?> lastRemoteRead(String seriesId) =>
+      _metadata.run(() async {
+        final db = await _database;
+        final row = await db
+            .customSelect(
+              'SELECT * FROM remote_history WHERE series_id = ? '
+              'ORDER BY last_read_at DESC LIMIT 1',
+              variables: [Variable.withString(seriesId)],
+            )
+            .getSingleOrNull();
+        return row == null ? null : _remoteRead(row);
+      });
+
+  LocalRemoteRead _remoteRead(QueryRow row) => LocalRemoteRead(
+    seriesId: row.read<String>('series_id'),
+    seriesTitle: row.read<String>('series_title'),
+    source: _decodeSeriesSource(row.readNullable<String>('source')),
+    chapterId: row.read<String>('chapter_id'),
+    chapterTitle: row.read<String>('chapter_title'),
+    progress: row.read<int>('progress'),
+    lastReadAt: DateTime.fromMillisecondsSinceEpoch(
+      row.read<int>('last_read_at'),
+    ),
+  );
 
   Future<int> remoteProgress(
     String seriesId,

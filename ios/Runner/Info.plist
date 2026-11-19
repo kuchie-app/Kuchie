@@ -70,6 +70,8 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Find and connect to your Suwayomi server on your local network.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Kuchie uses Face ID to unlock the app when App lock is on.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save manga pages to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

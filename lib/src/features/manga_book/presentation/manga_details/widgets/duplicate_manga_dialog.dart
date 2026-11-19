@@ -275,7 +275,10 @@ class _DuplicateCard extends StatelessWidget {
                       text: author!,
                     ),
                   if (showArtist)
-                    _DetailRow(icon: FluentIcons.paint_brush_24_regular, text: artist!),
+                    _DetailRow(
+                      icon: FluentIcons.paint_brush_24_regular,
+                      text: artist!,
+                    ),
                   _DetailRow(icon: status.icon, text: status.toLocale(context)),
                   if (isCertain) ...[
                     const Gap(4),

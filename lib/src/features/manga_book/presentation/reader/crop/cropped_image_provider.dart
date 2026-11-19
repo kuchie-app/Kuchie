@@ -96,7 +96,9 @@ class CroppedImageProvider extends ImageProvider<CroppedImageProvider> {
 
   Future<ui.Image> _decodeRgba(CroppedImageData data) async {
     final target = textureLimitedSize(
-      data.width, data.height, await deviceTextureLimit,
+      data.width,
+      data.height,
+      await deviceTextureLimit,
     );
     final completer = Completer<ui.Image>();
     ui.decodeImageFromPixels(

@@ -181,8 +181,7 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
           // The container may be disposed before this microtask; ignore that teardown race.
           try {
             sessionNotifier.record(id);
-          } catch (_) {
-          }
+          } catch (_) {}
         }
       }
 
@@ -198,8 +197,7 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         Future.microtask(() {
           try {
             sessionNotifier.discard(sessionChapterIds.value);
-          } catch (_) {
-          }
+          } catch (_) {}
         });
       };
     }, const []);
@@ -387,20 +385,21 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
             return Future.value(const AsyncValue<void>.data(null));
           }
           return recordReadingProgressWithDependencies(
-          offlineEnabled: offlineEnabledForFlush,
-          offlineDatabase: offlineDbForFlush,
-          repository: repoForFlush,
-          chapterId: p.chapterId,
+            offlineEnabled: offlineEnabledForFlush,
+            offlineDatabase: offlineDbForFlush,
+            repository: repoForFlush,
+            chapterId: p.chapterId,
             lastPageRead: p.rel,
-          isRead: isCompletion,
-          completionChapterIds: isCompletion
-              ? expandIdsForDuplicates(allChaptersForFlush.value, [p.chapterId])
-              : null,
+            isRead: isCompletion,
+            completionChapterIds: isCompletion
+                ? expandIdsForDuplicates(allChaptersForFlush.value, [
+                    p.chapterId,
+                  ])
+                : null,
           );
         }).ignore();
       };
     }, const []);
-
 
     Future<void> loadNextChapter(ChapterDto next) async {
       if (loadingNext.value || hasReachedEnd.value) return;
@@ -573,7 +572,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
       ],
     );
 
-
     final firstLoadedId = loadedChapters.value.first.chapterId;
     final lastLoadedId = loadedChapters.value.last.chapterId;
     final headAdjacency = ref.watch(
@@ -650,7 +648,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
       final d = window.chapterRawToDisplay(chapter.id, raw);
       return d >= 0 ? d : window.firstDisplayOf(chapter.id).clamp(0, 1 << 30);
     }, const []);
-
 
     void onChapterPageChanged(int chapterId, int raw) {
       if (currentVisibleChapter.value.id != chapterId) {
@@ -765,7 +762,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         ),
       );
     }
-
 
     final visibleChapterPages = InfinityContinuousUtils.createChapterPagesDto(
       loadedChapters.value,

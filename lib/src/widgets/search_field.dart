@@ -104,6 +104,12 @@ class SearchField extends HookWidget {
 
     Widget fallback(BuildContext context) => TextField(
       onChanged: onChanged,
+      // Titles are not dictionary words; autocorrect would rewrite them.
+      autocorrect: false,
+      enableSuggestions: false,
+      smartQuotesType: SmartQuotesType.disabled,
+      smartDashesType: SmartDashesType.disabled,
+      textInputAction: TextInputAction.search,
       autofocus: autofocus,
       controller: textController,
       focusNode: effectiveFocusNode,

@@ -9,6 +9,7 @@
 
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -530,9 +531,62 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
 
   late TapDownDetails _tapDownDetails;
 
-  final VelocityTracker _tracker = VelocityTracker.withKind(
-    PointerDeviceKind.touch,
-  );
+  VelocityTracker _tracker = _newVelocityTracker();
+
+  static VelocityTracker _newVelocityTracker() =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS
+      ? IOSScrollViewFlingVelocityTracker(PointerDeviceKind.touch)
+      : VelocityTracker.withKind(PointerDeviceKind.touch);
+
+  /// Same thresholds Scrollable applies to its own drag-end velocity.
+  static Offset _flingVelocity(Offset velocity) {
+    double clamp(double v) => v.abs() < kMinFlingVelocity
+        ? 0
+        : v.clamp(-kMaxFlingVelocity, kMaxFlingVelocity);
+    return Offset(clamp(velocity.dx), clamp(velocity.dy));
+  }
+
+  /// Zoomed (in or out) means the custom pan pipeline owns one-finger drags;
+  /// at 1x the wrapped scrollable scrolls natively.
+  bool get _isZoomed => (_scale - 1).abs() > 0.001;
+
+  int _activePointers = 0;
+
+  /// Set by a pinch; the pointer-up listener clears [_dragMode] before
+  /// onScaleEnd runs, so the end handler cannot rely on it.
+  bool _pinched = false;
+
+  bool _panSampled = false;
+  ScrollHoldController? _verticalHold;
+  ScrollHoldController? _horizontalHold;
+
+  void _holdPositions() {
+    if (_verticalHold == null && _verticalController.hasClients) {
+      _verticalHold = _verticalController.position.hold(
+        () => _verticalHold = null,
+      );
+    }
+    if (_horizontalHold == null && _horizontalController.hasClients) {
+      _horizontalHold = _horizontalController.position.hold(
+        () => _horizontalHold = null,
+      );
+    }
+  }
+
+  /// A hold left behind by a tap would freeze an overscroll or a half-finished
+  /// fling; cancelling lets the position settle like Scrollable does.
+  void _releaseHolds() {
+    _verticalHold?.cancel();
+    _horizontalHold?.cancel();
+    _verticalHold = null;
+    _horizontalHold = null;
+  }
+
+  void _pointerReleased() {
+    if (_activePointers > 0) _activePointers--;
+    if (_activePointers == 0) _releaseHolds();
+  }
 
   void _updateScale(double scale) {
     setState(() {
@@ -553,34 +607,33 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
       builder: (BuildContext context, BoxConstraints constraints) {
         double height = constraints.maxHeight;
         double width = constraints.maxWidth;
+        final outerScrollBehavior = ScrollConfiguration.of(context);
         return Listener(
           behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) {
+            _activePointers++;
+            if (widget.forceHoldOnPointerDown && _isZoomed) _holdPositions();
+          },
           onPointerUp: (PointerUpEvent event) {
             _dragMode = DragMode.none;
+            _pointerReleased();
           },
-          onPointerDown: widget.forceHoldOnPointerDown
-              ? (_) {
-                  if (widget.forceHoldOnPointerDown) {
-                    _verticalController.position.hold(() {});
-                    _horizontalController.position.hold(() {});
-                  }
-                }
-              : null,
+          onPointerCancel: (_) => _pointerReleased(),
           onPointerPanZoomStart: widget.forceHoldOnPointerDown
-              ? (_) {
-                  _verticalController.position.hold(() {});
-                  _horizontalController.position.hold(() {});
-                }
+              ? (_) => _holdPositions()
               : null,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
+          onPointerPanZoomEnd: (_) => _releaseHolds(),
+          child: _ZoomGestureDetector(
+            zoomed: _isZoomed,
             onScaleStart: (ScaleStartDetails details) {
               _clearScaleAnimationListeners();
               _masterAnimationController.stop();
               _trackPadState = details.kind == PointerDeviceKind.trackpad
                   ? TrackPadState.waiting
                   : TrackPadState.none;
-              if (details.pointerCount == 1) {
+              _tracker = _newVelocityTracker();
+              _panSampled = false;
+              if (details.pointerCount == 1 && _isZoomed) {
                 DragStartDetails dragDetails = DragStartDetails(
                   globalPosition: details.focalPoint,
                   kind: PointerDeviceKind.touch,
@@ -614,7 +667,8 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
                   if (widget.pinchEnabled) {
                     _dragMode = DragMode.pinchScale;
                   }
-                } else {
+                } else if (_isZoomed) {
+                  // At 1x the wrapped scrollable owns one-finger drags natively.
                   _dragMode = DragMode.pan;
                 }
               }
@@ -675,6 +729,7 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
                   final correctedOffset = details.focalPoint * _scale;
                   final time = details.sourceTimeStamp!;
                   _tracker.addPosition(time, correctedOffset);
+                  _panSampled = true;
                   final DragUpdateDetails verticalDetails = DragUpdateDetails(
                     globalPosition: correctedOffset,
                     sourceTimeStamp: time,
@@ -732,6 +787,7 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
                               reverse: widget.reverse,
                             ),
                   );
+                  _pinched = true;
                   _updateScale(newScale);
                   _verticalController.jumpTo(verticalOffset);
                   _horizontalController.jumpTo(horizontalOffset);
@@ -744,7 +800,13 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
               _lastScale = _scale;
               _previousDragPosition = null;
 
-              Offset velocity = _tracker.getVelocity().pixelsPerSecond;
+              final wasPinching = _pinched;
+              _pinched = false;
+              // The iOS tracker asserts when it has no samples (a pure pinch).
+              Offset velocity = _panSampled
+                  ? _flingVelocity(_tracker.getVelocity().pixelsPerSecond)
+                  : Offset.zero;
+              _panSampled = false;
               DragEndDetails endDetails = DragEndDetails(
                 velocity: Velocity(pixelsPerSecond: Offset(0.0, velocity.dy)),
                 primaryVelocity: velocity.dy,
@@ -755,6 +817,9 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
               );
               _verticalTouchHandler.handleDragEnd(endDetails);
               _horizontalTouchHandler.handleDragEnd(hEndDetails);
+              if (wasPinching && _scale != 1 && (_scale - 1).abs() < 0.06) {
+                _resetScaleToOne();
+              }
               widget.onScaleEnd?.call(
                 ZoomViewScaleEndDetails(
                   pointerCount: details.pointerCount,
@@ -789,7 +854,7 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
                         child: ScrollConfiguration(
                           behavior: const ScrollBehavior().copyWith(
                             overscroll: false,
-                            // The gesture detector owns input; disable competing scrollable drag recognizers.
+                            // Cross-axis panning only happens zoomed, through the gesture detector.
                             dragDevices: <PointerDeviceKind>{},
                             scrollbars: false,
                           ),
@@ -804,7 +869,12 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
                             child: SizedBox(
                               width: widget.scrollAxis == Axis.vertical ? width : null,
                               height: widget.scrollAxis == Axis.vertical ? null : height,
-                              child: widget.child,
+                              // Restore the reader's behavior so the list keeps
+                              // native drags, flings and momentum at 1x.
+                              child: ScrollConfiguration(
+                                behavior: outerScrollBehavior,
+                                child: widget.child,
+                              ),
                             ),
                           ),
                         ),
@@ -817,6 +887,62 @@ class _ZoomViewState extends State<ZoomView> with SingleTickerProviderStateMixin
           ),
         );
       },
+    );
+  }
+}
+
+/// Scale + double-tap recognizers. Zoomed, the scale recognizer gets a small
+/// pan slop so it beats the wrapped list's drag recognizer; at 1x it keeps the
+/// default slop, so one-finger drags go to the list and only pinches arrive.
+class _ZoomGestureDetector extends StatelessWidget {
+  const _ZoomGestureDetector({
+    required this.zoomed,
+    this.onScaleStart,
+    this.onScaleUpdate,
+    this.onScaleEnd,
+    this.onDoubleTapDown,
+    this.onDoubleTap,
+    required this.child,
+  });
+
+  final bool zoomed;
+  final GestureScaleStartCallback? onScaleStart;
+  final GestureScaleUpdateCallback? onScaleUpdate;
+  final GestureScaleEndCallback? onScaleEnd;
+  final GestureTapDownCallback? onDoubleTapDown;
+  final GestureTapCallback? onDoubleTap;
+  final Widget child;
+
+  static const _zoomedSettings = DeviceGestureSettings(touchSlop: 4);
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = zoomed
+        ? _zoomedSettings
+        : MediaQuery.maybeGestureSettingsOf(context);
+    return RawGestureDetector(
+      behavior: HitTestBehavior.translucent,
+      gestures: {
+        ScaleGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
+              () => ScaleGestureRecognizer(debugOwner: this),
+              (instance) => instance
+                ..onStart = onScaleStart
+                ..onUpdate = onScaleUpdate
+                ..onEnd = onScaleEnd
+                ..gestureSettings = settings,
+            ),
+        if (onDoubleTap != null || onDoubleTapDown != null)
+          DoubleTapGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+                () => DoubleTapGestureRecognizer(debugOwner: this),
+                (instance) => instance
+                  ..onDoubleTapDown = onDoubleTapDown
+                  ..onDoubleTap = onDoubleTap
+                  ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context),
+              ),
+      },
+      child: child,
     );
   }
 }

@@ -38,43 +38,66 @@ class ChapterListLayoutToggle extends StatelessWidget {
   final ValueChanged<ChapterListMode> onChanged;
 
   @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    spacing: 6,
+    children: [
+      for (final value in ChapterListMode.values)
+        ChapterHeaderButton(
+          icon: value.icon,
+          tooltip: value.toLocale(context),
+          selected: mode == value,
+          onPressed: () => onChanged(value),
+        ),
+    ],
+  );
+}
+
+/// One square button of the chapter list header (list, grid, filter, sort),
+/// so the three read as one set.
+class ChapterHeaderButton extends StatelessWidget {
+  const ChapterHeaderButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool selected;
+
+  @override
   Widget build(BuildContext context) {
     final cs = context.theme.colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.onSurface.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: cs.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final value in ChapterListMode.values)
-            Tooltip(
-              message: value.toLocale(context),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(9),
-                onTap: () => onChanged(value),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: mode == value
-                        ? cs.primary.withValues(alpha: 0.18)
-                        : null,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Icon(
-                    value.icon,
-                    size: 18,
-                    color: mode == value ? cs.primary : cs.outline,
-                  ),
-                ),
-              ),
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected
+            ? cs.primary.withValues(alpha: 0.18)
+            : cs.onSurface.withValues(alpha: 0.04),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: selected
+                ? cs.primary.withValues(alpha: 0.5)
+                : cs.outlineVariant,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox.square(
+            dimension: 34,
+            child: Icon(
+              icon,
+              size: 18,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
             ),
-        ],
+          ),
+        ),
       ),
     );
   }

@@ -83,16 +83,6 @@ class ChapterSelectionHeader extends ConsumerWidget {
         ),
       ),
       _HeaderAction(
-        icon: FluentIcons.arrow_circle_down_24_regular,
-        label: context.l10n.keepOffline,
-        onTap: () => keepChaptersOffline(
-          context: context,
-          ref: ref,
-          chapters: selected,
-          refresh: refresh,
-        ),
-      ),
-      _HeaderAction(
         icon: FluentIcons.cloud_arrow_down_24_regular,
         label: context.l10n.download,
         onTap: () => queueServerDownload(

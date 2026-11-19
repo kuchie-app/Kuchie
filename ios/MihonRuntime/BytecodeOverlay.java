@@ -28,6 +28,10 @@ public final class BytecodeOverlay {
             new Method("kuchieSupportedAlgorithms", ALGORITHMS, new Type[] {ALGORITHMS});
     private static final String IMAGE_PROXY = "mextensionserver/impl/MihonImageProxy";
     private static final String IMAGE_SECRET = "kuchieImageTokenSecret";
+    private static final String LOADER = "mextensionserver/impl/MExtensionServerLoader";
+    private static final String PACKAGE_TOOLS = "mextensionserver/util/PackageTools";
+    private static final String DEX2JAR_SIGNATURE = "(Ljava/io/File;Ljava/io/File;)V";
+    private static final String DEX_JAR_CACHE = "io/kuchie/runtime/DexJarCache";
 
     public static void main(String[] arguments) throws Exception {
         if (arguments.length != 2) {
@@ -39,7 +43,10 @@ public final class BytecodeOverlay {
             String compressionClass = COMPRESSION.getInternalName() + ".class";
             writeClass(output, compressionClass, fixCompression(readClass(input, compressionClass)));
             String imageProxyClass = IMAGE_PROXY + ".class";
-            writeClass(output, imageProxyClass, protectImageTokens(readClass(input, imageProxyClass)));
+            writeClass(output, imageProxyClass, keepImageProtocols(
+                    new ClassReader(protectImageTokens(readClass(input, imageProxyClass)))));
+            String loaderClass = LOADER + ".class";
+            writeClass(output, loaderClass, cacheDexTranslation(readClass(input, loaderClass)));
         }
     }
 
@@ -86,6 +93,75 @@ public final class BytecodeOverlay {
         }, 0);
         if (replaced[0] != 1) {
             throw new IllegalArgumentException("Expected 1 runtime ASM analysis call. Found " + replaced[0]);
+        }
+        return writer.toByteArray();
+    }
+
+    private static byte[] keepImageProtocols(ClassReader input) {
+        // The image proxy pins its requests to HTTP/1.1. Cloudflare refuses a
+        // browser user agent over HTTP/1.1 (Danbooru's image server answers
+        // 403) while the same request over HTTP/2 passes, so drop the pin and
+        // let page and poster requests negotiate like the extension's others.
+        // The builder stays on the stack: popping the list leaves exactly what
+        // protocols() would have returned.
+        int[] replaced = {0};
+        var writer = new ClassWriter(0);
+        input.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                var delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
+                return new MethodVisitor(Opcodes.ASM9, delegate) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String name,
+                            String descriptor, boolean isInterface) {
+                        if (opcode == Opcodes.INVOKEVIRTUAL
+                                && "okhttp3/OkHttpClient$Builder".equals(owner)
+                                && "protocols".equals(name)
+                                && "(Ljava/util/List;)Lokhttp3/OkHttpClient$Builder;".equals(descriptor)) {
+                            super.visitInsn(Opcodes.POP);
+                            replaced[0]++;
+                            return;
+                        }
+                        super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+                    }
+                };
+            }
+        }, 0);
+        if (replaced[0] < 1) {
+            throw new IllegalArgumentException("Expected a runtime image protocol pin. Found none");
+        }
+        return writer.toByteArray();
+    }
+
+    private static byte[] cacheDexTranslation(ClassReader input) {
+        // Route the loader's DEX-to-JAR translation through DexJarCache, which
+        // takes the same receiver and arguments as a static call.
+        int[] replaced = {0};
+        var writer = new ClassWriter(0);
+        input.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                    String signature, String[] exceptions) {
+                var delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
+                return new MethodVisitor(Opcodes.ASM9, delegate) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String name,
+                            String descriptor, boolean isInterface) {
+                        if (opcode == Opcodes.INVOKEVIRTUAL && PACKAGE_TOOLS.equals(owner)
+                                && "dex2jar".equals(name) && DEX2JAR_SIGNATURE.equals(descriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, DEX_JAR_CACHE, name,
+                                    "(L" + PACKAGE_TOOLS + ";Ljava/io/File;Ljava/io/File;)V", false);
+                            replaced[0]++;
+                            return;
+                        }
+                        super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+                    }
+                };
+            }
+        }, 0);
+        if (replaced[0] != 1) {
+            throw new IllegalArgumentException("Expected 1 runtime DEX translation call. Found " + replaced[0]);
         }
         return writer.toByteArray();
     }

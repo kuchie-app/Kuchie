@@ -14,6 +14,7 @@ import '../../../features/browse_center/domain/source/source_model.dart';
 import '../../../features/manga_book/domain/manga/manga_model.dart';
 import '../../../routes/router_config.dart';
 import '../../../utils/extensions/custom_extensions.dart';
+import '../../../utils/misc/copy_with_feedback.dart';
 import '../../web_route_link.dart';
 import '../grid/manga_cover_grid_tile.dart';
 import '../widgets/manga_badges.dart';
@@ -22,7 +23,14 @@ import '../widgets/manga_chips.dart';
 class MangaCoverDescriptiveListTile extends StatefulWidget {
   const MangaCoverDescriptiveListTile({
     super.key,
-    required this.manga,
+    this.manga,
+    this.titleOverride,
+    this.authorOverride,
+    this.statusOverride,
+    this.sourceNameOverride,
+    this.onSourcePressed,
+    this.coverImage,
+    this.fallbackCoverImage,
     this.onPressed,
     this.onCoverPressed,
     this.onLongPress,
@@ -38,7 +46,17 @@ class MangaCoverDescriptiveListTile extends StatefulWidget {
     this.linkLocation,
   });
   final String? linkLocation;
-  final MangaDto manga;
+  /// Null for on-device series, which pass the overrides below instead.
+  final MangaDto? manga;
+  final String? titleOverride;
+  final String? authorOverride;
+  final MangaStatus? statusOverride;
+  final String? sourceNameOverride;
+
+  /// Opens the source when there is no server source route.
+  final VoidCallback? onSourcePressed;
+  final ImageProvider? coverImage;
+  final ImageProvider? fallbackCoverImage;
   final bool showBadges;
   final bool showCountBadges;
   final VoidCallback? onPressed;
@@ -102,6 +120,23 @@ class _MangaCoverDescriptiveListTileState
 
   @override
   Widget build(BuildContext context) {
+    final manga = widget.manga;
+    final title = widget.titleOverride ?? manga?.title ?? '';
+    final author = widget.authorOverride ?? manga?.author;
+    final status =
+        widget.statusOverride ??
+        (manga == null
+            ? MangaStatus.unknown
+            : MangaStatus.fromJson(manga.status.name));
+    final sourceId = manga?.source?.id;
+    final sourceName =
+        widget.sourceNameOverride ?? manga?.source?.displayName;
+    final sourceLocation = sourceId.isNotBlank
+        ? SourceTypeRoute(
+            sourceId: sourceId!,
+            sourceType: SourceType.POPULAR,
+          ).location
+        : null;
     return ColoredBox(
       color: widget.selected
           ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.24)
@@ -137,7 +172,10 @@ class _MangaCoverDescriptiveListTileState
                   height: mangaCoverBoxHeight(
                   kDescriptiveCoverWidth * widget.scale),
                   child: MangaCoverGridTile(
-                    manga: widget.manga,
+                    manga: manga,
+                    titleOverride: widget.titleOverride,
+                    coverImage: widget.coverImage,
+                    fallbackCoverImage: widget.fallbackCoverImage,
                     onPressed: widget.onCoverPressed,
                     showBadges: false,
                     showTitle: false,
@@ -156,30 +194,40 @@ class _MangaCoverDescriptiveListTileState
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Tap copies; press and hold searches.
                         InkWell(
                           onTap: widget.onTitleClicked != null
-                              ? () => widget.onTitleClicked!(widget.manga.title)
+                              ? () => copyWithFeedback(context, title)
+                              : null,
+                          onLongPress: widget.onTitleClicked != null
+                              ? () => widget.onTitleClicked!(title)
                               : null,
                           // Skia uncapped ellipsis collapses to one line; use clip for wrapping.
                           child: Text(
-                            widget.manga.title,
+                            title,
                             style: context.textTheme.titleLarge,
                             softWrap: true,
                             overflow: widget.titleMaxLines == null
                                 ? TextOverflow.clip
                                 : TextOverflow.ellipsis,
                             maxLines: widget.titleMaxLines,
-                            semanticsLabel: widget.manga.title,
+                            semanticsLabel: title,
                           ),
                         ),
                         Gap(8),
                         InkWell(
                           onTap: widget.onTitleClicked != null &&
-                              widget.manga.author.isNotBlank
-                              ? () => widget.onTitleClicked!(widget.manga.author)
+                              author.isNotBlank
+                              ? () => copyWithFeedback(context, author!)
+                              : null,
+                          onLongPress: widget.onTitleClicked != null &&
+                              author.isNotBlank
+                              ? () => widget.onTitleClicked!(author)
                               : null,
                           child: Text(
-                            widget.manga.author ?? context.l10n.unknownAuthor,
+                            author.isNotBlank
+                                ? author!
+                                : context.l10n.unknownAuthor,
                             overflow: TextOverflow.ellipsis,
                             style: context.textTheme.bodyMedium,
                           ),
@@ -188,43 +236,33 @@ class _MangaCoverDescriptiveListTileState
                         Wrap(
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            ...[
-                              Icon(
-                                MangaStatus.fromJson(widget.manga.status.name).icon,
-                                size: 16,
-                                color: context.textTheme.bodySmall?.color,
-                              ),
-                              Text(
-                                " ${MangaStatus.fromJson(widget.manga.status.name).toLocale(context)}",
-                                style: context.textTheme.bodySmall,
-                              ),
-                            ],
-                            if (widget.manga.source?.displayName != null) ...[
+                            Icon(
+                              status.icon,
+                              size: 16,
+                              color: context.textTheme.bodySmall?.color,
+                            ),
+                            Text(
+                              " ${status.toLocale(context)}",
+                              style: context.textTheme.bodySmall,
+                            ),
+                            if (sourceName != null) ...[
                               Text(" • "),
                               WebRouteLink(
-                                location: (widget.manga.source?.id).isNotBlank
-                                    ? SourceTypeRoute(
-                                        sourceId: widget.manga.source!.id,
-                                        sourceType: SourceType.POPULAR,
-                                      ).location
-                                    : null,
+                                location: sourceLocation,
                                 enabled: widget.linkLocation == null,
                                 builder: (context, openSourceInNewTab) =>
                                     InkWell(
-                                      onTap:
-                                          (widget.manga.source?.id).isNotBlank
+                                      onTap: sourceLocation != null
                                           ? () => WebRouteLink.handleTap(
                                               openSourceInNewTab,
                                               () => SourceTypeRoute(
-                                                sourceId:
-                                                    widget.manga.source!.id,
+                                                sourceId: sourceId!,
                                                 sourceType: SourceType.POPULAR,
                                               ).go(context),
                                             )
-                                          : null,
+                                          : widget.onSourcePressed,
                                       child: Text(
-                                        widget.manga.source?.displayName ??
-                                            context.l10n.unknownSource,
+                                        sourceName,
                                         style: context.textTheme.bodySmall,
                                       ),
                                     ),
@@ -236,15 +274,15 @@ class _MangaCoverDescriptiveListTileState
                           Gap(4),
                           widget.belowStatus!,
                         ],
-                        if (widget.showBadges)
+                        if (widget.showBadges && manga != null)
                           context.windowSizeClass >= WindowSizeClass.medium
                               ? MangaChipsRow(
-                                  manga: widget.manga,
+                                  manga: manga,
                                   showCountBadges: widget.showCountBadges,
                                 )
                               : MangaBadgesRow(
                                   padding: KEdgeInsets.v8.size,
-                                  manga: widget.manga,
+                                  manga: manga,
                                   showCountBadges: widget.showCountBadges,
                                 ),
                       ],

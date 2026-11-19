@@ -119,21 +119,6 @@ class MultiChaptersActionsBottomAppBar extends HookConsumerWidget {
       ),
       IconButton(
         tooltip: canDownload
-            ? context.l10n.keepOffline
-            : context.l10n.accountPermissionDenied,
-        icon: const Icon(FluentIcons.arrow_circle_down_24_regular),
-        onPressed: !canDownload
-            // Download first: clearing selection disposes this bar mid-loop.
-            ? null
-            : () => keepChaptersOffline(
-                context: context,
-                ref: ref,
-                chapters: selected,
-                refresh: refresh,
-              ),
-      ),
-      IconButton(
-        tooltip: canDownload
             ? context.l10n.downloads
             : context.l10n.accountPermissionDenied,
         icon: const Icon(FluentIcons.cloud_arrow_down_24_regular),

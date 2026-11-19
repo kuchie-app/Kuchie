@@ -1,18 +1,24 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../constants/app_sizes.dart';
 import '../../../constants/navigation_bar_data.dart';
+import '../../../constants/urls.dart';
 import '../../../routes/router_config.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
 import '../../../widgets/app_bottom_sheet.dart';
+import '../../../widgets/compact_switch.dart';
+import '../../../widgets/in_app_web_view.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
 import '../../../widgets/ios/apple_glass_floating_header.dart';
 import '../../../widgets/ios/apple_glass_search.dart';
@@ -22,20 +28,31 @@ import '../../../widgets/ios/apple_page_title.dart';
 import '../../../widgets/kuchie_character_motion.dart';
 import '../../../widgets/kuchie_motion_reveal.dart';
 import '../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
+import '../../../widgets/scroll_bottom_inset.dart';
 import '../../../widgets/shell/apple_liquid_glass_tab_bar.dart';
 import '../../../widgets/shell/detail_navigation_shell_screen.dart';
+import '../../../widgets/shell/nav_tabs_preference.dart';
+import '../../history/presentation/widgets/history_item_tile.dart';
+import '../../manga_book/presentation/manga_details/widgets/chapter_list_tile.dart';
 import '../../onboarding/data/collection_mode.dart';
 import '../../onboarding/presentation/collection_mode_picker.dart';
+import '../../security/security_settings_screen.dart';
+import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../data/local_backups.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_providers.dart';
 import '../data/local_collection_services.dart';
 import '../data/local_download_queue.dart';
 import '../data/local_history.dart';
+import '../data/local_preferences.dart';
+import '../data/local_reading_stats.dart';
 import '../data/local_sources.dart';
 import '../data/local_updates.dart';
 import 'local_extension_browser.dart';
+import 'local_library_options.dart';
 import 'local_series_personal.dart';
+import 'local_settings.dart';
 import 'local_ui.dart';
 
 const _sections = ['library', 'updates', 'browse', 'history', 'more'];
@@ -67,12 +84,58 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   bool _importing = false;
   bool _showExtensions = false;
   bool _searching = false;
-  bool _reverseSort = false;
+
+  /// When each series was last read online, for the Last read order.
+  Map<String, DateTime> _lastOnlineRead = const {};
   int _categoryRevision = 0;
   bool _showSavedDownloads = false;
   bool _openingManga = false;
   final _query = TextEditingController();
   final _searchFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_applyDefaultTab());
+    // History shows each title's reading time.
+    unawaited(
+      LocalReadingStats.instance.load().then((_) {
+        if (mounted) setState(() {});
+      }),
+    );
+  }
+
+  /// Opens on the tab chosen in General, unless a link asked for one.
+  Future<void> _applyDefaultTab() async {
+    final preferences = LocalPreferences.instance;
+    await preferences.load();
+    if (!mounted || widget.initialSection != null) return;
+    final tab = switch (preferences.defaultTab.value) {
+      LocalDefaultTab.lastOpened => preferences.lastTab,
+      LocalDefaultTab.library => 0,
+      LocalDefaultTab.updates => 1,
+      LocalDefaultTab.browse => 2,
+      LocalDefaultTab.history => 3,
+      LocalDefaultTab.more => 4,
+    };
+    if (tab != _tab && tab >= 0 && tab < _sections.length) _select(tab);
+  }
+
+  void _loadReads(LocalCollectionServices services) {
+    final reads = services.catalog.remoteHistory();
+    _remoteReads = reads;
+    unawaited(
+      reads.then((list) {
+        if (!mounted) return;
+        final latest = <String, DateTime>{};
+        // Newest first, so the first row per series is its last read.
+        for (final read in list) {
+          latest.putIfAbsent(read.seriesId, () => read.lastReadAt);
+        }
+        setState(() => _lastOnlineRead = latest);
+      }, onError: (Object _) {}),
+    );
+  }
 
   int get _initialTab {
     if (widget.initialSection == 'downloads') return 4;
@@ -93,6 +156,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   @override
   void dispose() {
     _bound?.downloads.completed.removeListener(_refresh);
+    _bound?.downloads.removeListener(_onQueue);
     _query.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -101,10 +165,52 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   void _bind(LocalCollectionServices services) {
     if (identical(_bound, services)) return;
     _bound?.downloads.completed.removeListener(_refresh);
+    _bound?.downloads.removeListener(_onQueue);
     _bound = services;
+    services.downloads.addListener(_onQueue);
+    // Lists read kept covers from memory; repaint once they are known.
+    unawaited(
+      services.catalog.loadKeptCovers().then((_) {
+        if (mounted) setState(() {});
+      }),
+    );
     _library = services.catalog.list();
-    _remoteReads = services.catalog.remoteHistory();
+    _loadReads(services);
     services.downloads.completed.addListener(_refresh);
+    unawaited(_warmUpRuntime(services));
+    // Scheduled backups run when Kuchie opens, as iOS gives no timer.
+    unawaited(
+      LocalBackups.instance
+          .runIfDue(services.catalog)
+          .catchError((Object _) {}),
+    );
+  }
+
+  /// Boots the extension runtime after launch and loads the extensions behind
+  /// the latest History entries, as the server app keeps its server running.
+  Future<void> _warmUpRuntime(LocalCollectionServices services) async {
+    // Let the first screen settle before the interpreter competes for CPU.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    try {
+      await services.sources.warmUpRuntime();
+      final reads = await services.catalog.remoteHistory();
+      await services.sources.preloadRuntimeSources([
+        for (final read in reads.take(20)) ?read.source?.sourceId,
+      ]);
+    } on Exception {
+      // Opening a source reports runtime problems.
+    }
+  }
+
+  /// The Downloads toolbar shows Clear only while the queue has chapters.
+  bool _queueHadItems = false;
+
+  void _onQueue() {
+    final has = _bound?.downloads.value.isNotEmpty ?? false;
+    if (has != _queueHadItems && mounted) {
+      setState(() => _queueHadItems = has);
+    }
   }
 
   void _refresh() {
@@ -112,8 +218,30 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     if (services != null && mounted) {
       setState(() {
         _library = services.catalog.list();
-        _remoteReads = services.catalog.remoteHistory();
+        _loadReads(services);
       });
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    final services = _bound;
+    if (services == null) return;
+    if (!await localConfirm(
+      context,
+      localText(context, 'Clear history?', 'Hapus riwayat?'),
+      localText(
+        context,
+        'Removes every entry from History. Saved chapters and reading progress stay.',
+        'Menghapus semua entri dari Riwayat. Chapter tersimpan dan progres baca tetap ada.',
+      ),
+    )) {
+      return;
+    }
+    try {
+      await services.catalog.clearHistory();
+      _refresh();
+    } catch (error) {
+      if (mounted) localFailure(context, error);
     }
   }
 
@@ -147,9 +275,10 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     final services = _bound;
     if (index == 3 && services != null) {
       _library = services.catalog.list();
-      _remoteReads = services.catalog.remoteHistory();
+      _loadReads(services);
     }
     _tab = index;
+    unawaited(LocalPreferences.instance.setLastTab(index));
     _downloads = false;
     _showExtensions = false;
     _searching = false;
@@ -202,8 +331,28 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     final updates = _tab == 1 && !_downloads;
     final l10n = context.l10n;
     final title = _downloads ? l10n.downloads : tabs[_tab].label(context);
+    final queue = _bound?.downloads;
     return Scaffold(
       extendBody: supportsAppleGlass(context) && !_downloads,
+      // Pause or resume the queue, as Server's Downloads does.
+      floatingActionButton: _downloads && !_showSavedDownloads && queue != null
+          ? ValueListenableBuilder(
+              valueListenable: queue,
+              builder: (context, jobs, _) => jobs.isEmpty
+                  ? const SizedBox.shrink()
+                  : FloatingActionButton.extended(
+                      onPressed: () => _runQueue(
+                        queue.running ? queue.pauseAll : queue.resumeAll,
+                      ),
+                      icon: Icon(
+                        queue.running
+                            ? FluentIcons.pause_24_regular
+                            : FluentIcons.play_24_regular,
+                      ),
+                      label: Text(queue.running ? l10n.pause : l10n.resume),
+                    ),
+            )
+          : null,
       appBar: browse
           ? null
           : AppBar(
@@ -231,31 +380,83 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
                   : null,
               actions: [
                 if (library || history) _searchButton(),
+                if (_downloads &&
+                    !_showSavedDownloads &&
+                    (queue?.value.isNotEmpty ?? false))
+                  AppleGlassToolbarButton(
+                    id: 'clear-downloads',
+                    symbol: 'trash',
+                    label: l10n.confirmClearQueueTitle,
+                    fallbackIcon: FluentIcons.delete_24_regular,
+                    onPressed: () async {
+                      if (await localConfirm(
+                            context,
+                            l10n.confirmClearQueueTitle,
+                            l10n.confirmClearQueueMessage,
+                          ) &&
+                          queue != null) {
+                        await _runQueue(queue.clear);
+                      }
+                    },
+                  ),
+                if (_downloads)
+                  AppleGlassToolbarButton(
+                    id: 'download-settings',
+                    symbol: 'gearshape',
+                    label: l10n.settings,
+                    fallbackIcon: FluentIcons.settings_24_regular,
+                    onPressed: () => openLocalDownloadSettings(context),
+                  ),
+                if (history)
+                  AppleGlassToolbarButton(
+                    id: 'history-incognito',
+                    symbol: ref.watch(incognitoModeProvider)
+                        ? 'eyeglasses.slash'
+                        : 'eyeglasses',
+                    label: context.l10n.incognitoMode,
+                    fallbackIcon: FluentIcons.incognito_24_regular,
+                    color: ref.watch(incognitoModeProvider)
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    onPressed: () {
+                      final on = !ref.read(incognitoModeProvider);
+                      ref.read(incognitoModeProvider.notifier).set(on);
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              on
+                                  ? localText(
+                                      context,
+                                      'Incognito mode on: reading is not saved to History',
+                                      'Mode penyamaran aktif: bacaan tidak disimpan ke Riwayat',
+                                    )
+                                  : localText(
+                                      context,
+                                      'Incognito mode off',
+                                      'Mode penyamaran nonaktif',
+                                    ),
+                            ),
+                          ),
+                        );
+                    },
+                  ),
+                if (history)
+                  AppleGlassToolbarButton(
+                    id: 'clear-history',
+                    symbol: 'trash',
+                    label: localText(context, 'Clear history', 'Hapus riwayat'),
+                    fallbackIcon: FluentIcons.delete_24_regular,
+                    onPressed: _clearHistory,
+                  ),
                 if (library)
                   AppleGlassToolbarButton(
                     id: 'organize-library',
                     symbol: 'line.3.horizontal.decrease',
                     label: l10n.filter,
                     fallbackIcon: FluentIcons.filter_24_regular,
-                    onPressed: null,
-                    menu: [
-                      AppleGlassToolbarMenuItem(
-                        id: 'sort-ascending',
-                        title: localText(context, 'Title A–Z', 'Judul A–Z'),
-                        symbol: 'arrow.up',
-                        fallbackIcon: Icons.arrow_upward,
-                        selected: !_reverseSort,
-                        onSelected: () => setState(() => _reverseSort = false),
-                      ),
-                      AppleGlassToolbarMenuItem(
-                        id: 'sort-descending',
-                        title: localText(context, 'Title Z–A', 'Judul Z–A'),
-                        symbol: 'arrow.down',
-                        fallbackIcon: Icons.arrow_downward,
-                        selected: _reverseSort,
-                        onSelected: () => setState(() => _reverseSort = true),
-                      ),
-                    ],
+                    onPressed: () => showLocalLibraryOptions(context),
                   ),
                 if (library)
                   AppleGlassToolbarButton(
@@ -287,6 +488,17 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
                           symbol: 'plus',
                           fallbackIcon: Icons.add,
                           onSelected: () => _addCategory(services.catalog),
+                        ),
+                        AppleGlassToolbarMenuItem(
+                          id: 'local-random-entry',
+                          title: localText(
+                            context,
+                            'Open random entry',
+                            'Buka judul acak',
+                          ),
+                          symbol: 'shuffle',
+                          fallbackIcon: Icons.shuffle,
+                          onSelected: () => _openRandom(services),
                         ),
                       ],
                     ],
@@ -331,7 +543,8 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
               services: services,
               initialTab: _showExtensions ? 1 : 0,
               onImportManga: () => _import(services.catalog),
-              onRestoreBackup: () => _restoreBackup(services.catalog),
+              onRestoreBackup: () =>
+                  openLocalBackups(context, services, onRestored: _refresh),
             );
           }
           if (_tab == 4) return _more(services);
@@ -361,25 +574,44 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       ),
       bottomNavigationBar: _downloads
           ? null
-          : supportsAppleGlass(context)
-          ? AppleLiquidGlassTabBar(
-              tabs: tabs,
-              selectedIndex: _tab,
-              downloadsPaused: false,
-              extensionUpdates: 0,
-              onDestinationSelected: _select,
-            )
-          : NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: _select,
-              destinations: [
-                for (final tab in tabs)
-                  NavigationDestination(
-                    icon: Icon(tab.icon),
-                    selectedIcon: Icon(tab.activeIcon),
-                    label: tab.label(context),
-                  ),
-              ],
+          : Consumer(
+              builder: (context, ref, _) {
+                // Order, visibility and labels from Customize tabs.
+                final navTabs = ref.watch(navTabsProvider);
+                final shown = navTabs.visibleLocal;
+                final barTabs = [
+                  for (final tab in shown)
+                    navTabData(tab, labels: navTabs.labels),
+                ];
+                final selected = shown.indexWhere(
+                  (tab) => tab.localSection == _tab,
+                );
+                final index = selected < 0 ? shown.length - 1 : selected;
+                void onSelect(int i) => _select(shown[i].localSection!);
+                return supportsAppleGlass(context)
+                    ? AppleLiquidGlassTabBar(
+                        tabs: barTabs,
+                        selectedIndex: index,
+                        downloadsPaused: false,
+                        extensionUpdates: 0,
+                        onDestinationSelected: onSelect,
+                      )
+                    : NavigationBar(
+                        selectedIndex: index,
+                        onDestinationSelected: onSelect,
+                        labelBehavior: navTabs.labels
+                            ? null
+                            : NavigationDestinationLabelBehavior.alwaysHide,
+                        destinations: [
+                          for (final tab in barTabs)
+                            NavigationDestination(
+                              icon: Icon(tab.icon),
+                              selectedIcon: Icon(tab.activeIcon),
+                              label: tab.label(context),
+                            ),
+                        ],
+                      );
+              },
             ),
     );
   }
@@ -405,18 +637,12 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   ) {
     final query = _query.text.trim().toLowerCase();
     final library = books.where((book) => book.inLibrary).toList();
-    final matching =
-        library
-            .where((book) => book.title.toLowerCase().contains(query))
-            .toList()
-          ..sort((a, b) {
-            final result = a.title.toLowerCase().compareTo(
-              b.title.toLowerCase(),
-            );
-            return _reverseSort ? -result : result;
-          });
+    final matching = library
+        .where((book) => book.title.toLowerCase().contains(query))
+        .toList();
     return _LocalBooks(
       books: matching,
+      lastOnlineRead: _lastOnlineRead,
       categoryRevision: _categoryRevision,
       services: services,
       empty: library.isNotEmpty
@@ -488,7 +714,36 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     }
   }
 
+  Future<void> _runQueue(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openRandom(LocalCollectionServices services) async {
+    final books = [
+      for (final book in await (_library ?? Future.value(<LocalSeries>[])))
+        if (book.inLibrary) book,
+    ];
+    if (books.isEmpty || !mounted) return;
+    await _openManga(services, books[math.Random().nextInt(books.length)]);
+  }
+
   Future<void> _openMangaDetail(
+    LocalCollectionServices services,
+    LocalSeries book,
+  ) async {
+    final page = await _pushMangaDetail(services, book);
+    if (page != null) await page.closed;
+    _refresh();
+  }
+
+  /// Pushes the manga page for [book] and returns at once, with a future
+  /// that completes when the page closes; null when it cannot open.
+  Future<({Future<void> closed})?> _pushMangaDetail(
     LocalCollectionServices services,
     LocalSeries book,
   ) async {
@@ -504,32 +759,74 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         // Downloaded pages remain available when the extension is disabled.
       }
     }
-    if (!mounted) return;
+    if (!mounted) return null;
     if (selection case final current?) {
-      await openLocalSourceManga(
-        context,
-        services,
-        current.extension,
-        current.manga,
-      );
-    } else if (reference == null || book.chapters.isNotEmpty) {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => _SeriesDetail(services: services, series: book),
+      return (
+        closed: openLocalSourceManga(
+          context,
+          services,
+          current.extension,
+          current.manga,
         ),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            localText(
-              context,
-              'Install or enable this extension in Browse to view the manga.',
-              'Pasang atau aktifkan ekstensi ini di Jelajahi untuk membuka manga.',
-            ),
+    }
+    if (reference == null || book.chapters.isNotEmpty) {
+      return (
+        closed: Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => _SeriesDetail(services: services, series: book),
           ),
         ),
       );
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          localText(
+            context,
+            'Install or enable this extension in Browse to view the manga.',
+            'Pasang atau aktifkan ekstensi ini di Jelajahi untuk membuka manga.',
+          ),
+        ),
+      ),
+    );
+    return null;
+  }
+
+  /// Continues [entry] in the reader, above its manga page, so Back from the
+  /// reader lands on the manga rather than History.
+  Future<void> _resumeHistory(
+    LocalCollectionServices services,
+    ({LocalSeries book, LocalChapter chapter, bool saved}) entry,
+  ) async {
+    if (_openingManga) return;
+    _openingManga = true;
+    try {
+      final page = await _pushMangaDetail(services, entry.book);
+      if (page != null) unawaited(page.closed.whenComplete(_refresh));
+      if (!mounted) return;
+      if (entry.saved) {
+        await _openReader(context, services, entry.book, entry.chapter);
+      } else {
+        // Reopening asks the source for its chapter list first, which can
+        // take a while when the runtime is still starting.
+        final opening = _showOpening(context);
+        try {
+          await openRemoteLocalChapter(
+            context,
+            services,
+            series: entry.book,
+            chapterId: entry.chapter.id,
+            onReady: opening.remove,
+          );
+        } finally {
+          if (opening.mounted) opening.remove();
+        }
+      }
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    } finally {
+      _openingManga = false;
     }
     _refresh();
   }
@@ -551,10 +848,13 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   ) {
     final read = mergeLocalHistory(books, remoteReads);
     final query = _query.text.trim().toLowerCase();
+    // One row per series, its latest chapter, as in Mihon.
+    final seen = <String>{};
     final visible = [
       for (final item in read)
-        if (item.book.title.toLowerCase().contains(query) ||
-            item.chapter.title.toLowerCase().contains(query))
+        if ((item.book.title.toLowerCase().contains(query) ||
+                item.chapter.title.toLowerCase().contains(query)) &&
+            seen.add(item.book.id))
           item,
     ];
     if (visible.isEmpty) {
@@ -568,7 +868,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+      padding: EdgeInsets.fromLTRB(12, 8, 12, scrollBottomInset(context)),
       itemCount: visible.length,
       // State.context, so the post-await failure check matches `mounted`.
       itemBuilder: (_, index) {
@@ -576,31 +876,32 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         return _LocalHistoryRow(
           book: entry.book,
           chapter: entry.chapter,
-          onOpen: () async {
+          keptCover: services.catalog.keptCover(entry.book.id),
+          onOpen: () => _resumeHistory(services, entry),
+          onOpenManga: () => _openManga(services, entry.book),
+          readingTime: LocalReadingStats.instance.timeFor(entry.book.id),
+          onRemove: () async {
+            if (!await localConfirm(
+              context,
+              localText(context, 'Remove from history?', 'Hapus dari riwayat?'),
+              entry.book.title,
+            )) {
+              return;
+            }
             try {
-              if (entry.saved) {
-                await _openReader(context, services, entry.book, entry.chapter);
-              } else {
-                await openRemoteLocalChapter(
-                  context,
-                  services,
-                  series: entry.book,
-                  chapterId: entry.chapter.id,
-                );
-              }
+              await services.catalog.removeFromHistory(entry.book.id);
+              _refresh();
             } catch (error) {
               if (mounted) localFailure(context, error);
             }
-            _refresh();
           },
-          onOpenManga: () => _openManga(services, entry.book),
         );
       },
     );
   }
 
   Widget _more(LocalCollectionServices services) => ListView(
-    padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
+    padding: EdgeInsets.fromLTRB(0, 8, 0, scrollBottomInset(context)),
     children: [
       SettingsGroupRow(
         icon: Icons.swap_horiz_rounded,
@@ -610,36 +911,89 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         onTap: _chooseMode,
       ),
       const Divider(height: 16),
-      _moreRow(
-        FluentIcons.tag_24_regular,
-        localText(context, 'Categories', 'Kategori'),
-        () => _addCategory(services.catalog),
+      Consumer(
+        builder: (context, ref, _) {
+          final incognito = ref.watch(incognitoModeProvider);
+          return SettingsGroupRow(
+            icon: FluentIcons.incognito_24_regular,
+            title: context.l10n.incognitoMode,
+            subtitle: context.l10n.incognitoModeDescription,
+            trailing: CompactSwitch(
+              value: incognito,
+              onChanged: (value) =>
+                  ref.read(incognitoModeProvider.notifier).set(value),
+            ),
+            onTap: () =>
+                ref.read(incognitoModeProvider.notifier).set(!incognito),
+          );
+        },
       ),
+      // The same flat list as Tachimanga's More tab.
       _moreRow(
-        FluentIcons.arrow_download_24_regular,
-        context.l10n.downloads,
-        () => setState(() => _downloads = true),
+        FluentIcons.options_24_regular,
+        context.l10n.general,
+        () => openLocalGeneralSettings(context, services),
       ),
-      _moreRow(
-        FluentIcons.history_24_regular,
-        context.l10n.history,
-        () => _select(3),
-      ),
-      _moreRow(
-        FluentIcons.arrow_counterclockwise_24_regular,
-        context.l10n.backup,
-        () => _backup(services.catalog),
-      ),
-      const SizedBox(height: 16),
       _moreRow(
         FluentIcons.color_24_regular,
         context.l10n.appearance,
         () => context.push<void>(localAppearanceLocation),
       ),
       _moreRow(
+        FluentIcons.library_24_regular,
+        context.l10n.library,
+        () => openLocalLibrarySettings(
+          context,
+          onEditCategories: () => _addCategory(services.catalog),
+        ),
+      ),
+      _moreRow(
         FluentIcons.book_open_24_regular,
         context.l10n.reader,
         () => context.push<void>(localReaderSettingsLocation),
+      ),
+      _moreRow(
+        FluentIcons.puzzle_piece_24_regular,
+        context.l10n.extensions,
+        () => openLocalBrowseSettings(context, services),
+      ),
+      _moreRow(
+        FluentIcons.arrow_counterclockwise_24_regular,
+        localText(context, 'Backup & Restore', 'Backup & Pulihkan'),
+        () => openLocalBackups(context, services, onRestored: _refresh),
+      ),
+      _moreRow(
+        FluentIcons.shield_lock_24_regular,
+        context.l10n.securityAndPrivacy,
+        () => openSecuritySettings(context),
+      ),
+      _moreRow(
+        FluentIcons.data_trending_24_regular,
+        context.l10n.readingInsights,
+        () => openLocalReadingInsights(context, services),
+      ),
+      _moreRow(
+        FluentIcons.arrow_download_24_regular,
+        context.l10n.downloads,
+        () => setState(() => _downloads = true),
+      ),
+      const SizedBox(height: 16),
+      _moreRow(
+        FluentIcons.share_ios_24_regular,
+        localText(context, 'Share', 'Bagikan'),
+        () => SharePlus.instance.share(
+          ShareParams(uri: Uri.parse(KuchieLinks.project), title: 'Kuchie'),
+        ),
+      ),
+      _moreRow(
+        FluentIcons.question_circle_24_regular,
+        context.l10n.help,
+        () => openInAppWebView(context, '${KuchieLinks.project}#readme'),
+      ),
+      _moreRow(
+        FluentIcons.info_24_regular,
+        context.l10n.about,
+        () => openLocalAbout(context),
       ),
     ],
   );
@@ -679,142 +1033,216 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     );
   }
 
-  Future<void> _backup(LocalCatalog catalog) async {
-    final exporting = await showAppBottomSheet<bool>(
-      context: context,
-      isScrollControlled: false,
-      builder: (sheet) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AppSheetHeader(
-            title: localText(sheet, 'Local backup', 'Cadangan lokal'),
-          ),
-          ListTile(
-            title: Text(
-              localText(
-                sheet,
-                'Includes saved titles, categories, bookmarks, and reading progress. Keep chapter files separately.',
-                'Cadangan berisi judul tersimpan, kategori, penanda, dan progres baca. Simpan file chapter secara terpisah.',
+  Widget _downloadsPage(
+    LocalCollectionServices services,
+  ) => ValueListenableBuilder(
+    valueListenable: services.downloads,
+    builder: (context, jobs, _) => FutureBuilder<List<LocalSeries>>(
+      future: _library,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: _refresh,
+              child: Text(context.l10n.retry),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final library = snapshot.requireData;
+        final byId = {for (final book in library) book.id: book};
+        // On device lists one row per title, as Tachimanga does.
+        final saved = _showSavedDownloads
+            ? [
+                for (final book in library)
+                  if (book.chapters.isNotEmpty) book,
+              ]
+            : null;
+        final total = saved?.length ?? jobs.length;
+        if (total == 0) {
+          return _LocalEmpty(
+            icon: Icons.download_for_offline_outlined,
+            title: context.l10n.noDownloads,
+          );
+        }
+        return ListView.builder(
+          padding: EdgeInsets.fromLTRB(12, 8, 12, scrollBottomInset(context)),
+          itemCount: total,
+          itemBuilder: (context, index) {
+            if (saved == null) {
+              final job = jobs[index];
+              return _QueueRow(
+                services: services,
+                queue: services.downloads,
+                job: job,
+                book: byId[job.request.seriesId],
+              );
+            }
+            final book = saved[index];
+            final unread = book.chapters
+                .where((chapter) => chapter.lastReadAt == null)
+                .length;
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: _LocalCover(
+                services: services,
+                seriesId: book.id,
+                book: book,
               ),
-            ),
+              title: Text(
+                book.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                [
+                  localText(
+                    context,
+                    '${book.chapters.length} '
+                        '${book.chapters.length == 1 ? 'chapter' : 'chapters'}',
+                    '${book.chapters.length} chapter',
+                  ),
+                  if (unread > 0)
+                    localText(
+                      context,
+                      '$unread unread',
+                      '$unread belum dibaca',
+                    ),
+                ].join(' · '),
+              ),
+              trailing: const Icon(FluentIcons.chevron_right_24_regular),
+              onTap: () async {
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        _SeriesDetail(services: services, series: book),
+                  ),
+                );
+                _refresh();
+              },
+              onLongPress: () => _deleteDownloads(services, book),
+            );
+          },
+        );
+      },
+    ),
+  );
+
+  /// Deletes every saved chapter of [book] from this iPhone.
+  Future<void> _deleteDownloads(
+    LocalCollectionServices services,
+    LocalSeries book,
+  ) async {
+    unawaited(HapticFeedback.mediumImpact());
+    if (!await localConfirm(
+          context,
+          localText(context, 'Delete all downloads?', 'Hapus semua unduhan?'),
+          localText(
+            context,
+            '${book.chapters.length} chapters of ${book.title} will be '
+                'removed from this iPhone.',
+            '${book.chapters.length} chapter ${book.title} akan dihapus dari '
+                'iPhone ini.',
           ),
-          ListTile(
-            leading: const Icon(Icons.upload_file),
-            title: Text(localText(sheet, 'Export backup', 'Ekspor cadangan')),
-            onTap: () => Navigator.pop(sheet, true),
-          ),
-          ListTile(
-            leading: const Icon(Icons.file_open_outlined),
-            title: Text(
-              localText(sheet, 'Restore backup', 'Pulihkan cadangan'),
-            ),
-            onTap: () => Navigator.pop(sheet, false),
-          ),
-        ],
-      ),
-    );
-    if (exporting == null || !mounted) return;
-    if (!exporting) {
-      await _restoreBackup(catalog);
+        ) ||
+        !mounted) {
       return;
     }
     try {
-      final directory = await Directory.systemTemp.createTemp('kuchie-backup-');
-      try {
-        final file = File('${directory.path}/kuchie-local.json');
-        await catalog.exportMetadata(file);
-        final bytes = await file.readAsBytes();
-        if (mounted) {
-          await FilePicker.saveFile(
-            fileName: 'kuchie-local.json',
-            bytes: bytes,
-            mimeType: 'application/json',
-          );
-        }
-      } finally {
-        await directory.delete(recursive: true);
+      for (final chapter in book.chapters) {
+        await services.catalog.removeChapter(book.id, chapter.id);
       }
     } catch (error) {
       if (mounted) localFailure(context, error);
     }
+    _refresh();
   }
+}
 
-  Future<void> _restoreBackup(LocalCatalog catalog) async {
-    try {
-      final file = await FilePicker.pickFile();
-      if (file?.path case final path? when mounted) {
-        final result = await catalog.restoreMetadata(File(path));
-        if (!mounted) return;
-        _refresh();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              localText(
-                context,
-                '${result.restored} restored, ${result.skipped} chapters skipped',
-                '${result.restored} dipulihkan, ${result.skipped} chapter dilewati',
-              ),
+/// A title's cover: the reader's own, the saved source cover, the first
+/// saved page, then the source's link.
+class _LocalCover extends StatelessWidget {
+  const _LocalCover({
+    required this.services,
+    required this.seriesId,
+    this.book,
+    this.remote,
+  });
+
+  final LocalCollectionServices services;
+  final String seriesId;
+  final LocalSeries? book;
+  final Uri? remote;
+
+  static const _width = 44.0;
+  static const _height = 62.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final file =
+        book?.customCover ??
+        services.catalog.keptCover(seriesId) ??
+        book?.chapters.firstOrNull?.pages.firstOrNull;
+    final link = remote ?? book?.source?.cover;
+    final cacheWidth = (_width * MediaQuery.devicePixelRatioOf(context))
+        .round();
+    final placeholder = ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Icon(Icons.book_outlined),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: _width,
+        height: _height,
+        child: file != null
+            ? Image.file(
+                file,
+                fit: BoxFit.cover,
+                cacheWidth: cacheWidth,
+                errorBuilder: (_, _, _) => placeholder,
+              )
+            : link != null
+            ? Image.network(
+                link.toString(),
+                fit: BoxFit.cover,
+                cacheWidth: cacheWidth,
+                errorBuilder: (_, _, _) => placeholder,
+              )
+            : placeholder,
+      ),
+    );
+  }
+}
+
+/// A centered spinner over the page that blocks taps until removed.
+OverlayEntry _showOpening(BuildContext context) {
+  final entry = OverlayEntry(
+    builder: (context) => ColoredBox(
+      color: Theme.of(context).colorScheme.scrim.withValues(alpha: .26),
+      child: Center(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  localText(context, 'Opening chapter…', 'Membuka chapter…'),
+                ),
+              ],
             ),
           ),
-        );
-      }
-    } catch (error) {
-      if (mounted) localFailure(context, error);
-    }
-  }
-
-  Widget _downloadsPage(LocalCollectionServices services) =>
-      ValueListenableBuilder(
-        valueListenable: services.downloads,
-        builder: (context, jobs, _) => FutureBuilder<List<LocalSeries>>(
-          future: _library,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(
-                child: TextButton(
-                  onPressed: _refresh,
-                  child: Text(context.l10n.retry),
-                ),
-              );
-            }
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final chapters = _showSavedDownloads
-                ? [
-                    for (final book in snapshot.requireData)
-                      for (final chapter in book.chapters) (book, chapter),
-                  ]
-                : null;
-            final total = chapters?.length ?? jobs.length;
-            if (total == 0) {
-              return _LocalEmpty(
-                icon: Icons.download_for_offline_outlined,
-                title: context.l10n.noDownloads,
-              );
-            }
-            return ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
-              itemCount: total,
-              itemBuilder: (context, index) {
-                if (chapters == null) {
-                  return _QueueRow(queue: services.downloads, job: jobs[index]);
-                }
-                final (book, chapter) = chapters[index];
-                return ListTile(
-                  leading: const Icon(Icons.download_done_outlined),
-                  title: Text(book.title),
-                  subtitle: Text(chapter.title),
-                  onTap: () async {
-                    await _openReader(context, services, book, chapter);
-                    _refresh();
-                  },
-                );
-              },
-            );
-          },
         ),
-      );
+      ),
+    ),
+  );
+  Overlay.of(context, rootOverlay: true).insert(entry);
+  return entry;
 }
 
 Future<bool> _importManga(
@@ -905,9 +1333,11 @@ class _LocalBooks extends StatefulWidget {
     required this.categoryRevision,
     required this.empty,
     required this.onOpen,
+    this.lastOnlineRead = const {},
   });
 
   final List<LocalSeries> books;
+  final Map<String, DateTime> lastOnlineRead;
   final LocalCollectionServices services;
   final int categoryRevision;
   final Widget empty;
@@ -922,6 +1352,12 @@ class _LocalBooksState extends State<_LocalBooks> {
   late Future<List<String>> _categories = widget.services.catalog.categories();
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(LocalPreferences.instance.load());
+  }
+
+  @override
   void didUpdateWidget(covariant _LocalBooks oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.categoryRevision != oldWidget.categoryRevision ||
@@ -931,16 +1367,86 @@ class _LocalBooksState extends State<_LocalBooks> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<String>>(
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: LocalPreferences.instance.library,
+    builder: (context, _) => _build(context),
+  );
+
+  int _unread(LocalSeries book) =>
+      book.chapters.where((chapter) => chapter.lastReadAt == null).length;
+
+  /// Custom cover, then the kept source cover, the source link, and the first
+  /// saved page offline or when a source has none.
+  ImageProvider? _cover(LocalSeries book) {
+    if (book.customCover case final custom?) return FileImage(custom);
+    if (widget.services.catalog.keptCover(book.id) case final kept?) {
+      return FileImage(kept);
+    }
+    if (book.source?.cover case final remote?) {
+      return NetworkImage(remote.toString());
+    }
+    final firstPage = book.chapters.firstOrNull?.pages.firstOrNull;
+    return firstPage == null ? null : FileImage(firstPage);
+  }
+
+  /// The library after the Filter and Sort choices.
+  List<LocalSeries> _arranged() {
+    final preferences = LocalPreferences.instance;
+    // Worked out once per title, not on every comparison while sorting.
+    final unreadCounts = <String, int>{};
+    final lastReads = <String, DateTime?>{};
+    int unread(LocalSeries book) => unreadCounts[book.id] ??= _unread(book);
+    DateTime? lastRead(LocalSeries book) {
+      if (lastReads.containsKey(book.id)) return lastReads[book.id];
+      DateTime? latest = widget.lastOnlineRead[book.id];
+      for (final chapter in book.chapters) {
+        final at = chapter.lastReadAt;
+        if (at != null && (latest == null || at.isAfter(latest))) latest = at;
+      }
+      return lastReads[book.id] = latest;
+    }
+
+    final books = [
+      for (final book in widget.books)
+        if ((!preferences.filterUnread.value || unread(book) > 0) &&
+            (!preferences.filterDownloaded.value || book.chapters.isNotEmpty))
+          book,
+    ];
+    int byTitle(LocalSeries a, LocalSeries b) =>
+        a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+    final compare = switch (preferences.sort.value) {
+      LocalLibrarySort.alphabetical => byTitle,
+      // Most recent, most unread and longest first, like Tachimanga.
+      LocalLibrarySort.lastRead =>
+        (LocalSeries a, LocalSeries b) =>
+            (lastRead(b) ?? epoch).compareTo(lastRead(a) ?? epoch),
+      LocalLibrarySort.unread => (LocalSeries a, LocalSeries b) => unread(
+        b,
+      ).compareTo(unread(a)),
+      LocalLibrarySort.totalChapters =>
+        (LocalSeries a, LocalSeries b) =>
+            b.chapters.length.compareTo(a.chapters.length),
+    };
+    books.sort((a, b) {
+      final result = compare(a, b);
+      return result != 0 ? result : byTitle(a, b);
+    });
+    return preferences.sortDescending.value ? books.reversed.toList() : books;
+  }
+
+  Widget _build(BuildContext context) => FutureBuilder<List<String>>(
     future: _categories,
     builder: (context, snapshot) {
       final categories = snapshot.data ?? const <String>[];
+      final preferences = LocalPreferences.instance;
       final visible = [
-        for (final book in widget.books)
+        for (final book in _arranged())
           if (_category == null || book.categories.contains(_category)) book,
       ];
       final glass = supportsAppleGlass(context);
-      final dockInset = glass ? 96.0 : 8.0;
+      // Clears the floating tab bar and the home indicator on every phone.
+      final dockInset = scrollBottomInset(context, extra: 8);
       final content = Builder(
         builder: (context) => CustomScrollView(
           slivers: [
@@ -963,16 +1469,77 @@ class _LocalBooksState extends State<_LocalBooks> {
                         ),
                       ),
               )
+            else if (preferences.display.value == LocalLibraryDisplay.list)
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(8, 4, 8, dockInset),
+                sliver: SliverList.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, index) {
+                    final book = visible[index];
+                    final unread = _unread(book);
+                    return ListTile(
+                      key: ValueKey(book.id),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 44,
+                          height: 62,
+                          child: switch (_cover(book)) {
+                            // Decoded at row size, not the source's full size.
+                            final image? => Image(
+                              image: ResizeImage.resizeIfNeeded(
+                                (44 * MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
+                                null,
+                                image,
+                              ),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.book_outlined),
+                            ),
+                            null => const Icon(Icons.book_outlined),
+                          },
+                        ),
+                      ),
+                      title: Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [
+                          ?book.source?.sourceName,
+                          if (book.chapters.isNotEmpty)
+                            localText(
+                              context,
+                              '${book.chapters.length} saved',
+                              '${book.chapters.length} tersimpan',
+                            ),
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: preferences.unreadBadges.value && unread > 0
+                          ? _CountPill(
+                              count: unread,
+                              color: Theme.of(context).colorScheme.primary,
+                              onColor: Theme.of(context).colorScheme.onPrimary,
+                            )
+                          : null,
+                      onTap: () => widget.onOpen(book),
+                    );
+                  },
+                ),
+              )
             else
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(8, 4, 8, dockInset),
                 sliver: SliverGrid.builder(
                   gridDelegate:
-                      MediaQuery.orientationOf(context) ==
-                              Orientation.portrait &&
-                          glass
-                      ? const MangaCoverFixedCountGridDelegate(
-                          crossAxisCount: 2,
+                      MediaQuery.orientationOf(context) == Orientation.portrait
+                      ? MangaCoverFixedCountGridDelegate(
+                          crossAxisCount: preferences.gridColumns.value,
                           crossAxisSpacing: 4,
                           mainAxisSpacing: 4,
                         )
@@ -982,34 +1549,45 @@ class _LocalBooksState extends State<_LocalBooks> {
                     final book = visible[index];
                     final firstPage =
                         book.chapters.firstOrNull?.pages.firstOrNull;
-                    final remoteCover = book.source?.cover;
-                    // The tile decodes at its own size; nesting ResizeImage fails.
                     final pageImage = firstPage == null
                         ? null
                         : FileImage(firstPage);
-                    final remoteImage = remoteCover == null
-                        ? null
-                        : NetworkImage(remoteCover.toString());
-                    final unreadCount = book.chapters
-                        .where((chapter) => chapter.lastReadAt == null)
-                        .length;
-                    return MangaCoverGridTile(
+                    final saved = book.chapters.length;
+                    return Stack(
                       key: ValueKey(book.id),
-                      titleOverride: book.title,
-                      // Custom cover, then the source cover; the first saved
-                      // page stands in offline or when a source has none.
-                      coverImage: switch (book.customCover) {
-                        final custom? => FileImage(custom),
-                        null => remoteImage ?? pageImage,
-                      },
-                      fallbackCoverImage: pageImage,
-                      badgeCountOverride: unreadCount,
-                      showDarkOverlay: false,
-                      outlineOnCovers: true,
-                      borderRadius: glass
-                          ? const BorderRadius.all(Radius.circular(18))
-                          : null,
-                      onPressed: () => widget.onOpen(book),
+                      fit: StackFit.expand,
+                      children: [
+                        MangaCoverGridTile(
+                          titleOverride: book.title,
+                          coverImage: _cover(book),
+                          fallbackCoverImage: pageImage,
+                          badgeCountOverride: preferences.unreadBadges.value
+                              ? _unread(book)
+                              : 0,
+                          showDarkOverlay: false,
+                          outlineOnCovers: true,
+                          borderRadius: glass
+                              ? const BorderRadius.all(Radius.circular(18))
+                              : null,
+                          onPressed: () => widget.onOpen(book),
+                        ),
+                        // Saved chapters, beside the unread count as in
+                        // Tachimanga.
+                        if (preferences.downloadedBadges.value && saved > 0)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: IgnorePointer(
+                              child: _CountPill(
+                                count: saved,
+                                color: Theme.of(context).colorScheme.tertiary,
+                                onColor: Theme.of(
+                                  context,
+                                ).colorScheme.onTertiary,
+                              ),
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),
@@ -1018,10 +1596,15 @@ class _LocalBooksState extends State<_LocalBooks> {
         ),
       );
       if (categories.isEmpty) return content;
+      String label(String name, int count) =>
+          preferences.categoryCounts.value ? '$name ($count)' : name;
       final labels = [
-        '${context.l10n.all} (${widget.books.length})',
+        label(context.l10n.all, widget.books.length),
         for (final name in categories)
-          '$name (${widget.books.where((book) => book.categories.contains(name)).length})',
+          label(
+            name,
+            widget.books.where((book) => book.categories.contains(name)).length,
+          ),
       ];
       final track = AppleGlassSegments(
         labels: labels,
@@ -1068,118 +1651,108 @@ class _LocalHistoryRow extends StatelessWidget {
   const _LocalHistoryRow({
     required this.book,
     required this.chapter,
+    required this.keptCover,
     required this.onOpen,
     required this.onOpenManga,
+    required this.onRemove,
+    this.readingTime = Duration.zero,
   });
 
+  final VoidCallback onRemove;
+
+  /// Time spent reading this series.
+  final Duration readingTime;
   final LocalSeries book;
   final LocalChapter chapter;
+
+  /// The source cover saved on this iPhone, when there is one.
+  final File? keptCover;
   final VoidCallback onOpen;
   final VoidCallback onOpenManga;
+
+  Future<void> _actions(BuildContext context) async {
+    unawaited(HapticFeedback.selectionClick());
+    final choice = await showAppBottomSheet<String>(
+      context: context,
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppSheetHeader(title: book.title),
+          ListTile(
+            leading: const Icon(FluentIcons.book_open_24_regular),
+            title: Text(sheet.l10n.viewManga),
+            onTap: () => Navigator.pop(sheet, 'manga'),
+          ),
+          ListTile(
+            leading: const Icon(FluentIcons.play_24_regular),
+            title: Text(localText(sheet, 'Continue reading', 'Lanjut baca')),
+            onTap: () => Navigator.pop(sheet, 'read'),
+          ),
+          ListTile(
+            leading: const Icon(FluentIcons.delete_24_regular),
+            title: Text(
+              localText(sheet, 'Remove from history', 'Hapus dari riwayat'),
+            ),
+            onTap: () => Navigator.pop(sheet, 'remove'),
+          ),
+          SizedBox(height: MediaQuery.paddingOf(sheet).bottom),
+        ],
+      ),
+    );
+    switch (choice) {
+      case 'manga':
+        onOpenManga();
+      case 'read':
+        onOpen();
+      case 'remove':
+        onRemove();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cover =
-        book.customCover ?? book.chapters.firstOrNull?.pages.firstOrNull;
+        book.customCover ??
+        keptCover ??
+        book.chapters.firstOrNull?.pages.firstOrNull;
     // Chapters read online have no saved pages to show.
     final remoteCover = book.source?.cover;
-    final glass = supportsAppleGlass(context);
-    final width = glass ? 84.0 : 56.0;
-    final height = glass ? 122.0 : 80.0;
-    final cacheWidth = (width * MediaQuery.devicePixelRatioOf(context)).round();
-    final placeholder = SizedBox(
-      width: width,
-      height: height,
-      child: const Icon(Icons.book_outlined),
-    );
-    final readAt = chapter.lastReadAt;
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: glass ? 0 : 4, vertical: 4),
-      color: glass ? Colors.transparent : null,
-      elevation: glass ? 0 : null,
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: glass ? const EdgeInsets.all(4) : const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: glass
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.center,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(glass ? 12 : 8),
-                child: cover != null
-                    ? Image.file(
-                        cover,
-                        width: width,
-                        height: height,
-                        cacheWidth: cacheWidth,
-                        fit: BoxFit.cover,
-                      )
-                    : remoteCover != null
-                    ? Image.network(
-                        remoteCover.toString(),
-                        width: width,
-                        height: height,
-                        cacheWidth: cacheWidth,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => placeholder,
-                      )
-                    : placeholder,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      style:
-                          (glass
-                                  ? context.textTheme.titleMedium
-                                  : context.textTheme.titleSmall)
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      chapter.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (readAt != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        MaterialLocalizations.of(
-                          context,
-                        ).formatShortDate(readAt),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              AppleGlassToolbarButton(
-                id: 'history-options',
-                symbol: 'ellipsis',
-                label: context.l10n.more,
-                fallbackIcon: Icons.more_horiz,
-                onPressed: null,
-                menu: [
-                  AppleGlassToolbarMenuItem(
-                    id: 'view-manga',
-                    title: context.l10n.viewManga,
-                    symbol: 'books.vertical',
-                    fallbackIcon: Icons.book_outlined,
-                    onSelected: onOpenManga,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    return HistoryRowView(
+      cover: (size) {
+        final cacheWidth = (size.width * MediaQuery.devicePixelRatioOf(context))
+            .round();
+        final placeholder = SizedBox.fromSize(
+          size: size,
+          child: const Icon(Icons.book_outlined),
+        );
+        return cover != null
+            ? Image.file(
+                cover,
+                width: size.width,
+                height: size.height,
+                cacheWidth: cacheWidth,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+              )
+            : remoteCover != null
+            ? Image.network(
+                remoteCover.toString(),
+                width: size.width,
+                height: size.height,
+                cacheWidth: cacheWidth,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+              )
+            : placeholder;
+      },
+      seriesTitle: book.title,
+      chapterTitle: chapter.title,
+      readAt: chapter.lastReadAt,
+      readingTime: readingTime,
+      // Like Tachimanga: the row opens the series; resuming is in the sheet.
+      onTap: onOpenManga,
+      onLongPress: () => _actions(context),
+      onRemove: onRemove,
     );
   }
 }
@@ -1376,17 +1949,24 @@ class _SeriesDetailState extends State<_SeriesDetail> {
             title: Text(context.l10n.noOfChapters(_series.chapters.length)),
           ),
           for (final chapter in _series.chapters)
-            ListTile(
-              leading: Icon(
-                chapter.bookmarked ? Icons.bookmark : Icons.menu_book_outlined,
-              ),
-              title: Text(chapter.title),
-              subtitle: Text(
-                localText(
-                  context,
-                  '${chapter.pages.length} pages',
-                  '${chapter.pages.length} halaman',
-                ),
+            ChapterRowView(
+              key: ValueKey('saved-chapter-${chapter.id}'),
+              title: chapter.title,
+              isRead:
+                  chapter.lastReadAt != null &&
+                  chapter.progress >= chapter.pages.length - 1,
+              isBookmarked: chapter.bookmarked,
+              lastPageRead: chapter.progress,
+              isSelected: false,
+              date: chapter.lastReadAt == null
+                  ? null
+                  : MaterialLocalizations.of(
+                      context,
+                    ).formatShortDate(chapter.lastReadAt!),
+              extra: localText(
+                context,
+                '${chapter.pages.length} pages',
+                '${chapter.pages.length} halaman',
               ),
               onTap: () => _read(chapter),
               trailing: IconButton(
@@ -1420,10 +2000,19 @@ class _SeriesDetailState extends State<_SeriesDetail> {
 }
 
 class _QueueRow extends StatelessWidget {
-  const _QueueRow({required this.queue, required this.job});
+  const _QueueRow({
+    required this.services,
+    required this.queue,
+    required this.job,
+    this.book,
+  });
 
+  final LocalCollectionServices services;
   final LocalDownloadQueue queue;
   final LocalDownload job;
+
+  /// The title in this iPhone's catalog, for its custom cover.
+  final LocalSeries? book;
 
   @override
   Widget build(BuildContext context) {
@@ -1454,7 +2043,14 @@ class _QueueRow extends StatelessWidget {
     }
 
     return ListTile(
-      title: Text(request.title),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: _LocalCover(
+        services: services,
+        seriesId: request.seriesId,
+        book: book,
+        remote: request.source?.cover,
+      ),
+      title: Text(request.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1525,8 +2121,19 @@ class _LocalUpdates extends StatefulWidget {
 class _LocalUpdatesState extends State<_LocalUpdates> {
   late var _updates = _load();
 
+  static const _baseline = PreferencesUpdateBaseline();
+
   Future<({List<LocalMangaUpdate> items, int failed})> _load() =>
-      loadLocalUpdates(widget.services.sources, widget.library);
+      loadLocalUpdates(
+        widget.services.sources,
+        widget.library,
+        baseline: _baseline,
+        readChapters: (seriesId) async => {
+          for (final MapEntry(:key, :value)
+              in (await widget.services.catalog.chapterMarks(seriesId)).entries)
+            if (value.read) key,
+        },
+      );
 
   @override
   void didUpdateWidget(_LocalUpdates oldWidget) {
@@ -1583,6 +2190,11 @@ class _LocalUpdatesState extends State<_LocalUpdates> {
           ],
         );
       }
+      // Tachimanga's Updates: a summary banner, then every new chapter.
+      final rows = [
+        for (final update in updates)
+          for (final chapter in update.newChapters) (update, chapter),
+      ];
       return RefreshIndicator(
         onRefresh: () async {
           setState(() {
@@ -1591,45 +2203,273 @@ class _LocalUpdatesState extends State<_LocalUpdates> {
           await _updates;
         },
         child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-          itemCount: updates.length + (failed == 0 ? 0 : 1),
+          padding: EdgeInsets.only(bottom: scrollBottomInset(context)),
+          itemCount: rows.length + 2,
           itemBuilder: (context, index) {
-            if (index == updates.length) {
-              return ListTile(
-                title: Text(
-                  localText(
-                    context,
-                    'Some titles could not be checked',
-                    'Beberapa judul gagal diperiksa',
+            if (index == 0) {
+              return _UpdateSummaryBanner(
+                updates: updates,
+                failed: failed,
+                onRetry: () => setState(() => _updates = _load()),
+              );
+            }
+            if (index == 1) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  DateGroupKeys.today.toLocale(context),
+                  style: context.textTheme.titleSmall?.copyWith(
+                    color: context.colorScheme.onSurfaceVariant,
                   ),
-                ),
-                trailing: TextButton(
-                  onPressed: () => setState(() => _updates = _load()),
-                  child: Text(context.l10n.retry),
                 ),
               );
             }
-            final update = updates[index];
-            return ListTile(
-              title: Text(update.manga.title),
-              subtitle: Text(
-                localText(
+            final (update, chapter) = rows[index - 2];
+            return _UpdateChapterRow(
+              key: ValueKey('${update.seriesId}/${chapter.id}'),
+              services: widget.services,
+              update: update,
+              chapter: chapter,
+              onOpen: () async {
+                // Opening the title marks its new chapters as seen.
+                await _baseline.write(update.seriesId, update.chapterIds);
+                if (!context.mounted) return;
+                await openLocalSourceManga(
                   context,
-                  '${update.count} new chapters',
-                  '${update.count} chapter baru',
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openLocalSourceManga(
-                context,
-                widget.services,
-                update.source,
-                update.manga,
-              ),
+                  widget.services,
+                  update.source,
+                  update.manga,
+                );
+                if (mounted) setState(() => _updates = _load());
+              },
             );
           },
         ),
       );
     },
+  );
+}
+
+/// "Update completed. N titles, M chapters, F failed", with the summary.
+class _UpdateSummaryBanner extends StatelessWidget {
+  const _UpdateSummaryBanner({
+    required this.updates,
+    required this.failed,
+    required this.onRetry,
+  });
+
+  final List<LocalMangaUpdate> updates;
+  final int failed;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final chapters = updates.fold<int>(0, (sum, u) => sum + u.count);
+    final cs = context.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(
+        color: cs.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        child: ListTile(
+          leading: Icon(
+            failed == 0
+                ? FluentIcons.checkmark_circle_24_regular
+                : FluentIcons.warning_24_regular,
+            color: failed == 0 ? cs.primary : cs.error,
+          ),
+          title: Text(
+            localText(context, 'Update completed', 'Pembaruan selesai'),
+          ),
+          subtitle: Text(
+            localText(
+              context,
+              '${updates.length} titles · $chapters new chapters · $failed failed',
+              '${updates.length} judul · $chapters chapter baru · $failed gagal',
+            ),
+          ),
+          trailing: IconButton(
+            tooltip: localText(context, 'Summary', 'Ringkasan'),
+            icon: const Icon(FluentIcons.info_24_regular),
+            onPressed: () => showAppBottomSheet<void>(
+              context: context,
+              builder: (sheet) => DraggableScrollableSheet(
+                expand: false,
+                initialChildSize: .6,
+                builder: (sheet, controller) => ListView(
+                  controller: controller,
+                  children: [
+                    AppSheetHeader(
+                      title: localText(
+                        sheet,
+                        'Updates summary',
+                        'Ringkasan pembaruan',
+                      ),
+                    ),
+                    ExpansionTile(
+                      initiallyExpanded: true,
+                      leading: const Icon(
+                        FluentIcons.checkmark_circle_24_regular,
+                      ),
+                      title: Text(
+                        localText(
+                          sheet,
+                          'Completed (${updates.length})',
+                          'Selesai (${updates.length})',
+                        ),
+                      ),
+                      children: [
+                        for (final update in updates)
+                          ListTile(
+                            dense: true,
+                            title: Text(update.manga.title),
+                            trailing: Text('+${update.count}'),
+                          ),
+                      ],
+                    ),
+                    ListTile(
+                      leading: const Icon(FluentIcons.warning_24_regular),
+                      title: Text(
+                        localText(sheet, 'Failed ($failed)', 'Gagal ($failed)'),
+                      ),
+                      trailing: failed == 0
+                          ? null
+                          : TextButton(
+                              onPressed: () {
+                                Navigator.pop(sheet);
+                                onRetry();
+                              },
+                              child: Text(sheet.l10n.retry),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One new chapter: cover, title, chapter and a save button.
+class _UpdateChapterRow extends StatefulWidget {
+  const _UpdateChapterRow({
+    super.key,
+    required this.services,
+    required this.update,
+    required this.chapter,
+    required this.onOpen,
+  });
+
+  final LocalCollectionServices services;
+  final LocalMangaUpdate update;
+  final LocalSourceChapter chapter;
+  final VoidCallback onOpen;
+
+  @override
+  State<_UpdateChapterRow> createState() => _UpdateChapterRowState();
+}
+
+class _UpdateChapterRowState extends State<_UpdateChapterRow> {
+  bool _queued = false;
+
+  Future<void> _save() async {
+    if (_queued) return;
+    setState(() => _queued = true);
+    try {
+      await enqueueLocalChapterDownload(
+        widget.services,
+        widget.update.source,
+        widget.update.manga,
+        widget.update.seriesId,
+        widget.chapter,
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _queued = false);
+        localFailure(context, error);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final update = widget.update;
+    final kept = widget.services.catalog.keptCover(update.seriesId);
+    final cover = update.manga.cover;
+    final cacheWidth = (40 * MediaQuery.devicePixelRatioOf(context)).round();
+    return ListTile(
+      onTap: widget.onOpen,
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: kept != null
+              ? Image.file(kept, fit: BoxFit.cover, cacheWidth: cacheWidth)
+              : cover != null
+              ? Image.network(
+                  cover.toString(),
+                  headers: update.manga.coverHeaders,
+                  fit: BoxFit.cover,
+                  cacheWidth: cacheWidth,
+                  errorBuilder: (_, _, _) => const Icon(Icons.book_outlined),
+                )
+              : const Icon(Icons.book_outlined),
+        ),
+      ),
+      title: Text(
+        update.manga.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        widget.chapter.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        tooltip: localText(context, 'Save to device', 'Simpan ke perangkat'),
+        onPressed: _queued ? null : _save,
+        icon: Icon(
+          _queued
+              ? FluentIcons.arrow_download_24_filled
+              : FluentIcons.arrow_circle_down_24_regular,
+        ),
+      ),
+    );
+  }
+}
+
+/// A small rounded count, as on Tachimanga's library covers.
+class _CountPill extends StatelessWidget {
+  const _CountPill({
+    required this.count,
+    required this.color,
+    required this.onColor,
+  });
+
+  final int count;
+  final Color color;
+  final Color onColor;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Text(
+        '$count',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: onColor,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
   );
 }

@@ -12,10 +12,7 @@ part 'chrome_extents.g.dart';
 /// Measured chrome extents include system insets; do not add them again at call sites.
 @immutable
 class ChromeExtents {
-  const ChromeExtents({
-    required this.topInset,
-    required this.bottomInset,
-  });
+  const ChromeExtents({required this.topInset, required this.bottomInset});
 
   /// Fallback offsets before the first chrome measurement.
   static const ChromeExtents initial = ChromeExtents(

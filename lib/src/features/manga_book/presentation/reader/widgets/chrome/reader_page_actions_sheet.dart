@@ -25,6 +25,7 @@ import '../../../../../../widgets/app_bottom_sheet.dart';
 import '../../../../../../widgets/cover_cache/cover_cache.dart';
 import '../../../../../../widgets/server_image.dart';
 import '../../../../../auth/data/auth_credentials_store.dart';
+import '../../../../../security/app_security.dart';
 import '../../../../domain/chapter_page/chapter_page_model.dart';
 import 'image_clipboard.dart';
 
@@ -172,6 +173,7 @@ Future<void> showReaderImageActionsSheet({
           final toast = ref.read(toastProvider);
           final errorMsg = context.l10n.errorSomethingWentWrong;
           Navigator.pop(sheetContext);
+          if (!contentSharingAllowed(context)) return;
           try {
             final file = await resolve();
             if (!current()) return;

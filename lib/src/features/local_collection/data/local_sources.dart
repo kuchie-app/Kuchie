@@ -8,10 +8,12 @@ import 'package:http/http.dart' as http;
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pub_semver/pub_semver.dart';
 
+import '../../browse_center/domain/filter/filter_model.dart';
 import 'apk_signature.dart';
 import 'local_catalog.dart';
 import 'local_mihon_runtime.dart';
-import 'remote_webview/remote_webview_server.dart';
+import 'local_network_settings.dart';
+import 'local_source_filters.dart';
 
 part 'local_mihon_store.dart';
 part 'local_shinigami_source.dart';
@@ -24,6 +26,20 @@ class LocalSourceSecurityException extends FormatException {
 
   /// The URL itself was refused (not HTTPS, or carried credentials).
   final bool insecureUrl;
+}
+
+/// A store that stopped publishing extensions: all it lists are notices
+/// telling Mihon readers to update or move to another store.
+class LocalSourceRetiredStoreException extends FormatException {
+  const LocalSourceRetiredStoreException(
+    this.storeName, {
+    this.movedToKeiyoushi = false,
+  }) : super('The extension store no longer publishes extensions.');
+
+  final String storeName;
+
+  /// The notices point at Keiyoushi, where the extensions now live.
+  final bool movedToKeiyoushi;
 }
 
 /// An APK that verifies but is not signed with its store's key. Mihon shows
@@ -206,10 +222,13 @@ class LocalSources {
        _runtime =
            runtime ??
            MihonRuntimeClient(
-             // Only the app's own runtime gets WebViews; tests and other
-             // hosts keep their own clients.
+             // Only the app's own runtime gets WebViews and the reader's
+             // network settings; tests and other hosts keep their own clients.
              webViewHeaders: Platform.isIOS
-                 ? RemoteWebViewServer.instance.headers
+                 ? LocalNetworkSettings.instance.runtimeHeaders
+                 : null,
+             siteCookies: Platform.isIOS
+                 ? LocalNetworkSettings.instance.siteCookies
                  : null,
            ),
        _ownsRuntime = runtime == null,
@@ -274,6 +293,73 @@ class LocalSources {
     return state.extensions.values.map(_parseInstalled).toList(growable: false);
   }
 
+  Future<void>? _warming;
+
+  /// Removes saved source listings; they are fetched again when needed.
+  /// The extension cache folder, for Storage.
+  Directory get cacheDirectory => Directory('${_directory.path}/cache');
+
+  Future<void> clearCache() => _serial(() async {
+    final cache = Directory('${_directory.path}/cache');
+    try {
+      if (await cache.exists()) await cache.delete(recursive: true);
+    } on FileSystemException {
+      // The next write recreates entries; a leftover file is harmless.
+    }
+  });
+
+  /// Clears the cookies the extension runtime holds for every source.
+  Future<void> clearRuntimeCookies() => _runtime.clearCookies();
+
+  /// Boots the extension runtime in the background, so installing or opening
+  /// an extension does not wait for it. With [onlyIfInstalled], it boots only
+  /// when an enabled Mihon extension is installed.
+  Future<void> warmUpRuntime({bool onlyIfInstalled = true}) async {
+    if (onlyIfInstalled) {
+      final installed = await extensions();
+      if (!installed.any(
+        (extension) =>
+            extension.enabled && extension._manifest.runtimeSources.isNotEmpty,
+      )) {
+        return;
+      }
+    }
+    await (_warming ??= _runtime.warmUp());
+  }
+
+  /// Loads the extensions behind [sourceIds] (most recent first, at most
+  /// [limit] of them) into the runtime, so reopening them from History or
+  /// Browse skips loading the APK.
+  Future<void> preloadRuntimeSources(
+    Iterable<String> sourceIds, {
+    int limit = 2,
+  }) async {
+    final installed = await extensions();
+    final loaded = <String>{};
+    for (final id in sourceIds) {
+      if (loaded.length >= limit) break;
+      final packageId = id.split(':').first;
+      if (loaded.contains(packageId)) continue;
+      final extension = installed
+          .where(
+            (extension) =>
+                extension.packageId == packageId &&
+                extension.enabled &&
+                extension._manifest.apkFingerprint != null,
+          )
+          .firstOrNull;
+      if (extension == null) continue;
+      loaded.add(packageId);
+      try {
+        await _runtime.preload(await _installedApk(extension));
+      } on Exception {
+        // The next real request reports the problem.
+      } on StateError {
+        // The APK is missing; opening the source asks to reinstall it.
+      }
+    }
+  }
+
   Future<List<LocalExtension>> sources() async {
     final installed = await extensions();
     return [
@@ -290,6 +376,9 @@ class LocalSources {
             ),
     ];
   }
+
+  /// The Keiyoushi store, where most retired stores moved their extensions.
+  static Uri get keiyoushiIndex => _keiyoushiIndex;
 
   Future<LocalSourceRepository> addRepository(Uri index) =>
       _storeRepository(index);
@@ -331,13 +420,23 @@ class LocalSources {
   /// `kuchie.repository.v1` format on a URL that answers directly; anything
   /// else is read as a Mihon store, which may redirect and may point at
   /// further documents, exactly as Mihon follows them.
-  Future<(Uri, Map<String, Object?>)> _fetchRepository(Uri url) async {
+  Future<(Uri, Map<String, Object?>)> _fetchRepository(
+    Uri url, {
+    bool fromPage = false,
+  }) async {
     if (url == _keiyoushiIndex) return (url, await _fetchMihonStore(url));
     final (:bytes, :redirected) = await _fetch(
       url,
       _maxMihonStoreBytes,
       redirects: _Redirects.https,
     );
+    // A store's web page (such as yuzono.github.io/extensions) links its
+    // index through an "Add to Mihon" button; follow that link once.
+    if (!fromPage) {
+      if (_storeLinkInPage(bytes) case final link?) {
+        return _fetchRepository(_repositoryUrl(link), fromPage: true);
+      }
+    }
     final document = await _decodeMihonDocumentInBackground(bytes);
     if (document is Map<String, Object?> &&
         document['format'] == 'kuchie.repository.v1') {
@@ -415,7 +514,10 @@ class LocalSources {
           'format': 'kuchie.mihon-store.v1',
           'name': legacy.name,
           'signingKey': legacy.signingKey,
-          'extensions': _mihonLegacyPackages(list, base),
+          'extensions': _mihonLegacyPackages(
+            _withoutNotices(list, legacy.name),
+            base,
+          ),
         },
       );
     }
@@ -443,14 +545,15 @@ class LocalSources {
     if (list is! Map) {
       throw const FormatException('Invalid extension store index.');
     }
+    final name = _string(document, 'name', max: 160);
     return (
       url,
       {
         'format': 'kuchie.mihon-store.v1',
-        'name': _string(document, 'name', max: 160),
+        'name': name,
         'signingKey': _mihonSigningKey(document['signingKey']),
         'extensions': _mihonV2Packages(
-          _list(_object(list), 'extensions', 20000),
+          _withoutNotices(_list(_object(list), 'extensions', 20000), name),
           keiyoushi: url == _keiyoushiIndex,
         ),
       },
@@ -772,23 +875,46 @@ class LocalSources {
     bool latest = false,
   }) async => (await browsePage(id, query: query, latest: latest)).items;
 
+  /// Each runtime source's filters as last reported, to send changes back.
+  final _rawFilters = <String, List<Map<String, Object?>>>{};
+
+  /// The search filters of source [id], empty for sources without any.
+  /// [reload] asks the extension again, as Mihon's Reset does.
+  Future<List<Filter>> sourceFilters(String id, {bool reload = false}) async {
+    final source = await _enabled(id);
+    final runtimeSource = source._runtimeSource;
+    if (runtimeSource == null) return const [];
+    final raw = !reload && _rawFilters[id] != null
+        ? _rawFilters[id]!
+        : _rawFilters[id] = await _runtime.filters(
+            await _installedApk(source),
+            runtimeSource,
+          );
+    return filtersFromRuntime(raw);
+  }
+
   Future<({List<LocalSourceManga> items, bool hasMore})> browsePage(
     String id, {
     String query = '',
     bool latest = false,
     int page = 1,
+    List<FilterChange> filters = const [],
     void Function(bool fromCache)? onFreshness,
   }) async {
     if (page < 1) throw ArgumentError.value(page, 'page');
     final source = await _enabled(id);
     final manifest = source._manifest;
     if (source._runtimeSource case final runtimeSource?) {
+      final raw = _rawFilters[id];
       final pageResult = await _runtime.browse(
         await _installedApk(source),
         runtimeSource,
         query: query.trim(),
         latest: latest,
         page: page,
+        filterList: raw == null || filters.isEmpty
+            ? const []
+            : runtimeFilterList(raw, filters),
       );
       final ids = <String>{};
       final items = <LocalSourceManga>[];

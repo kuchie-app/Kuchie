@@ -57,7 +57,7 @@ cp "$archives/MExtensionServer-ios.jar" "$runtime/MExtensionServer.jar"
 "$java_home/bin/java" --class-path "$runtime/MExtensionServer.jar" \
   "$source_dir/BytecodeOverlay.java" "$runtime/MExtensionServer.jar" "$runtime/ExtCompat.jar"
 "$java_home/bin/javac" --release 21 -proc:none -classpath "$runtime/MExtensionServer.jar" \
-  -d "$work/bridge-classes" "$source_dir/ExtensionRuntime.java"
+  -d "$work/bridge-classes" "$source_dir/ExtensionRuntime.java" "$source_dir/DexJarCache.java"
 "$java_home/bin/jar" --create --file "$runtime/KuchieExtensionRuntime.jar" \
   -C "$work/bridge-classes" .
 "$java_home/bin/javac" --release 21 --patch-module "java.logging=$source_dir/logging" \
@@ -68,4 +68,8 @@ cp "$archives/OpenJDK-LICENSE.txt" "$archives/MExtensionServer-LICENSE.txt" "$ru
 
 rm -rf "$source_dir/.prepared"
 mv "$prepared" "$source_dir/.prepared"
+# The bridge picks the runtime up with __has_include, which Xcode does not
+# track: without this, an incremental build after the first one keeps the
+# bridge compiled without OpenJDK while still embedding the framework.
+touch "$source_dir/../Runner/MihonRuntimeBridge.mm"
 echo 'Prepared arm64 iOS extension runtime for Kuchie.'

@@ -13,10 +13,10 @@ enum HistoryMenuAction {
   viewManga;
 
   String toLocale(BuildContext context) => switch (this) {
-        HistoryMenuAction.viewManga => context.l10n.viewManga,
-      };
+    HistoryMenuAction.viewManga => context.l10n.viewManga,
+  };
 
   IconData get icon => switch (this) {
-        HistoryMenuAction.viewManga => FluentIcons.book_open_24_regular,
-      };
+    HistoryMenuAction.viewManga => FluentIcons.book_open_24_regular,
+  };
 }

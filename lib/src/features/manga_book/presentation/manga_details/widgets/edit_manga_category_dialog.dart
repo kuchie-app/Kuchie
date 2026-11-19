@@ -78,7 +78,9 @@ class EditMangaCategoryDialog extends HookConsumerWidget {
                                 }
                                 // The caller refreshes on close if the dialog was dismissed.
                                 if (!context.mounted) return;
-                                unawaited(ref.read(provider.notifier).refresh());
+                                unawaited(
+                                  ref.read(provider.notifier).refresh(),
+                                );
                                 ref.invalidate(categoryControllerProvider);
                                 ref.invalidate(libraryMangaListProvider);
                               },

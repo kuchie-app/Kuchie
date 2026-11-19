@@ -162,10 +162,12 @@ Future<String?> localLanIp() async {
       includeLoopback: false,
       includeLinkLocal: false,
     );
-    for (final iface in ifaces) {
-      for (final addr in iface.addresses) {
-        if (_isPrivateV4(addr.address)) return addr.address;
-      }
+    if (pickLanAddress([
+          for (final iface in ifaces)
+            for (final addr in iface.addresses) (iface.name, addr.address),
+        ])
+        case final ip?) {
+      return ip;
     }
   } catch (_) {}
   try {
@@ -173,6 +175,34 @@ Future<String?> localLanIp() async {
   } catch (_) {
     return null;
   }
+}
+
+/// The private IPv4 address of the Wi-Fi or Ethernet interface, from
+/// (interface name, address) pairs. iPhones also list cellular (`pdp_ip`,
+/// often 10.x behind carrier NAT) and VPN (`utun`, `ipsec`) interfaces, and
+/// scanning their subnet never finds a server on the home network.
+String? pickLanAddress(List<(String, String)> addresses) {
+  const skipped = ['pdp_ip', 'utun', 'ipsec', 'ppp', 'awdl', 'llw', 'bridge'];
+  int rank(String name) => name.startsWith('en') || name.startsWith('eth')
+      ? 0
+      : name.startsWith('wlan')
+      ? 0
+      : 1;
+  final candidates = [
+    for (final (name, ip) in addresses)
+      if (_isPrivateV4(ip) && !skipped.any(name.startsWith)) (name, ip),
+  ]..sort((a, b) => rank(a.$1).compareTo(rank(b.$1)));
+  return candidates.firstOrNull?.$2;
+}
+
+/// Whether [host] is on the local network, where iOS asks for Local
+/// Network permission before an app may connect.
+bool isLocalNetworkHost(String host) {
+  final lower = host.toLowerCase();
+  if (lower.endsWith('.local')) return true;
+  if (_isPrivateV4(host)) return true;
+  final parts = host.split('.');
+  return parts.length == 4 && parts[0] == '169' && parts[1] == '254';
 }
 
 // RFC 1918 ranges: 10/8, 172.16/12, 192.168/16.
