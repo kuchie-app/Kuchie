@@ -18,10 +18,11 @@ class _LibraryManga extends MangaWithId {
 }
 
 void main() {
-  testWidgets('In library asks before removal and Cancel keeps the series', (
+  testWidgets('In library opens the category editor instead of removing', (
     tester,
   ) async {
-    var inLibrary = true;
+    var edits = 0;
+    var adds = 0;
     var refreshes = 0;
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -40,10 +41,12 @@ void main() {
             body: SingleChildScrollView(
               child: MangaDescription(
                 manga: testManga(),
-                removeMangaFromLibrary: () async {
-                  inLibrary = false;
+                editLibraryCategories: () async {
+                  edits++;
                 },
-                addMangaToLibrary: () async {},
+                addMangaToLibrary: () async {
+                  adds++;
+                },
                 onMigrate: () async {},
                 refresh: () async {
                   refreshes++;
@@ -58,23 +61,10 @@ void main() {
     await tester.tap(find.text('In library'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Remove from library'), findsOneWidget);
-    expect(find.text('Remove'), findsOneWidget);
-    expect(
-      find.text(
-        'Remove 1 entry from your library? This also deletes downloaded chapters on this device.',
-      ),
-      findsOneWidget,
-    );
-    expect(inLibrary, isTrue);
-    expect(refreshes, 0);
-
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
     expect(find.byType(AlertDialog), findsNothing);
+    expect(edits, 1);
+    expect(adds, 0);
+    expect(refreshes, 1);
     expect(find.text('In library'), findsOneWidget);
-    expect(inLibrary, isTrue);
-    expect(refreshes, 0);
   });
 }

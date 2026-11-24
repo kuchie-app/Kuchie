@@ -233,7 +233,7 @@
     "@globalUpdate": {
         "description": "Button text of Global Manga Update"
     },
-    "edit": "Login",
+    "edit": "Ubah",
     "@edit": {
         "description": "Popup button text to edit Category in Edit category screen"
     },

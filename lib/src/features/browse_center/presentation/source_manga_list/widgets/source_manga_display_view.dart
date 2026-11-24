@@ -240,14 +240,8 @@ class SourceMangaDisplayView extends HookConsumerWidget {
           result.showToastOnError(container.read(toastProvider));
           return;
         }
-        // Series flow returns void, so confirm the add before marking the tile.
-        List<MangaDto>? library;
-        try {
-          library = await container.read(libraryMangaListProvider.future);
-        } catch (_) {
-          library = null;
-        }
-        if (library != null && library.any((m) => m.id == manga.id)) {
+        // The add flow reports success, so no library refetch is needed here.
+        if (result.value == true) {
           controller.mapItems(
             (m) => m.id == manga.id
                 ? m.copyWith(user: m.user.copyWith(inLibrary: true))
