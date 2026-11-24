@@ -1377,6 +1377,8 @@ class _LibraryTabBar extends ConsumerWidget {
         labels: labels,
         selectedIndex: controller.index,
         onSelected: controller.animateTo,
+        // Follows the category pages while they are swiped.
+        position: controller.animation,
         fallback: fallback,
         scrollable: true,
       ),

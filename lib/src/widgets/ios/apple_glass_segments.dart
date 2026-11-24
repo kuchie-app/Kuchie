@@ -27,6 +27,7 @@ class AppleGlassSegments extends StatelessWidget
     this.symbols = const [],
     this.actionIndices = const {},
     this.scrollable = false,
+    this.position,
   });
 
   final List<String> labels;
@@ -36,6 +37,12 @@ class AppleGlassSegments extends StatelessWidget
   final ValueChanged<int> onSelected;
   final PreferredSizeWidget fallback;
   final bool scrollable;
+
+  /// Where the selection sits while the pages are swiped, in segments: 1.4
+  /// is 40% of the way from the second segment to the third. Pass the
+  /// [TabController.animation] of a swipeable pager, so the selection
+  /// follows the finger instead of jumping once the swipe ends.
+  final Animation<double>? position;
 
   @override
   Size get preferredSize => fallback.preferredSize;
@@ -60,6 +67,7 @@ class AppleGlassSegments extends StatelessWidget
           selectedIndex: selectedIndex,
           onSelected: onSelected,
           scrollable: scrollable,
+          position: position,
           dark: Theme.of(context).brightness == Brightness.dark,
           direction: Directionality.of(context),
           reduceMotion: MediaQuery.disableAnimationsOf(context),
@@ -78,10 +86,13 @@ class _NativeSegments extends StatefulWidget {
     required this.selectedIndex,
     required this.onSelected,
     required this.scrollable,
+    required this.position,
     required this.dark,
     required this.direction,
     required this.reduceMotion,
   });
+
+  final Animation<double>? position;
 
   final List<String> labels;
   final List<String> symbols;
@@ -110,6 +121,32 @@ class _NativeSegments extends StatefulWidget {
 
 class _NativeSegmentsState extends State<_NativeSegments> {
   MethodChannel? _channel;
+  double? _sentPosition;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.position?.addListener(_onPosition);
+  }
+
+  /// Moves the native selection with the swipe, one message per change.
+  void _onPosition() {
+    final position = widget.position?.value;
+    if (position == null || _channel == null) return;
+    if (_sentPosition case final sent? when (position - sent).abs() < .002) {
+      return;
+    }
+    _sentPosition = position;
+    unawaited(_invoke('position', position));
+  }
+
+  Future<void> _invoke(String method, Object? arguments) async {
+    try {
+      await _channel?.invokeMethod<void>(method, arguments);
+    } on MissingPluginException {
+      // The native view can be released while a message is in flight.
+    }
+  }
 
   void _onCreated(int id) {
     _channel = MethodChannel('$_viewType/$id')
@@ -126,17 +163,15 @@ class _NativeSegmentsState extends State<_NativeSegments> {
     unawaited(_updateNative());
   }
 
-  Future<void> _updateNative() async {
-    try {
-      await _channel?.invokeMethod<void>('update', widget.configuration);
-    } on MissingPluginException {
-      // The native view can be released while an update is in flight.
-    }
-  }
+  Future<void> _updateNative() => _invoke('update', widget.configuration);
 
   @override
   void didUpdateWidget(_NativeSegments oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.position != widget.position) {
+      oldWidget.position?.removeListener(_onPosition);
+      widget.position?.addListener(_onPosition);
+    }
     if (oldWidget.selectedIndex != widget.selectedIndex ||
         oldWidget.dark != widget.dark ||
         oldWidget.direction != widget.direction ||
@@ -150,6 +185,7 @@ class _NativeSegmentsState extends State<_NativeSegments> {
 
   @override
   void dispose() {
+    widget.position?.removeListener(_onPosition);
     _channel?.setMethodCallHandler(null);
     super.dispose();
   }

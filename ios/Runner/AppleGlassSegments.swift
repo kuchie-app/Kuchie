@@ -85,6 +85,14 @@ private final class AppleGlassSegmentTrack: NSObject, FlutterPlatformView {
     }
     update(configuration)
     channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "position" {
+        // The pages are being swiped: the selection follows the finger.
+        if let position = call.arguments as? Double {
+          self?.segments.follow(position: CGFloat(position))
+        }
+        result(nil)
+        return
+      }
       guard call.method == "update" else {
         result(FlutterMethodNotImplemented)
         return
@@ -279,6 +287,36 @@ private final class SegmentScrollView: UIScrollView {
     }
     showSelection(animated: false, reveal: revealAfterLayout || resized)
     revealAfterLayout = false
+  }
+
+  /// Places the selection part way between two segments while the pages are
+  /// swiped; 1.4 is 40% of the way from the second segment to the third.
+  func follow(position: CGFloat) {
+    guard !buttons.isEmpty, !needsSegmentLayout, !bounds.isEmpty else { return }
+    let clamped = min(max(position, 0), CGFloat(buttons.count - 1))
+    let lower = Int(clamped.rounded(.down))
+    let upper = min(lower + 1, buttons.count - 1)
+    let fraction = clamped - CGFloat(lower)
+    let from = buttons[lower].frame
+    let to = buttons[upper].frame
+    let segment = CGRect(
+      x: from.minX + (to.minX - from.minX) * fraction,
+      y: from.minY,
+      width: from.width + (to.width - from.width) * fraction,
+      height: from.height
+    )
+    let thumb = segment.insetBy(dx: 4, dy: 4)
+    // Drop a running tap animation; the swipe position is the truth now.
+    selection.layer.removeAllAnimations()
+    selection.layer.cornerRadius = max(0, thumb.height / 2)
+    selection.frame = thumb
+    guard scrollable else { return }
+    if segment.width > bounds.width {
+      let x = rtl ? segment.maxX - bounds.width : segment.minX
+      setContentOffset(CGPoint(x: x, y: 0), animated: false)
+    } else {
+      scrollRectToVisible(segment, animated: false)
+    }
   }
 
   private func showSelection(animated: Bool, reveal: Bool) {

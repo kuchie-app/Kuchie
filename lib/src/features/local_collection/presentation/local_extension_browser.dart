@@ -527,6 +527,8 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
             labels: labels,
             selectedIndex: index,
             onSelected: _goToTab,
+            // Follows the pages while they are swiped.
+            position: _tabs.animation,
             fallback: fallback,
           )
         : fallback;
