@@ -196,11 +196,8 @@ class BigScreenMangaDetails extends HookConsumerWidget {
                       expansion: expansion,
                       manga: manga,
                       onMigrate: onMigrate,
-                      removeMangaFromLibrary: (() =>
-                          removeMangaFromLibraryAndPurge(
-                            ProviderScope.containerOf(context, listen: false),
-                            mangaId,
-                          )),
+                      editLibraryCategories: () =>
+                          editMangaLibraryCategories(ref, context, manga),
                       addMangaToLibrary: (() =>
                           addMangaToLibraryWithCategory(ref, context, manga)),
                       refresh: () => onDescriptionRefresh(false),

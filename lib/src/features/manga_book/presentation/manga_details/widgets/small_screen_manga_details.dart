@@ -16,7 +16,6 @@ import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../../widgets/emoticons.dart';
 import '../../../../../widgets/ios/apple_glass_capability.dart';
-import '../../../../offline/data/offline_download_providers.dart';
 import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../controller/chapter_list_entry.dart';
@@ -76,10 +75,8 @@ class SmallScreenMangaDetails extends HookConsumerWidget {
                   manga: manga,
                   onMigrate: onMigrate,
                   refresh: () => onDescriptionRefresh(false),
-                  removeMangaFromLibrary: () => removeMangaFromLibraryAndPurge(
-                    ProviderScope.containerOf(context, listen: false),
-                    mangaId,
-                  ),
+                  editLibraryCategories: () =>
+                      editMangaLibraryCategories(ref, context, manga),
                   addMangaToLibrary: () =>
                       addMangaToLibraryWithCategory(ref, context, manga),
                 ),

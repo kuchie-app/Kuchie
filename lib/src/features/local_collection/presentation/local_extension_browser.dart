@@ -47,6 +47,7 @@ import '../../browse_center/presentation/extension/widgets/extension_info_conten
 import '../../browse_center/presentation/source/widgets/source_list_tile.dart';
 import '../../browse_center/presentation/source_manga_list/widgets/source_manga_filter.dart';
 import '../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
+import '../../manga_book/presentation/manga_details/widgets/add_to_library_category.dart';
 import '../../manga_book/presentation/manga_details/widgets/chapter_context_menu.dart'
     show ChapterMenuRow, menuAnchorForPoint;
 import '../../manga_book/presentation/manga_details/widgets/chapter_grid_tile.dart';
@@ -2571,33 +2572,79 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     }
   }
 
-  Future<void> _toggleLibrary(bool inLibrary) async {
+  /// Adds the series with the categories the user picks (none checked at
+  /// first), or edits them once it is in the library. Unchecking every
+  /// category removes it from the library.
+  Future<void> _editLibrary(LocalSeries? series) async {
     if (_savingLibrary) return;
-    _savingLibrary = true;
+    setState(() => _savingLibrary = true);
     try {
-      if (inLibrary &&
-          !await localConfirm(
-            context,
-            context.l10n.removeFromLibrary,
-            context.l10n.duplicatesRemoveConfirm(1),
-          )) {
-        return;
-      }
+      final catalog = widget.services.catalog;
+      final inLibrary = series?.inLibrary == true;
+      final names = await catalog.categories();
       if (!mounted) return;
-      await widget.services.catalog.setInLibrary(
-        seriesId: _seriesId,
-        title: _manga.title,
-        inLibrary: !inLibrary,
-        source: widget.services.sources.seriesReference(
-          _manga,
-          sourceName: widget.extension.name,
-        ),
-      );
+      final Set<String> picked;
+      if (names.isEmpty) {
+        // Nothing to choose from: add straight away, or confirm the removal.
+        if (inLibrary &&
+            !await localConfirm(
+              context,
+              context.l10n.removeFromLibrary,
+              context.l10n.duplicatesRemoveConfirm(1),
+            )) {
+          return;
+        }
+        picked = const {};
+      } else {
+        final current = {...?series?.categories}.intersection(names.toSet());
+        final choice = await showLibraryCategoryPicker<String>(
+          context,
+          options: [for (final name in names) (id: name, name: name)],
+          initial: inLibrary ? current : const {},
+          inLibrary: inLibrary,
+          subtitle: _manga.title,
+        );
+        if (choice == null || !mounted) return;
+        if (inLibrary &&
+            choice.length == current.length &&
+            choice.containsAll(current)) {
+          return;
+        }
+        picked = choice;
+      }
+      final keep = !inLibrary || picked.isNotEmpty;
+      if (keep) {
+        await catalog.setInLibrary(
+          seriesId: _seriesId,
+          title: _manga.title,
+          inLibrary: true,
+          source: widget.services.sources.seriesReference(
+            _manga,
+            sourceName: widget.extension.name,
+          ),
+        );
+        await catalog.setCategories(_seriesId, picked.toList());
+        if (!inLibrary) {
+          unawaited(keepLocalSourceCover(widget.services, _seriesId, _manga));
+        }
+      } else {
+        // Clear memberships first so a later add starts with nothing checked.
+        await catalog.setCategories(_seriesId, const []);
+        await catalog.setInLibrary(
+          seriesId: _seriesId,
+          title: _manga.title,
+          inLibrary: false,
+        );
+      }
       if (mounted) _reload();
     } catch (error) {
       if (mounted) localFailure(context, error);
     } finally {
-      _savingLibrary = false;
+      if (mounted) {
+        setState(() => _savingLibrary = false);
+      } else {
+        _savingLibrary = false;
+      }
     }
   }
 
@@ -3310,17 +3357,23 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                     child: MangaActionButton(
                                       horizontal: supportsAppleGlass(context),
                                       active: series?.inLibrary == true,
-                                      icon: Icon(
-                                        series?.inLibrary == true
-                                            ? FluentIcons.heart_24_filled
-                                            : FluentIcons.heart_24_regular,
-                                      ),
+                                      icon: _savingLibrary
+                                          ? const SizedBox.square(
+                                              dimension: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Icon(
+                                              series?.inLibrary == true
+                                                  ? FluentIcons.heart_24_filled
+                                                  : FluentIcons
+                                                        .heart_24_regular,
+                                            ),
                                       label: series?.inLibrary == true
                                           ? context.l10n.inLibrary
                                           : context.l10n.addToLibrary,
-                                      onPressed: () => _toggleLibrary(
-                                        series?.inLibrary == true,
-                                      ),
+                                      onPressed: () => _editLibrary(series),
                                     ),
                                   ),
                                   // Same three actions as server series.

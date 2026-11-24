@@ -27,6 +27,7 @@ import '../../../../offline/data/webui_chapter_sort_meta.dart';
 import '../../../../settings/presentation/library/widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import '../../../data/manga_book/manga_book_repository.dart';
 import '../../../domain/chapter/chapter_model.dart';
+import '../../../domain/manga/graphql/__generated__/fragment.graphql.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../../upcoming/controller/upcoming_controller.dart';
 import 'chapter_list_entry.dart';
@@ -101,6 +102,16 @@ class MangaWithId extends _$MangaWithId {
 
   Future<void> refresh() async {
     ref.invalidateSelf();
+  }
+
+  /// Shows a library change before the server confirms it; the next refetch
+  /// replaces it with the server's answer.
+  void showInLibrary(bool inLibrary) {
+    final manga = state.value;
+    if (manga == null || manga.user.inLibrary == inLibrary) return;
+    state = AsyncData(
+      manga.copyWith(user: manga.user.copyWith(inLibrary: inLibrary)),
+    );
   }
 }
 
