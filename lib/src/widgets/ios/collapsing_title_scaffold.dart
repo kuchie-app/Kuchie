@@ -5,10 +5,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../../utils/theme/brand.dart';
-import '../../../widgets/ios/apple_glass_capability.dart';
-import '../../../widgets/ios/apple_glass_floating_header.dart';
-import '../../../widgets/shell/detail_navigation_shell_screen.dart';
+import '../../utils/theme/brand.dart';
+import '../pull_refresh_indicator.dart';
+import '../shell/detail_navigation_shell_screen.dart';
+import 'apple_glass_capability.dart';
+import 'apple_glass_floating_header.dart';
 
 /// A browse screen with a large title that scrolls up into the navigation
 /// bar and a row of filters that stays pinned under it, as in iOS apps.
@@ -16,8 +17,12 @@ import '../../../widgets/shell/detail_navigation_shell_screen.dart';
 /// [body] scrolls behind the bar and the filters. It reads its top padding
 /// from [AppleGlassFloatingHeader.insetOf], and must report scrolling through
 /// [ScrollNotification]s at depth 0.
-class LocalCollapsingHeaderScaffold extends StatefulWidget {
-  const LocalCollapsingHeaderScaffold({
+///
+/// With [onRefresh], pulling the content down moves the title and filters
+/// down with it and shows the refresh arrow above the title; letting go past
+/// the threshold refreshes.
+class CollapsingTitleScaffold extends StatefulWidget {
+  const CollapsingTitleScaffold({
     super.key,
     required this.title,
     this.subtitle,
@@ -25,7 +30,10 @@ class LocalCollapsingHeaderScaffold extends StatefulWidget {
     required this.pinned,
     required this.actions,
     required this.body,
+    this.onRefresh,
   });
+
+  final Future<void> Function()? onRefresh;
 
   final String title;
   final String? subtitle;
@@ -40,12 +48,12 @@ class LocalCollapsingHeaderScaffold extends StatefulWidget {
   final Widget body;
 
   @override
-  State<LocalCollapsingHeaderScaffold> createState() =>
-      _LocalCollapsingHeaderScaffoldState();
+  State<CollapsingTitleScaffold> createState() =>
+      _CollapsingTitleScaffoldState();
 }
 
-class _LocalCollapsingHeaderScaffoldState
-    extends State<LocalCollapsingHeaderScaffold> {
+class _CollapsingTitleScaffoldState extends State<CollapsingTitleScaffold> {
+  /// Scroll position of the body; negative while it is pulled down.
   final _offset = ValueNotifier<double>(0);
 
   // A first-frame estimate for one title line and one subtitle line, so the
@@ -60,7 +68,9 @@ class _LocalCollapsingHeaderScaffoldState
 
   bool _onScroll(ScrollNotification notification) {
     if (notification.depth == 0 && notification.metrics.axis == Axis.vertical) {
-      _offset.value = math.max(0, notification.metrics.pixels);
+      final pixels = notification.metrics.pixels;
+      // While pulling to refresh, the title and filters follow the content.
+      _offset.value = widget.onRefresh == null ? math.max(0, pixels) : pixels;
     }
     return false;
   }
@@ -184,95 +194,112 @@ class _LocalCollapsingHeaderScaffoldState
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: appBar,
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _onScroll,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AppleGlassFloatingHeader(inset: inset, child: widget.body),
-            ),
-            // Covers scrolling under the bar and the filters blur, as on
-            // iOS. Built only once content is under the bar, so a resting
-            // screen pays nothing for it.
-            if (glass)
-              ValueListenableBuilder<double>(
-                valueListenable: _offset,
-                builder: (context, offset, _) {
-                  final covered = (offset / math.max(1, _headerHeight)).clamp(
-                    0.0,
-                    1.0,
-                  );
-                  if (covered < .02) return const SizedBox.shrink();
-                  final bottom =
-                      math.max(barBottom, barBottom + _headerHeight - offset) +
-                      widget.pinned.preferredSize.height;
-                  return Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: bottom,
-                    child: IgnorePointer(
-                      child: ClipRect(
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(
-                            sigmaX: 6 * covered,
-                            sigmaY: 6 * covered,
-                          ),
-                          child: ColoredBox(
-                            color: OnImage.shadow.withValues(
-                              alpha: .12 * covered,
+      body: _withPullToRefresh(
+        barBottom,
+        NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: AppleGlassFloatingHeader(
+                  inset: inset,
+                  child: widget.body,
+                ),
+              ),
+              // Covers scrolling under the bar and the filters blur, as on
+              // iOS. Built only once content is under the bar, so a resting
+              // screen pays nothing for it.
+              if (glass)
+                ValueListenableBuilder<double>(
+                  valueListenable: _offset,
+                  builder: (context, offset, _) {
+                    final covered = (offset / math.max(1, _headerHeight)).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    if (covered < .02) return const SizedBox.shrink();
+                    final bottom =
+                        math.max(
+                          barBottom,
+                          barBottom + _headerHeight - offset,
+                        ) +
+                        widget.pinned.preferredSize.height;
+                    return Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: bottom,
+                      child: IgnorePointer(
+                        child: ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(
+                              sigmaX: 6 * covered,
+                              sigmaY: 6 * covered,
+                            ),
+                            child: ColoredBox(
+                              color: OnImage.shadow.withValues(
+                                alpha: .12 * covered,
+                              ),
                             ),
                           ),
                         ),
                       ),
+                    );
+                  },
+                ),
+              ValueListenableBuilder<double>(
+                valueListenable: _offset,
+                builder: (context, offset, child) {
+                  final hidden = offset >= _headerHeight;
+                  return Positioned(
+                    top: barBottom - offset,
+                    left: 0,
+                    right: 0,
+                    child: Visibility(
+                      visible: !hidden,
+                      maintainState: true,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      child: Opacity(
+                        opacity: (1 - offset / math.max(1, _headerHeight))
+                            .clamp(0.0, 1.0),
+                        child: child,
+                      ),
                     ),
                   );
                 },
+                child: _SizeReporter(onSize: _onHeaderSize, child: header),
               ),
-            ValueListenableBuilder<double>(
-              valueListenable: _offset,
-              builder: (context, offset, child) {
-                final hidden = offset >= _headerHeight;
-                return Positioned(
-                  top: barBottom - offset,
+              ValueListenableBuilder<double>(
+                valueListenable: _offset,
+                builder: (context, offset, child) => Positioned(
+                  top: math.max(barBottom, barBottom + _headerHeight - offset),
                   left: 0,
                   right: 0,
-                  child: Visibility(
-                    visible: !hidden,
-                    maintainState: true,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    child: Opacity(
-                      opacity: (1 - offset / math.max(1, _headerHeight)).clamp(
-                        0.0,
-                        1.0,
-                      ),
-                      child: child,
-                    ),
-                  ),
-                );
-              },
-              child: _SizeReporter(onSize: _onHeaderSize, child: header),
-            ),
-            ValueListenableBuilder<double>(
-              valueListenable: _offset,
-              builder: (context, offset, child) => Positioned(
-                top: math.max(barBottom, barBottom + _headerHeight - offset),
-                left: 0,
-                right: 0,
-                child: child!,
+                  child: child!,
+                ),
+                // Glass chips float over the covers; plain buttons need a
+                // backdrop to stay readable.
+                child: glass
+                    ? widget.pinned
+                    : ColoredBox(color: surface, child: widget.pinned),
               ),
-              // Glass chips float over the covers; plain buttons need a
-              // backdrop to stay readable.
-              child: glass
-                  ? widget.pinned
-                  : ColoredBox(color: surface, child: widget.pinned),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _withPullToRefresh(double barBottom, Widget child) =>
+      switch (widget.onRefresh) {
+        final onRefresh? => PullToRefresh(
+          onRefresh: onRefresh,
+          top: barBottom,
+          child: child,
+        ),
+        null => child,
+      };
 }
 
 /// Reports its child's size after layout.

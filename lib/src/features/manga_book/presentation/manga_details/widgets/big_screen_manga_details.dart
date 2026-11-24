@@ -17,6 +17,7 @@ import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../../widgets/emoticons.dart';
+import '../../../../../widgets/pull_refresh_indicator.dart';
 import '../../../../offline/data/offline_download_providers.dart';
 import '../../../../offline/presentation/offline_settings_format.dart';
 import '../../../domain/chapter/chapter_model.dart';
@@ -24,6 +25,7 @@ import '../../../domain/manga/manga_model.dart';
 import '../controller/chapter_list_entry.dart';
 import '../controller/manga_details_controller.dart';
 import 'add_to_library_category.dart';
+import 'chapter_check_status.dart';
 import 'chapter_context_menu.dart';
 import 'chapter_grid_tile.dart';
 import 'chapter_list_mode_toggle.dart';
@@ -178,8 +180,9 @@ class BigScreenMangaDetails extends HookConsumerWidget {
       );
     }
     previousWide.value = wide;
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: () => onRefresh(true),
+      top: MediaQuery.paddingOf(context).top,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -296,6 +299,16 @@ class BigScreenMangaDetails extends HookConsumerWidget {
                             onRefresh: () => onRefresh(true),
                             onFilter: openFilterPanel,
                           ),
+                    if (!selecting)
+                      ServerChapterCheckStatus(
+                        mangaId: mangaId,
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          16,
+                          4,
+                          16,
+                          6,
+                        ),
+                      ),
                     Expanded(
                       child: listMode == ChapterListMode.grid
                           ? GridView.builder(

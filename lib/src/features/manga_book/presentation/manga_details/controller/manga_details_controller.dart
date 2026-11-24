@@ -212,6 +212,11 @@ class MangaChapterList extends _$MangaChapterList {
     var didSourceFetch = false;
     // Offline refreshes use the catalog; mirror only genuine server responses.
     var fromServer = false;
+    // Chapters the server had before the scrape, to count the new ones.
+    Set<int>? storedIds;
+    var newChapters = 0;
+    final checking = refreshFromSource && !viewOffline;
+    if (checking) _reportCheck((state: ChapterCheckState.checking, count: 0));
     final result = await AsyncValue.guard(
       () => chaptersWithOfflineFallback(
         fetch: () async {
@@ -225,6 +230,13 @@ class MangaChapterList extends _$MangaChapterList {
             final fetched = await repo.getMangaAndChapterList(mangaId);
             if (fetched != null && fetched.isNotEmpty) {
               didSourceFetch = true;
+              if (stored != null && stored.isNotEmpty) {
+                final known = {for (final c in stored) c.id};
+                storedIds = known;
+                newChapters = fetched
+                    .where((c) => !known.contains(c.id))
+                    .length;
+              }
               return fetched;
             }
           } catch (_) {}
@@ -240,6 +252,18 @@ class MangaChapterList extends _$MangaChapterList {
     );
     if (!current()) return;
     ref.keepAlive();
+    if (checking) {
+      _reportCheck(switch ((didSourceFetch, storedIds)) {
+        // A first scrape has nothing to compare with.
+        (true, null) => null,
+        (true, _) when newChapters > 0 => (
+          state: ChapterCheckState.newChapters,
+          count: newChapters,
+        ),
+        (true, _) => (state: ChapterCheckState.upToDate, count: 0),
+        (false, _) => (state: ChapterCheckState.failed, count: 0),
+      });
+    }
     // Source scraping also changes metadata, so refresh it alongside chapters.
     if (didSourceFetch && ref.mounted) {
       ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
@@ -260,6 +284,12 @@ class MangaChapterList extends _$MangaChapterList {
     }
   }
 
+  /// Feeds the status line above the series page's chapter list.
+  void _reportCheck(ChapterCheck? check) {
+    if (!ref.mounted) return;
+    ref.read(mangaChapterCheckProvider(mangaId: mangaId).notifier).set(check);
+  }
+
   void updateChapter(int index, ChapterDto chapter) {
     final current = state.value;
     if (current == null || index < 0 || index >= current.length) return;
@@ -267,6 +297,23 @@ class MangaChapterList extends _$MangaChapterList {
     newList[index] = chapter;
     state = AsyncData<List<ChapterDto>?>(newList);
   }
+}
+
+enum ChapterCheckState { checking, upToDate, newChapters, failed }
+
+/// Outcome of checking the source for new chapters; [count] is set for
+/// [ChapterCheckState.newChapters].
+typedef ChapterCheck = ({ChapterCheckState state, int count});
+
+/// The latest check for new chapters of a series, for the line above its
+/// chapter list; null when there is nothing to say. Cleared once the series
+/// page is closed.
+@riverpod
+class MangaChapterCheck extends _$MangaChapterCheck {
+  @override
+  ChapterCheck? build({required int mangaId}) => null;
+
+  void set(ChapterCheck? check) => state = check;
 }
 
 @riverpod
