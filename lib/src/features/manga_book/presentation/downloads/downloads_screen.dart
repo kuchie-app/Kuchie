@@ -146,6 +146,8 @@ class DownloadsScreen extends HookConsumerWidget {
             labels: labels,
             selectedIndex: tabController.index,
             onSelected: tabController.animateTo,
+            // Follows the pages while they are swiped.
+            position: tabController.animation,
             fallback: materialTabs,
           )
         : materialTabs;
