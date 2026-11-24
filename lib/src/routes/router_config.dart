@@ -80,6 +80,7 @@ import '../utils/motion/reduce_motion.dart';
 import '../widgets/desktop/desktop_page_frame.dart';
 import '../widgets/shell/detail_navigation_shell_screen.dart';
 import '../widgets/shell/navigation_shell_screen.dart';
+import 'reader_swipe_back_route.dart';
 
 part 'router_config.g.dart';
 part 'detail_navigation_page.dart';

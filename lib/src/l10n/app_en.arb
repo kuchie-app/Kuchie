@@ -4670,5 +4670,12 @@
   "customizeTabs": "Customize tabs",
   "customizeTabsSubtitle": "Arrange and choose your navigation tabs",
   "customizeTabsLabels": "Labels",
-  "customizeTabsLabelsSubtitle": "Show or hide labels under icons"
+  "customizeTabsLabelsSubtitle": "Show or hide labels under icons",
+  "chapterCheckRefreshing": "Refreshing",
+  "@chapterCheckRefreshing": {
+    "description": "Shown above the chapter list while the source is checked for new chapters"
+  },
+  "chapterCheckUpToDate": "No new chapters found",
+  "chapterCheckNew": "{count, plural, =1{1 new chapter} other{{count} new chapters}}",
+  "chapterCheckFailed": "Couldn't check for new chapters"
 }

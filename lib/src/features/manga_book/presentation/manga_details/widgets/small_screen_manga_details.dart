@@ -16,11 +16,13 @@ import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../../widgets/emoticons.dart';
 import '../../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../../widgets/pull_refresh_indicator.dart';
 import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../controller/chapter_list_entry.dart';
 import '../controller/manga_details_controller.dart';
 import 'add_to_library_category.dart';
+import 'chapter_check_status.dart';
 import 'chapter_context_menu.dart';
 import 'chapter_grid_tile.dart';
 import 'chapter_list_mode_toggle.dart';
@@ -63,8 +65,10 @@ class SmallScreenMangaDetails extends HookConsumerWidget {
     final listMode = ref.watch(mangaChapterListModeProvider(mangaId: mangaId));
     final chapterCount =
         chapterEntries?.whereType<MangaChapterEntry>().length ?? 0;
-    return RefreshIndicator(
+    // The arrow shows under the bar, which the page scrolls behind.
+    return PullToRefresh(
       onRefresh: () => onRefresh(true),
+      top: MediaQuery.paddingOf(context).top,
       child: DesktopFullBleedScroll(
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -126,6 +130,9 @@ class SmallScreenMangaDetails extends HookConsumerWidget {
                   ],
                 ),
               ),
+            ),
+            SliverToBoxAdapter(
+              child: ServerChapterCheckStatus(mangaId: mangaId),
             ),
             chapterList.showUiWhenData(
               context,

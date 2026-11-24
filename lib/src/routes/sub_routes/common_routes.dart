@@ -64,7 +64,8 @@ class ReaderRoute extends GoRouteData with $ReaderRoute {
 
   @override
   Page<void> buildPage(context, state) {
-    return CustomTransitionPage(
+    // Swipe from the left edge to close, back to the series page.
+    return ReaderSwipeBackPage(
       key: state.pageKey,
       child: ReaderScreen(
         mangaId: mangaId,

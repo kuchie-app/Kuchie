@@ -15,6 +15,7 @@ import '../../../constants/app_sizes.dart';
 import '../../../constants/db_keys.dart';
 import '../../../constants/enum.dart';
 import '../../../constants/language_list.dart';
+import '../../../routes/reader_swipe_back_route.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/hooks/paging_controller_hook.dart';
 import '../../../utils/motion/reduce_motion.dart';
@@ -29,12 +30,14 @@ import '../../../widgets/ios/apple_glass_popover.dart';
 import '../../../widgets/ios/apple_glass_segments.dart';
 import '../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../widgets/ios/apple_page_title.dart';
+import '../../../widgets/ios/collapsing_title_scaffold.dart';
 import '../../../widgets/kuchie_character_motion.dart';
 import '../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import '../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
 import '../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
 import '../../../widgets/paging_footer.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
+import '../../../widgets/pull_refresh_indicator.dart';
 import '../../../widgets/search_field.dart';
 import '../../../widgets/selection_action_bar.dart';
 import '../../../widgets/server_image.dart';
@@ -48,6 +51,7 @@ import '../../browse_center/presentation/source/widgets/source_list_tile.dart';
 import '../../browse_center/presentation/source_manga_list/widgets/source_manga_filter.dart';
 import '../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
 import '../../manga_book/presentation/manga_details/widgets/add_to_library_category.dart';
+import '../../manga_book/presentation/manga_details/widgets/chapter_check_status.dart';
 import '../../manga_book/presentation/manga_details/widgets/chapter_context_menu.dart'
     show ChapterMenuRow, menuAnchorForPoint;
 import '../../manga_book/presentation/manga_details/widgets/chapter_grid_tile.dart';
@@ -67,7 +71,6 @@ import '../data/local_mihon_runtime.dart';
 import '../data/local_network_settings.dart';
 import '../data/local_sources.dart';
 import '../data/package_catalog_index.dart';
-import 'local_collapsing_header.dart';
 import 'local_reader.dart';
 import 'local_series_personal.dart';
 import 'local_source_settings.dart';
@@ -2067,8 +2070,10 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
             ),
           )
         : null;
-    return LocalCollapsingHeaderScaffold(
+    return CollapsingTitleScaffold(
       title: extension.name,
+      // Pull down above the title to load the catalogue again.
+      onRefresh: () async => _paging.refresh(),
       subtitle: extension.homepage?.toString(),
       below: _showSearch || savedNote != null
           ? Column(
@@ -2268,36 +2273,31 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
                 ),
               ),
       );
-      return RefreshIndicator(
-        edgeOffset: inset,
-        onRefresh: () async => _paging.refresh(),
-        child: _showList
-            ? PagedListView<int, LocalSourceManga>(
-                state: state,
-                fetchNextPage: fetchNextPage,
-                padding: padding,
-                physics: const AlwaysScrollableScrollPhysics(),
-                builderDelegate: delegate,
-              )
-            : PagedGridView<int, LocalSourceManga>(
-                state: state,
-                fetchNextPage: fetchNextPage,
-                padding: padding,
-                physics: const AlwaysScrollableScrollPhysics(),
-                showNewPageErrorIndicatorAsGridChild: false,
-                showNewPageProgressIndicatorAsGridChild: false,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount:
-                      context.windowSizeClass == WindowSizeClass.compact
-                      ? 2
-                      : 4,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                  childAspectRatio: .74,
-                ),
-                builderDelegate: delegate,
+      // Pull-to-refresh lives in the header scaffold, above the title.
+      return _showList
+          ? PagedListView<int, LocalSourceManga>(
+              state: state,
+              fetchNextPage: fetchNextPage,
+              padding: padding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              builderDelegate: delegate,
+            )
+          : PagedGridView<int, LocalSourceManga>(
+              state: state,
+              fetchNextPage: fetchNextPage,
+              padding: padding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              showNewPageErrorIndicatorAsGridChild: false,
+              showNewPageProgressIndicatorAsGridChild: false,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:
+                    context.windowSizeClass == WindowSizeClass.compact ? 2 : 4,
+                crossAxisSpacing: 4,
+                mainAxisSpacing: 4,
+                childAspectRatio: .74,
               ),
-      );
+              builderDelegate: delegate,
+            );
     },
   );
 }
@@ -2452,8 +2452,45 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
       localSourceSeriesId(widget.extension, widget.manga.id);
   LocalDownloadQueue get _queue => widget.services.downloads;
 
-  Future<List<LocalSourceChapter>> _load() =>
-      widget.services.sources.chapters(widget.extension.id, widget.manga);
+  /// The line above the chapter list: checking, nothing new, or new chapters.
+  ChapterCheck? _check;
+  int _checkRequest = 0;
+
+  Future<List<LocalSourceChapter>> _load() {
+    final chapters = widget.services.sources.chapters(
+      widget.extension.id,
+      widget.manga,
+    );
+    // Callers rebuild right after, so no setState here.
+    _check = (state: ChapterCheckState.checking, count: 0);
+    unawaited(_trackCheck(chapters));
+    return chapters;
+  }
+
+  /// Compares with the chapter count seen last time this series was opened.
+  Future<void> _trackCheck(Future<List<LocalSourceChapter>> chapters) async {
+    final request = ++_checkRequest;
+    ChapterCheck? result;
+    try {
+      final count = (await chapters).length;
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'local.reader.chapterCount.$_seriesId';
+      final before = prefs.getInt(key);
+      await prefs.setInt(key, count);
+      result = switch (before) {
+        // First visit: nothing to compare with.
+        null => null,
+        final before when count > before => (
+          state: ChapterCheckState.newChapters,
+          count: count - before,
+        ),
+        _ => (state: ChapterCheckState.upToDate, count: 0),
+      };
+    } catch (_) {
+      result = (state: ChapterCheckState.failed, count: 0);
+    }
+    if (mounted && request == _checkRequest) setState(() => _check = result);
+  }
 
   @override
   void initState() {
@@ -3313,8 +3350,10 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                       }
                       return false;
                     },
-                    child: RefreshIndicator(
+                    // The arrow shows under the bar the page scrolls behind.
+                    child: PullToRefresh(
                       onRefresh: _refresh,
+                      top: MediaQuery.paddingOf(context).top,
                       child: CustomScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
@@ -3512,6 +3551,9 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                               ),
                             ),
                           ),
+                          SliverToBoxAdapter(
+                            child: ChapterCheckStatus(check: _check),
+                          ),
                           if (snapshot.hasError)
                             SliverToBoxAdapter(
                               child: Center(
@@ -3624,8 +3666,9 @@ Future<void> openLocalSourceChapter(
   LocalSeries? savedSeries,
 }) {
   unawaited(keepLocalSourceCover(services, seriesId, manga, replace: false));
+  // Swipe from the left edge to close, back to the series page.
   return Navigator.of(context).push<void>(
-    MaterialPageRoute(
+    ReaderSwipeBackRoute(
       builder: (_) => _LocalChapterSession(
         services: services,
         extension: extension,
@@ -3754,7 +3797,7 @@ Future<void> openSavedLocalChapter(
   LocalSeries series,
   LocalChapter chapter,
 ) => Navigator.of(context).push<void>(
-  MaterialPageRoute(
+  ReaderSwipeBackRoute(
     builder: (_) => _LocalChapterSession(
       services: services,
       chapters: const [],

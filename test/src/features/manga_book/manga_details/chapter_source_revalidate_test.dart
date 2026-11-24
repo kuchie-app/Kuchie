@@ -18,7 +18,7 @@ class _SessionStore extends AuthCredentialsStore {
 }
 
 class _Repository extends MangaBookRepository {
-  _Repository()
+  _Repository({this.scraped})
     : super(
         GraphQLClient(
           link: HttpLink('http://localhost:0'),
@@ -26,6 +26,9 @@ class _Repository extends MangaBookRepository {
         ),
       );
   int sourceRequests = 0;
+
+  /// What the source returns; null makes the scrape fail.
+  final List<ChapterDto>? Function()? scraped;
 
   @override
   Future<List<ChapterDto>?> getStoredChapterList(int mangaId) async => [
@@ -35,16 +38,21 @@ class _Repository extends MangaBookRepository {
   @override
   Future<List<ChapterDto>?> getMangaAndChapterList(int mangaId) async {
     sourceRequests++;
-    return [ch(id: 1, number: 1), ch(id: 2, number: 2)];
+    final scraped = this.scraped;
+    if (scraped == null) return [ch(id: 1, number: 1), ch(id: 2, number: 2)];
+    final chapters = scraped();
+    if (chapters == null) throw StateError('source down');
+    return chapters;
   }
 }
 
 Future<(ProviderContainer, _Repository)> _open(
-  Map<String, Object> prefsValues,
-) async {
+  Map<String, Object> prefsValues, {
+  List<ChapterDto>? Function()? scraped,
+}) async {
   SharedPreferences.setMockInitialValues(prefsValues);
   final prefs = await SharedPreferences.getInstance();
-  final repo = _Repository();
+  final repo = _Repository(scraped: scraped);
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
@@ -63,19 +71,22 @@ void main() {
   List<int>? ids(ProviderContainer c) =>
       c.read(provider).value?.map((chapter) => chapter.id).toList();
 
-  test('opening a series shows stored chapters, then the source scrape', () async {
-    final (container, repo) = await _open({});
-    addTearDown(container.dispose);
-    final subscription = container.listen(provider, (_, _) {});
-    addTearDown(subscription.close);
+  test(
+    'opening a series shows stored chapters, then the source scrape',
+    () async {
+      final (container, repo) = await _open({});
+      addTearDown(container.dispose);
+      final subscription = container.listen(provider, (_, _) {});
+      addTearDown(subscription.close);
 
-    final first = await container.read(provider.future);
-    expect(first!.map((chapter) => chapter.id), [1]);
+      final first = await container.read(provider.future);
+      expect(first!.map((chapter) => chapter.id), [1]);
 
-    await pumpEventQueue();
-    expect(repo.sourceRequests, 1);
-    expect(ids(container), [1, 2]);
-  });
+      await pumpEventQueue();
+      expect(repo.sourceRequests, 1);
+      expect(ids(container), [1, 2]);
+    },
+  );
 
   test('turning source refresh off keeps the stored chapters only', () async {
     final (container, repo) = await _open({
@@ -89,5 +100,54 @@ void main() {
     await pumpEventQueue();
     expect(repo.sourceRequests, 0);
     expect(ids(container), [1]);
+  });
+
+  group('the line above the chapter list', () {
+    final check = mangaChapterCheckProvider(mangaId: 1);
+
+    Future<ChapterCheck?> checkAfterOpen(
+      List<ChapterDto>? Function() scraped,
+    ) async {
+      final (container, _) = await _open({}, scraped: scraped);
+      addTearDown(container.dispose);
+      final states = <ChapterCheck?>[];
+      final keepCheck = container.listen(
+        check,
+        (_, next) => states.add(next),
+        fireImmediately: true,
+      );
+      addTearDown(keepCheck.close);
+      final keepList = container.listen(provider, (_, _) {});
+      addTearDown(keepList.close);
+      await container.read(provider.future);
+      await pumpEventQueue();
+      expect(
+        states.map((s) => s?.state),
+        contains(ChapterCheckState.checking),
+        reason: 'it says it is refreshing first',
+      );
+      return container.read(check);
+    }
+
+    test('counts chapters the source added', () async {
+      final result = await checkAfterOpen(
+        () => [
+          ch(id: 1, number: 1),
+          ch(id: 2, number: 2),
+          ch(id: 3, number: 3),
+        ],
+      );
+      expect(result, (state: ChapterCheckState.newChapters, count: 2));
+    });
+
+    test('says nothing is new when the source has the same chapters', () async {
+      final result = await checkAfterOpen(() => [ch(id: 1, number: 1)]);
+      expect(result, (state: ChapterCheckState.upToDate, count: 0));
+    });
+
+    test('says the check failed when the source is down', () async {
+      final result = await checkAfterOpen(() => null);
+      expect(result, (state: ChapterCheckState.failed, count: 0));
+    });
   });
 }

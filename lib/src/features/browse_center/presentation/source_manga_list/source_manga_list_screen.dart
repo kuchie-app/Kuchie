@@ -19,9 +19,11 @@ import '../../../../widgets/app_bottom_sheet.dart';
 import '../../../../widgets/desktop/desktop_top_bar.dart';
 import '../../../../widgets/desktop/desktop_view_switch.dart';
 import '../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../widgets/ios/apple_glass_floating_header.dart';
 import '../../../../widgets/ios/apple_glass_segments.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../widgets/ios/apple_page_title.dart';
+import '../../../../widgets/ios/collapsing_title_scaffold.dart';
 import '../../../../widgets/search_field.dart';
 import '../../../../widgets/server_image.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
@@ -504,17 +506,21 @@ class SourceMangaListScreen extends HookConsumerWidget {
               ),
           ],
         );
+        Widget displayView({required double topPadding}) =>
+            SourceMangaDisplayView(
+              sourceId: sourceId,
+              sourceType: sourceType,
+              controller: controller,
+              source: data,
+              topPadding: topPadding,
+              onSelectingChanged: (v) {
+                if (context.mounted) selecting.value = v;
+              },
+            );
         final listBody = RefreshIndicator(
           onRefresh: () async => refresh(),
-          child: SourceMangaDisplayView(
-            sourceId: sourceId,
-            sourceType: sourceType,
-            controller: controller,
-            source: data,
+          child: displayView(
             topPadding: glass ? _glassSegmentHeight + _glassResultSpacing : 0,
-            onSelectingChanged: (v) {
-              if (context.mounted) selecting.value = v;
-            },
           ),
         );
         if (context.usesDesktopShell) {
@@ -846,6 +852,24 @@ class SourceMangaListScreen extends HookConsumerWidget {
             ),
             minWidth: searchTopBarSlotMinWidth(slotActionCount, leadingWidth),
             child: desktopScaffold,
+          );
+        }
+        if (glass && !topBar) {
+          // As on iOS: the large title scrolls up into the bar, the
+          // segments stay pinned under it, and pulling down above the title
+          // reloads the catalogue.
+          return CollapsingTitleScaffold(
+            title: sourceName,
+            subtitle: sourceHost,
+            below: showSearch.value ? toolbarBottom : null,
+            pinned: glassSegments,
+            actions: glassActions,
+            onRefresh: () async => refresh(),
+            body: Builder(
+              builder: (context) => displayView(
+                topPadding: AppleGlassFloatingHeader.insetOf(context),
+              ),
+            ),
           );
         }
         final scaffold = Scaffold(
