@@ -876,5 +876,7 @@
     "chapterCheckRefreshing": "Memperbarui",
     "chapterCheckUpToDate": "Tidak ada bab baru",
     "chapterCheckNew": "{count, plural, other{{count} bab baru}}",
-    "chapterCheckFailed": "Gagal memeriksa bab baru"
+    "chapterCheckFailed": "Gagal memeriksa bab baru",
+    "readerChapterFinished": "Selesai:",
+    "readerChapterCurrent": "Sekarang:"
 }

@@ -31,7 +31,6 @@ import '../../../../../../history/presentation/history_controller.dart';
 import '../../../../../../offline/data/offline_download_providers.dart';
 import '../../../../../../offline/data/offline_repository.dart';
 import '../../../../../../settings/presentation/incognito/incognito_mode.dart';
-import '../../../../../../settings/presentation/reader/widgets/reader_feedback_toasts_tile/reader_feedback_toasts_tile.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_mouse_scroll_speed_slider/reader_mouse_scroll_speed_slider.dart';
 import '../../../../../../settings/presentation/reader/widgets/reader_paged_prefs/reader_paged_prefs.dart';
@@ -124,8 +123,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     watchDownloadAhead(ref);
-    bool readerToastsEnabled() =>
-        ref.read(readerFeedbackToastsProvider).ifNull(true);
     final ItemScrollController itemScrollController = useMemoized(
       () => ItemScrollController(),
     );
@@ -174,7 +171,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
     final hasReachedEnd = useState(false);
     final hasReachedStart = useState(false);
 
-    final lastStartFeedbackTime = useRef<DateTime?>(null);
     final completedChapterIds = useRef<Set<int>>({});
 
     // Session protection: protect each chapter opened in this reader from
@@ -738,12 +734,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       if (loadedRef.value.any((e) => e.chapterId == next.id)) return;
       loadingNext.value = true;
       try {
-        if (context.mounted && readerToastsEnabled()) {
-          InfinityContinuousFeedback.showLoadingNextChapterFeedback(
-            context,
-            next.name,
-          );
-        }
         // Hold the autoDispose neighbour provider until fetch completion so timeout retries can reuse its result.
         final sub = ref.listenManual(
           chapterPagesProvider(chapterId: next.id),
@@ -769,12 +759,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
           (pages: pages, chapter: next, chapterId: next.id),
         ];
         prefetchPagesFrom(currentGlobalIndex());
-        if (context.mounted && readerToastsEnabled()) {
-          InfinityContinuousFeedback.showNextChapterLoadedFeedback(
-            context,
-            next.name,
-          );
-        }
       } catch (_) {
         // Invalidate transient failures so the next gesture can retry.
         ref.invalidate(chapterPagesProvider(chapterId: next.id));
@@ -788,12 +772,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       if (loadedRef.value.any((e) => e.chapterId == prev.id)) return;
       loadingPrevious.value = true;
       try {
-        if (context.mounted && readerToastsEnabled()) {
-          InfinityContinuousFeedback.showLoadingPreviousChapterFeedback(
-            context,
-            prev.name,
-          );
-        }
         final sub = ref.listenManual(
           chapterPagesProvider(chapterId: prev.id),
           (_, _) {},
@@ -865,13 +843,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
               });
             }
           });
-        }
-
-        if (context.mounted && readerToastsEnabled()) {
-          InfinityContinuousFeedback.showPreviousChapterLoadedFeedback(
-            context,
-            prev.name,
-          );
         }
       } catch (_) {
         // Invalidate transient failures so the next gesture can retry.
@@ -1010,12 +981,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
             loadPreviousChapter(prev);
           } else if (pair != null && !hasReachedStart.value) {
             hasReachedStart.value = true;
-            if (readerToastsEnabled()) {
-              InfinityContinuousFeedback.showStartOfMangaFeedback(
-                context,
-                lastStartFeedbackTime,
-              );
-            }
           }
         }
       }
@@ -1249,6 +1214,8 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       // A null pair means the chapter list hasn't loaded yet.
       final marker = InfinityContinuousChapterSeparator(
         chapterName: loadedChapters.value.last.chapter.name,
+        // The next chapter, if any, loads in quietly behind this marker.
+        nextChapterName: pair?.first?.name,
         isChapterStart: false,
         note: pair != null && pair.first == null
             ? context.l10n.noMoreChaptersAhead
@@ -1446,6 +1413,7 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       if (info == null) return pageGap;
       return InfinityContinuousChapterSeparator(
         chapterName: info.chapterName,
+        nextChapterName: info.nextChapterName,
         isChapterStart: info.isChapterStart,
         alwaysShow: alwaysShowTransition,
         gapCount: info.gapCount,

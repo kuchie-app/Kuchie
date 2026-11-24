@@ -58,7 +58,6 @@ const List<String> _preReorgIds = [
   'swipeChapterToggle',
   'lastPageSwipe',
   'scrollAnimation',
-  'feedbackToasts',
   'mouseScrollSpeed',
   'pagedTapZones',
   'pagedTapInvert',
