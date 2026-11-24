@@ -101,7 +101,6 @@ enum DBKeys<T> {
   globalSearchSourceFilter(GlobalSearchSourceFilter.pinned),
   gridMangaCoverMinWidth(128.0),
   readerOverlay(false),
-  readerFeedbackToasts(true),
   volumeTap(false),
   volumeTapInvert(false),
   keepScreenOn(false),

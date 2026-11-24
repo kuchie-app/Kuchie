@@ -4677,5 +4677,10 @@
   },
   "chapterCheckUpToDate": "No new chapters found",
   "chapterCheckNew": "{count, plural, =1{1 new chapter} other{{count} new chapters}}",
-  "chapterCheckFailed": "Couldn't check for new chapters"
+  "chapterCheckFailed": "Couldn't check for new chapters",
+  "readerChapterFinished": "Finished:",
+  "@readerChapterFinished": {
+    "description": "Label above the chapter just read, on the marker between chapters in the reader"
+  },
+  "readerChapterCurrent": "Current:"
 }

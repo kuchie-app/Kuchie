@@ -497,14 +497,6 @@ List<SettingsSearchEntry> get readerSettingsSearchEntries => [
     visible: (_, _) => true,
   ),
   SettingsSearchEntry(
-    id: 'feedbackToasts',
-    title: (l) => l.readerFeedbackToasts,
-    subtitle: (l) => l.readerFeedbackToastsSubtitle,
-    breadcrumb: (l) => '${l.reader} › ${l.readerGroupReading}',
-    open: (c) => const ReaderSettingsRoute(highlight: 'feedbackToasts').push(c),
-    visible: (_, _) => true,
-  ),
-  SettingsSearchEntry(
     id: 'mouseScrollSpeed',
     title: (l) => l.readerMouseScrollSpeed,
     breadcrumb: (l) => '${l.reader} › ${l.readerGroupNavigation}',

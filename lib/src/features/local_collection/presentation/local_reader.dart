@@ -810,6 +810,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
             chapterName: _chapter.title,
             isChapterStart: false,
             alwaysShow: alwaysShow,
+            note: next == null ? context.l10n.noMoreChaptersAhead : null,
           ),
           if (next != null)
             TextButton(onPressed: nextChapter, child: Text(next.title)),

@@ -19,7 +19,6 @@ import '../../../../../history/presentation/history_controller.dart';
 import '../../../../../offline/data/offline_download_providers.dart';
 import '../../../../../offline/data/offline_repository.dart';
 import '../../../../../settings/presentation/incognito/incognito_mode.dart';
-import '../../../../../settings/presentation/reader/widgets/reader_feedback_toasts_tile/reader_feedback_toasts_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_mouse_scroll_speed_slider/reader_mouse_scroll_speed_slider.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_webtoon_prefs/reader_webtoon_prefs.dart';
 import '../../../../../tracking/domain/track_progress_gate.dart';
@@ -80,20 +79,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     watchDownloadAhead(ref);
-    bool readerToastsEnabled() =>
-        ref.read(readerFeedbackToastsProvider).ifNull(true);
-
-    // Defer feedback outside hook initialization, where inherited l10n lookups are invalid.
-    void deferFeedback(VoidCallback show) {
-      if (!readerToastsEnabled()) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) return;
-        try {
-          show();
-        } catch (_) {}
-      });
-    }
-
     final controller = useMemoized(() => PagedReaderController());
     final settings = ref.watch(readerEffectiveSettingsProvider(manga.id));
 
@@ -163,8 +148,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
     final loadingPrevious = useState(false);
     final hasReachedEnd = useState(false);
     final hasReachedStart = useState(false);
-    final lastEndFeedbackTime = useRef<DateTime?>(null);
-    final lastStartFeedbackTime = useRef<DateTime?>(null);
     final completedChapterIds = useRef<Set<int>>({});
 
     final sessionChapterIds = useRef<Set<int>>({});
@@ -413,12 +396,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         (_, _) {},
       );
       try {
-        deferFeedback(
-          () => InfinityContinuousFeedback.showLoadingNextChapterFeedback(
-            context,
-            next.name,
-          ),
-        );
         final ChapterPagesDto? pages;
         try {
           pages = await ref
@@ -439,12 +416,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
           ...base,
           (pages: pages, chapter: next, chapterId: next.id),
         ];
-        deferFeedback(
-          () => InfinityContinuousFeedback.showNextChapterLoadedFeedback(
-            context,
-            next.name,
-          ),
-        );
       } catch (_) {
         // Invalidate transient failures so the next gesture can retry.
         if (context.mounted) {
@@ -467,12 +438,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         (_, _) {},
       );
       try {
-        deferFeedback(
-          () => InfinityContinuousFeedback.showLoadingPreviousChapterFeedback(
-            context,
-            prev.name,
-          ),
-        );
         final ChapterPagesDto? pages;
         try {
           pages = await ref
@@ -492,12 +457,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
           (pages: pages, chapter: prev, chapterId: prev.id),
           ...base,
         ];
-        deferFeedback(
-          () => InfinityContinuousFeedback.showPreviousChapterLoadedFeedback(
-            context,
-            prev.name,
-          ),
-        );
       } catch (_) {
         if (context.mounted) {
           ref.invalidate(chapterPagesProvider(chapterId: prev.id));
@@ -703,12 +662,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         );
         return;
       }
-      if (nextChapterExists) return; // more to load — no end feedback
-      if (!context.mounted || !readerToastsEnabled()) return;
-      InfinityContinuousFeedback.showEndOfMangaFeedback(
-        context,
-        lastEndFeedbackTime,
-      );
     }
 
     void onReachedStartEdge() {
@@ -722,12 +675,6 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
         );
         return;
       }
-      if (prevChapterExists) return;
-      if (!context.mounted || !readerToastsEnabled()) return;
-      InfinityContinuousFeedback.showStartOfMangaFeedback(
-        context,
-        lastStartFeedbackTime,
-      );
     }
 
     String nameForChapter(int? id) {
@@ -753,9 +700,15 @@ class MultiChapterPagedReaderMode extends HookConsumerWidget {
           ? headAdjacency?.second
           : chapterById(t.fromChapterId);
       final to = t.isEnd ? tailAdjacency?.first : chapterById(t.toChapterId);
+      // Between chapters: "Finished: <from>", "Current: <to>". The very first
+      // page names the chapter beginning; the last says when none follows.
       return _PagedChapterTransition(
-        chapterName: name,
-        isChapterStart: !t.isEnd,
+        chapterName: t.isStart ? name : nameForChapter(t.fromChapterId),
+        nextChapterName: t.isStart ? null : to?.name,
+        isChapterStart: t.isStart,
+        note: t.isEnd && tailAdjacency != null && to == null
+            ? context.l10n.noMoreChaptersAhead
+            : null,
         gapCount: chapterGap(
           higher: to?.chapterNumber,
           lower: from?.chapterNumber,
@@ -925,11 +878,15 @@ class _PagedChapterTransition extends StatelessWidget {
     required this.chapterName,
     required this.isChapterStart,
     required this.gapCount,
+    this.nextChapterName,
+    this.note,
   });
 
   final String chapterName;
   final bool isChapterStart;
   final int gapCount;
+  final String? nextChapterName;
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -938,6 +895,8 @@ class _PagedChapterTransition extends StatelessWidget {
         child: InfinityContinuousChapterSeparator(
           chapterName: chapterName,
           isChapterStart: isChapterStart,
+          nextChapterName: nextChapterName,
+          note: note,
           gapCount: gapCount,
         ),
       ),
