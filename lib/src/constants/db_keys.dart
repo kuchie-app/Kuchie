@@ -108,7 +108,7 @@ enum DBKeys<T> {
   hideEmptyCategory(false),
   showUpdateProgressBanner(true),
   sidebarExpanded(true),
-  refreshChaptersFromSource(false),
+  refreshChaptersFromSource(true),
   pinchToZoom(true),
   readerIgnoreSafeArea(true),
   appTheme(AppTheme.indigoNight),
