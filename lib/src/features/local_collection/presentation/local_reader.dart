@@ -983,9 +983,6 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
             ref,
             mode: mode,
             layout: navigationLayout,
-            seriesOverride: settings.tapInvert == TapInvert.none
-                ? null
-                : settings.tapInvert,
           ),
           smallerTapZones: settings.smallerTapZones,
         ),
@@ -1048,9 +1045,6 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       ref,
       mode: mode,
       layout: zonesLayout,
-      seriesOverride: settings.tapInvert == TapInvert.none
-          ? null
-          : settings.tapInvert,
     );
     final pageContent = Stack(
       fit: StackFit.expand,

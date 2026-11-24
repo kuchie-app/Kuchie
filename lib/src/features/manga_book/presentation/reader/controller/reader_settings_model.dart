@@ -533,9 +533,7 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
   late InvertedColors _invertedColors;
   // Globals of the per-series fields, for the "For this series" OFF path.
   late ReaderModeKey _readerModeKey;
-  late ReaderNavigationLayoutKey _navigationLayoutKey;
   late ReaderOrientationKey _readerOrientationKey;
-  late ReaderTapInvertKey _readerTapInvertKey;
   late ReaderPaddingKey _readerPaddingKey;
 
   @override
@@ -610,9 +608,7 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
     _grayscale = ref.read(grayscaleProvider.notifier);
     _invertedColors = ref.read(invertedColorsProvider.notifier);
     _readerModeKey = ref.read(readerModeKeyProvider.notifier);
-    _navigationLayoutKey = ref.read(readerNavigationLayoutKeyProvider.notifier);
     _readerOrientationKey = ref.read(readerOrientationKeyProvider.notifier);
-    _readerTapInvertKey = ref.read(readerTapInvertKeyProvider.notifier);
     _readerPaddingKey = ref.read(readerPaddingKeyProvider.notifier);
     if (localSeriesId != null) {
       final preferences = ref.watch(sharedPreferencesProvider);
@@ -629,23 +625,16 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
   ReaderSettingsState _resolve(MangaMeta? meta) {
     return ReaderSettingsState(
       readerMode: ReaderSettings.mode.resolveWith(ref, meta?.readerMode),
-      navigationLayout: ReaderSettings.navigationLayout.resolveWith(
-        ref,
-        meta?.readerNavigationLayout,
-      ),
-      sidePadding: ReaderSettings.sidePadding.resolveWith(
-        ref,
-        meta?.readerPadding,
-      ),
+      // Tap zones, tap inversion, padding and rotation are app-wide: older
+      // per-series overrides are ignored so no series drifts from Settings.
+      navigationLayout: ReaderSettings.navigationLayout.resolveWith(ref, null),
+      sidePadding: ReaderSettings.sidePadding.resolveWith(ref, null),
       invertTap: ReaderSettings.invertTap.resolveWith(ref, null),
       readerOrientation: ReaderSettings.readerOrientation.resolveWith(
         ref,
-        meta?.readerOrientation,
+        null,
       ),
-      tapInvert: ReaderSettings.tapInvert.resolveWith(
-        ref,
-        meta?.readerTapInvert,
-      ),
+      tapInvert: ReaderSettings.tapInvert.resolveWith(ref, null),
       pinchToZoom: ReaderSettings.pinchToZoom.resolveWith(ref, null),
       doubleTapToZoom: ReaderSettings.doubleTapToZoom.resolveWith(ref, null),
       disableZoomOut: ReaderSettings.disableZoomOut.resolveWith(ref, null),
@@ -899,43 +888,24 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
     );
   }
 
-  /// The global branch targets an unused legacy key; global controls must use paged/long-strip keys.
-  Future<void> setNavigationLayout(
+  /// Saves the tap zones for the paged or the long-strip viewer, the same
+  /// preference Settings edits, so every series and the local reader follow.
+  void setNavigationLayout(
     ReaderNavigationLayout layout, {
-    bool perSeries = true,
-  }) => perSeries
-      ? _patchMeta(MangaMetaKeys.readerNavigationLayout, layout.name)
-      : _clearMetaThenWriteGlobal(
-          MangaMetaKeys.readerNavigationLayout,
-          () => _navigationLayoutKey.update(layout),
-        );
+    required bool longStrip,
+  }) => longStrip
+      ? ref.read(longStripNavigationLayoutKeyProvider.notifier).update(layout)
+      : ref.read(pagedNavigationLayoutKeyProvider.notifier).update(layout);
 
-  Future<void> setSidePadding(double value, {bool perSeries = true}) =>
-      perSeries
-      ? _patchMeta(MangaMetaKeys.readerPadding, value)
-      : _clearMetaThenWriteGlobal(
-          MangaMetaKeys.readerPadding,
-          () => _readerPaddingKey.update(value),
-        );
+  /// Saves tap inversion for the paged or the long-strip viewer, as Settings does.
+  void setTapInvert(TapInvert value, {required bool longStrip}) => longStrip
+      ? ref.read(longStripTapInvertKeyProvider.notifier).update(value)
+      : ref.read(pagedTapInvertKeyProvider.notifier).update(value);
 
-  Future<void> setReaderOrientation(
-    ReaderOrientation orientation, {
-    bool perSeries = true,
-  }) => perSeries
-      ? _patchMeta(MangaMetaKeys.readerOrientation, orientation.name)
-      : _clearMetaThenWriteGlobal(
-          MangaMetaKeys.readerOrientation,
-          () => _readerOrientationKey.update(orientation),
-        );
+  void setSidePadding(double value) => _readerPaddingKey.update(value);
 
-  /// Write only the new tap-invert key so legacy reads remain valid after downgrade.
-  Future<void> setTapInvert(TapInvert value, {bool perSeries = true}) =>
-      perSeries
-      ? _patchMeta(MangaMetaKeys.readerTapInvert, value.name)
-      : _clearMetaThenWriteGlobal(
-          MangaMetaKeys.readerTapInvert,
-          () => _readerTapInvertKey.update(value),
-        );
+  void setReaderOrientation(ReaderOrientation orientation) =>
+      _readerOrientationKey.update(orientation);
 
   Future<void> _patchMeta(MangaMetaKeys key, dynamic value) async {
     final local = _localSeriesId;

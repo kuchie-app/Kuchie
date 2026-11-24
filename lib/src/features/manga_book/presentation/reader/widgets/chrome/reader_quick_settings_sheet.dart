@@ -9,12 +9,15 @@ import '../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../widgets/app_bottom_sheet.dart';
 import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../../widgets/popup_widgets/radio_list_popup.dart';
+import '../../../../../settings/presentation/reader/widgets/reader_navigation_layout_tile/reader_navigation_layout_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_padding_slider/reader_padding_slider.dart';
+import '../../../../../settings/presentation/reader/widgets/reader_tap_invert/reader_tap_invert.dart';
 import '../../controller/auto_scroll_controller.dart';
 import '../../controller/auto_webtoon.dart';
 import '../../controller/reader_settings_model.dart';
 import '../../utils/reader_mode_kind.dart';
 import 'reader_settings_dialog.dart';
+import 'tabs/reading_mode_tab.dart';
 
 /// The reader's settings, kept short like Tachimanga: reading mode,
 /// rotation, tap zones, background, side padding, crop borders and auto
@@ -33,6 +36,7 @@ Future<void> showReaderQuickSettings({
   builder: (sheet) => _ReaderQuickSettings(
     mangaId: mangaId,
     localSeriesId: localSeriesId,
+    localFormat: localFormat,
     readerPadding: readerPadding,
     onAdvanced: () {
       Navigator.pop(sheet);
@@ -55,12 +59,14 @@ class _ReaderQuickSettings extends ConsumerWidget {
   const _ReaderQuickSettings({
     required this.mangaId,
     required this.localSeriesId,
+    required this.localFormat,
     required this.readerPadding,
     required this.onAdvanced,
   });
 
   final int mangaId;
   final String? localSeriesId;
+  final ReaderFormatMetadata? localFormat;
   final ValueNotifier<double> readerPadding;
   final VoidCallback onAdvanced;
 
@@ -78,6 +84,21 @@ class _ReaderQuickSettings extends ConsumerWidget {
         : settings.cropBordersWebtoon;
     final autoScroll = ref.watch(autoScrollActiveProvider);
     final l10n = context.l10n;
+    // Tap zones are saved per viewer, so edit the one this series shows.
+    final longStripViewer = !isPagedReaderMode(
+      sessionReaderMode(
+        ref,
+        settings: settings,
+        mangaId: mangaId,
+        localSeriesId: localSeriesId,
+        localFormat: localFormat,
+      ),
+    );
+    final tapZones =
+        (longStripViewer
+            ? ref.watch(longStripNavigationLayoutKeyProvider)
+            : ref.watch(pagedNavigationLayoutKeyProvider)) ??
+        ReaderNavigationLayout.disabled;
 
     Future<void> pick<T>({
       required String title,
@@ -126,17 +147,19 @@ class _ReaderQuickSettings extends ConsumerWidget {
                 options: ReaderOrientation.values,
                 value: settings.readerOrientation,
                 label: (orientation) => orientation.toLocale(context),
-                onChanged: (orientation) =>
-                    unawaited(model.setReaderOrientation(orientation)),
+                onChanged: model.setReaderOrientation,
               ),
             ),
             ListTile(
               leading: const Icon(FluentIcons.tap_single_24_regular),
               title: Text(l10n.readerNavigationLayout),
-              subtitle: Text(settings.navigationLayout.toLocale(context)),
+              subtitle: Text(tapZones.toLocale(context)),
               onTap: () => showAppBottomSheet<void>(
                 context: context,
-                builder: (_) => _TapZonesSheet(provider: provider),
+                builder: (_) => _TapZonesSheet(
+                  provider: provider,
+                  longStrip: longStripViewer,
+                ),
               ),
             ),
             ListTile(
@@ -185,14 +208,27 @@ class _ReaderQuickSettings extends ConsumerWidget {
 
 /// Tap zones as pictures, like Tachimanga, plus invert and page animation.
 class _TapZonesSheet extends ConsumerWidget {
-  const _TapZonesSheet({required this.provider});
+  const _TapZonesSheet({required this.provider, required this.longStrip});
 
   final ReaderSettingsModelProvider provider;
+
+  /// Which viewer's app-wide tap zones this sheet edits.
+  final bool longStrip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(provider);
     final model = ref.read(provider.notifier);
+    final layoutNow =
+        (longStrip
+            ? ref.watch(longStripNavigationLayoutKeyProvider)
+            : ref.watch(pagedNavigationLayoutKeyProvider)) ??
+        ReaderNavigationLayout.disabled;
+    final invertNow =
+        (longStrip
+            ? ref.watch(longStripTapInvertKeyProvider)
+            : ref.watch(pagedTapInvertKeyProvider)) ??
+        TapInvert.none;
     return SafeArea(
       top: false,
       child: Column(
@@ -209,8 +245,9 @@ class _TapZonesSheet extends ConsumerWidget {
                 for (final layout in ReaderNavigationLayout.displayOrder)
                   _TapZoneCard(
                     layout: layout,
-                    selected: settings.navigationLayout == layout,
-                    onTap: () => unawaited(model.setNavigationLayout(layout)),
+                    selected: layoutNow == layout,
+                    onTap: () =>
+                        model.setNavigationLayout(layout, longStrip: longStrip),
                   ),
               ],
             ),
@@ -218,9 +255,10 @@ class _TapZonesSheet extends ConsumerWidget {
           SwitchListTile(
             secondary: const Icon(FluentIcons.arrow_swap_24_regular),
             title: Text(context.l10n.readerSectionTapInvert),
-            value: settings.tapInvert != TapInvert.none,
-            onChanged: (on) => unawaited(
-              model.setTapInvert(on ? TapInvert.both : TapInvert.none),
+            value: invertNow != TapInvert.none,
+            onChanged: (on) => model.setTapInvert(
+              on ? TapInvert.both : TapInvert.none,
+              longStrip: longStrip,
             ),
           ),
           SwitchListTile(
