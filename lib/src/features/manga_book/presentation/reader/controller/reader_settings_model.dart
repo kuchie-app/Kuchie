@@ -12,6 +12,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../../constants/db_keys.dart';
 import '../../../../../constants/enum.dart';
 import '../../../../../global_providers/global_providers.dart';
+import '../../../../settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
 import '../../../../settings/presentation/reader/widgets/reader_filter_prefs/reader_filter_prefs.dart';
 import '../../../../settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
 import '../../../../settings/presentation/reader/widgets/reader_invert_tap_tile/reader_invert_tap_tile.dart';
@@ -624,7 +625,9 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
 
   ReaderSettingsState _resolve(MangaMeta? meta) {
     return ReaderSettingsState(
-      readerMode: ReaderSettings.mode.resolveWith(ref, meta?.readerMode),
+      // Always Default: the reader follows the app-wide mode (and automatic
+      // webtoon detection); older per-series modes are ignored.
+      readerMode: ReaderSettings.mode.resolveWith(ref, null),
       // Tap zones, tap inversion, padding and rotation are app-wide: older
       // per-series overrides are ignored so no series drifts from Settings.
       navigationLayout: ReaderSettings.navigationLayout.resolveWith(ref, null),
@@ -875,17 +878,15 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
 
   void setInvertedColors(bool value) => _invertedColors.update(value);
 
-  // With perSeries=false, remove the override and update the app-wide default.
-
-  Future<void> setReaderMode(ReaderMode mode, {bool perSeries = true}) {
-    if (perSeries) return _patchMeta(MangaMetaKeys.readerMode, mode.name);
-    // Default only has meaning per-series; leave the global key unchanged.
-    return _clearMetaThenWriteGlobal(
-      MangaMetaKeys.readerMode,
-      mode == ReaderMode.defaultReader
-          ? null
-          : () => _readerModeKey.update(mode),
-    );
+  /// Saves the reading mode app-wide, the same preference Settings edits.
+  /// Default is not a mode of its own, so it changes nothing. Pass
+  /// [overrideAuto] when automatic webtoon detection chose the mode of the
+  /// series on screen: the pick then turns that detection off, or it would
+  /// never show.
+  void setReaderMode(ReaderMode mode, {bool overrideAuto = false}) {
+    if (mode == ReaderMode.defaultReader) return;
+    _readerModeKey.update(mode);
+    if (overrideAuto) ref.read(autoWebtoonModeProvider.notifier).update(false);
   }
 
   /// Saves the tap zones for the paged or the long-strip viewer, the same
@@ -941,31 +942,6 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
     }
     state = _resolve(MangaMeta.fromJson(values));
     return prefs.setString('$_localNamespace$seriesId', jsonEncode(values));
-  }
-
-  /// Delete meta before the global write rebuilds this model; do not use ref afterwards.
-  Future<void> _clearMetaThenWriteGlobal(
-    MangaMetaKeys key,
-    void Function()? writeGlobal,
-  ) async {
-    final local = _localSeriesId;
-    if (local != null) {
-      await _patchLocalMeta(local, key, null);
-      writeGlobal?.call();
-      return;
-    }
-    final link = ref.keepAlive();
-    try {
-      await AsyncValue.guard(
-        () => ref
-            .read(mangaBookRepositoryProvider)
-            .deleteMangaMeta(mangaId: mangaId, key: key.key),
-      );
-      ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
-    } finally {
-      link.close();
-    }
-    writeGlobal?.call();
   }
 }
 

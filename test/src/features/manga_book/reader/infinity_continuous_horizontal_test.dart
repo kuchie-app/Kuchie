@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
+import 'package:kuchie/src/constants/db_keys.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
@@ -142,7 +143,8 @@ Future<void> _pumpReaderOnChapter2(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  SharedPreferences.setMockInitialValues(const {});
+  // The reading mode is app-wide.
+  SharedPreferences.setMockInitialValues({DBKeys.readerMode.name: mode.index});
   final prefs = await SharedPreferences.getInstance();
 
   final ch1 = _chapter(id: 1, sourceOrder: 1);

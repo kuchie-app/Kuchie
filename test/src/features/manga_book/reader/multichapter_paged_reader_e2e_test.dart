@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/db_keys.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter/chapter_model.dart';
@@ -84,34 +85,33 @@ List<String> _localPages(int count, String tag) {
   ];
 }
 
-MangaDto _manga({
-  ReaderMode mode = ReaderMode.singleHorizontalLTR,
-}) => Fragment$MangaDto(
-  id: 1,
-  title: 'Test Manga',
-  chapters: Fragment$MangaDto$chapters(totalCount: 2),
-  genre: const [],
-  initialized: true,
-  meta: [
-    Fragment$MangaDto$meta(
-      key: MangaMetaKeys.readerMode.key,
-      value: mode.name,
-    ),
-  ],
-  sourceId: '1',
-  status: Enum$MangaStatus.ONGOING,
-  categories: Fragment$MangaDto$categories(nodes: const []),
-  trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
-  updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
-  url: '/manga/1',
-  user: Fragment$MangaDto$user(
-    bookmarkCount: 0,
-    downloadCount: 0,
-    inLibrary: true,
-    inLibraryAt: '0',
-    unreadCount: 2,
-  ),
-);
+MangaDto _manga({ReaderMode mode = ReaderMode.singleHorizontalLTR}) =>
+    Fragment$MangaDto(
+      id: 1,
+      title: 'Test Manga',
+      chapters: Fragment$MangaDto$chapters(totalCount: 2),
+      genre: const [],
+      initialized: true,
+      meta: [
+        Fragment$MangaDto$meta(
+          key: MangaMetaKeys.readerMode.key,
+          value: mode.name,
+        ),
+      ],
+      sourceId: '1',
+      status: Enum$MangaStatus.ONGOING,
+      categories: Fragment$MangaDto$categories(nodes: const []),
+      trackRecords: Fragment$MangaDto$trackRecords(nodes: const []),
+      updateStrategy: Enum$UpdateStrategy.ALWAYS_UPDATE,
+      url: '/manga/1',
+      user: Fragment$MangaDto$user(
+        bookmarkCount: 0,
+        downloadCount: 0,
+        inLibrary: true,
+        inLibraryAt: '0',
+        unreadCount: 2,
+      ),
+    );
 
 ChapterDto _chapter({
   required int id,
@@ -181,8 +181,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues(const {
+      SharedPreferences.setMockInitialValues({
         'alwaysShowChapterTransition': false,
+        // The reading mode is app-wide.
+        DBKeys.readerMode.name: ReaderMode.singleHorizontalLTR.index,
       });
       final prefs = await SharedPreferences.getInstance();
       final repo = _RecordingRepo();
@@ -299,8 +301,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    SharedPreferences.setMockInitialValues(const {
+    SharedPreferences.setMockInitialValues({
       'autoAdvanceIntervalSeconds': 1,
+      // The reading mode is app-wide.
+      DBKeys.readerMode.name: mode.index,
     });
     final prefs = await SharedPreferences.getInstance();
     final repo = _RecordingRepo();
@@ -389,7 +393,9 @@ void main() {
     }
   });
 
-  testWidgets('closing a read chapter preserves its saved page', (tester) async {
+  testWidgets('closing a read chapter preserves its saved page', (
+    tester,
+  ) async {
     final repo = await pumpSingleChapter(
       tester,
       pageCount: 5,
@@ -401,10 +407,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(
-      repo.putChapterCalls.where((c) => c.chapterId == 1),
-      isEmpty,
-    );
+    expect(repo.putChapterCalls.where((c) => c.chapterId == 1), isEmpty);
   });
 
   testWidgets(

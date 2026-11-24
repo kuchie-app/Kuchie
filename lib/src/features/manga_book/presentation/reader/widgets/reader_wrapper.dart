@@ -19,6 +19,7 @@ import '../../../../../routes/router_config.dart';
 import '../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../widgets/popup_widgets/radio_list_popup.dart';
+import '../../../../settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
 import '../../../../settings/presentation/reader/widgets/reader_force_horizontal_seekbar_tile/reader_force_horizontal_seekbar_tile.dart';
 import '../../../../settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
 import '../../../../settings/presentation/reader/widgets/reader_initial_overlay_tile/reader_initial_overlay_tile.dart';
@@ -31,13 +32,13 @@ import '../../../../settings/presentation/reader/widgets/reader_swipe_toggle_til
 import '../../../../settings/presentation/reader/widgets/reader_volume_tap_invert_tile/reader_volume_tap_invert_tile.dart';
 import '../../../../settings/presentation/reader/widgets/reader_volume_tap_tile/reader_volume_tap_tile.dart';
 import '../../../../settings/presentation/reader/widgets/tap_zones_overlay/tap_zones_overlay.dart';
-import '../../../data/manga_book/manga_book_repository.dart';
 import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/chapter/missing_chapters.dart';
 import '../../../domain/chapter_page/chapter_page_model.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../../manga_details/controller/manga_details_controller.dart';
 import '../controller/auto_scroll_controller.dart';
+import '../controller/auto_webtoon.dart';
 import '../controller/reader_controller.dart';
 import '../controller/reader_settings_model.dart';
 import '../utils/koreader_progress_actions.dart';
@@ -293,8 +294,8 @@ class ReaderWrapper extends HookConsumerWidget {
     // Padding, tap zones and tap inversion are app-wide, not per series.
     final mangaReaderPadding = useState(localMangaReaderPadding);
 
-    final mangaReaderMode =
-        manga.metaData.readerMode ?? ReaderMode.defaultReader;
+    // The reading mode is app-wide: Default follows Settings.
+    const mangaReaderMode = ReaderMode.defaultReader;
     const mangaReaderNavigationLayout =
         ReaderNavigationLayout.defaultNavigation;
     const TapInvert? mangaTapInvert = null;
@@ -317,30 +318,31 @@ class ReaderWrapper extends HookConsumerWidget {
       () => showAppDialog<void>(
         context: context,
         builder: (dialogContext) => RadioListPopup<ReaderMode>(
-          optionList: ReaderMode.displayOrder,
+          // Saved app-wide, like Settings, so it carries to every series.
+          optionList: ReaderMode.displayOrder.sublist(1),
           separatorBefore: ReaderMode.continuousHorizontalLTR,
           getOptionTitle: (value) => value.toLocale(dialogContext),
-          value: mangaReaderMode,
+          value: defaultReaderMode ?? DBKeys.readerMode.initial,
           title: dialogContext.l10n.readerMode,
-          onChange: (enumValue) async {
+          onChange: (enumValue) {
             Navigator.pop(dialogContext);
-            if (!context.mounted) return;
-            await AsyncValue.guard(
-              () => ref
-                  .read(mangaBookRepositoryProvider)
-                  .patchMangaMeta(
-                    mangaId: manga.id,
-                    key: MangaMetaKeys.readerMode.key,
-                    value: enumValue.name,
-                  ),
-            );
-            if (context.mounted) {
-              ref.invalidate(mangaWithIdProvider(mangaId: manga.id));
+            ref.read(readerModeKeyProvider.notifier).update(enumValue);
+            // A pick made while auto detection chose this series' mode wins.
+            final autoApplies =
+                sessionAutoReaderMode(
+                  enabled: ref.read(autoWebtoonModeProvider).ifNull(true),
+                  seriesMode: null,
+                  genres: manga.genre,
+                  sourceName: manga.source?.name,
+                ) !=
+                null;
+            if (autoApplies) {
+              ref.read(autoWebtoonModeProvider.notifier).update(false);
             }
           },
         ),
       ),
-      [manga.id, mangaReaderMode],
+      [defaultReaderMode, manga],
     );
 
     useEffect(() {

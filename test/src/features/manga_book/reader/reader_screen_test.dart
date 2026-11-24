@@ -152,6 +152,8 @@ Future<void> _openReader(
   SharedPreferences.setMockInitialValues({
     if (floating) DBKeys.readerOverlay.name: true,
     DBKeys.forceHorizontalSeekbar.name: ?forceHorizontal,
+    // The reading mode is app-wide.
+    DBKeys.readerMode.name: mode.index,
   });
   final prefs = await SharedPreferences.getInstance();
 
@@ -409,7 +411,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues(const {});
+      SharedPreferences.setMockInitialValues({
+        // The reading mode is app-wide; these readers open paged.
+        DBKeys.readerMode.name: ReaderMode.singleHorizontalLTR.index,
+      });
       final prefs = await SharedPreferences.getInstance();
       final repo = _RecordingRepo();
 
@@ -472,7 +477,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    SharedPreferences.setMockInitialValues(const {});
+    SharedPreferences.setMockInitialValues({
+      // The reading mode is app-wide; these readers open paged.
+      DBKeys.readerMode.name: ReaderMode.singleHorizontalLTR.index,
+    });
     final prefs = await SharedPreferences.getInstance();
     final repo = _RecordingRepo();
 

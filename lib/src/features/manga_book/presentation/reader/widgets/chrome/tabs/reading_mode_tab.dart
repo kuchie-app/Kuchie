@@ -7,6 +7,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../../../../constants/db_keys.dart';
 import '../../../../../../../constants/enum.dart';
 import '../../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../../utils/motion/reduce_motion.dart';
@@ -24,9 +25,9 @@ import '../../../controller/reader_settings_model.dart';
 import '../../../utils/reader_mode_kind.dart';
 import 'int_slider_tile.dart';
 
-/// The mode the reader is showing for this series, auto webtoon detection
-/// included, so app-wide viewer settings are edited for the right viewer.
-ReaderMode sessionReaderMode(
+/// The mode automatic webtoon detection picks for this series, or null when
+/// it is off or the series is not a webtoon.
+ReaderMode? sessionAutoMode(
   WidgetRef ref, {
   required ReaderSettingsState settings,
   required int mangaId,
@@ -36,17 +37,33 @@ ReaderMode sessionReaderMode(
   final manga = localSeriesId == null
       ? ref.watch(mangaWithIdProvider(mangaId: mangaId)).value
       : null;
-  final autoMode = sessionAutoReaderMode(
+  return sessionAutoReaderMode(
     enabled: ref.watch(autoWebtoonModeProvider).ifNull(true),
     seriesMode: settings.readerMode,
     genres: localFormat?.genres ?? manga?.genre,
     sourceName: localFormat?.sourceName ?? manga?.source?.name,
   );
-  return autoMode ??
-      (settings.readerMode == ReaderMode.defaultReader
-          ? (ref.watch(readerModeKeyProvider) ?? ReaderMode.singleHorizontalRTL)
-          : settings.readerMode);
 }
+
+/// The mode the reader is showing for this series, auto webtoon detection
+/// included, so app-wide viewer settings are edited for the right viewer.
+ReaderMode sessionReaderMode(
+  WidgetRef ref, {
+  required ReaderSettingsState settings,
+  required int mangaId,
+  String? localSeriesId,
+  ReaderFormatMetadata? localFormat,
+}) =>
+    sessionAutoMode(
+      ref,
+      settings: settings,
+      mangaId: mangaId,
+      localSeriesId: localSeriesId,
+      localFormat: localFormat,
+    ) ??
+    (settings.readerMode == ReaderMode.defaultReader
+        ? (ref.watch(readerModeKeyProvider) ?? ReaderMode.singleHorizontalRTL)
+        : settings.readerMode);
 
 class ReadingModeTab extends ConsumerWidget {
   const ReadingModeTab({
@@ -64,8 +81,7 @@ class ReadingModeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Only the reading mode is kept per series; the rest is app-wide.
-    const perSeries = true;
+    // Everything here is app-wide, the same preferences Settings edits.
     final settings = ref.watch(
       readerSettingsModelProvider(mangaId, localSeriesId: localSeriesId),
     );
@@ -82,6 +98,15 @@ class ReadingModeTab extends ConsumerWidget {
       localSeriesId: localSeriesId,
       localFormat: localFormat,
     );
+    final autoApplies =
+        sessionAutoMode(
+          ref,
+          settings: settings,
+          mangaId: mangaId,
+          localSeriesId: localSeriesId,
+          localFormat: localFormat,
+        ) !=
+        null;
     final isLongStrip = switch (resolvedMode) {
       ReaderMode.webtoon ||
       ReaderMode.continuousVertical ||
@@ -89,7 +114,10 @@ class ReadingModeTab extends ConsumerWidget {
       ReaderMode.continuousHorizontalRTL => true,
       _ => false,
     };
-    final storedChip = ReaderModeAdapter.toChip(settings.readerMode);
+    final storedChip = ReaderModeAdapter.toChip(
+      ref.watch(readerModeKeyProvider) ?? DBKeys.readerMode.initial,
+    );
+    final autoWebtoon = ref.watch(autoWebtoonModeProvider).ifNull(true);
     final resolvedNav = effectiveNavigationLayout(ref, mode: resolvedMode);
     // Tap zones and inversion are kept per viewer, exactly as in Settings.
     final longStripViewer = !isPagedReaderMode(resolvedMode);
@@ -108,20 +136,22 @@ class ReadingModeTab extends ConsumerWidget {
       primary: false,
       padding: const EdgeInsets.only(bottom: 12),
       children: [
-        _GroupHeading(context.l10n.readerForThisSeries, separate: false),
+        _GroupHeading(context.l10n.general, separate: false),
         _SectionLabel(context.l10n.readerSectionReadingMode),
         _ChipRow(
           children: [
             for (final chip in ReadingModeChip.values)
-              FilterChip(
-                selected: storedChip == chip,
-                showCheckmark: false,
-                label: Text(chip.toLocale(context)),
-                onSelected: (_) => model.setReaderMode(
-                  ReaderModeAdapter.fromChip(chip),
-                  perSeries: perSeries,
+              // Default only meant "follow Settings"; the choice is now Settings itself.
+              if (chip != ReadingModeChip.defaultChip)
+                FilterChip(
+                  selected: storedChip == chip,
+                  showCheckmark: false,
+                  label: Text(chip.toLocale(context)),
+                  onSelected: (_) => model.setReaderMode(
+                    ReaderModeAdapter.fromChip(chip),
+                    overrideAuto: autoApplies,
+                  ),
                 ),
-              ),
             if (storedChip == null)
               FilterChip(
                 selected: true,
@@ -131,7 +161,13 @@ class ReadingModeTab extends ConsumerWidget {
               ),
           ],
         ),
-        _GroupHeading(context.l10n.general),
+        // Auto mode still opens manhwa, manhua and webtoons as webtoons.
+        CompactSwitchListTile(
+          title: Text(context.l10n.autoWebtoonMode),
+          subtitle: Text(context.l10n.autoWebtoonModeSubtitle),
+          value: autoWebtoon,
+          onChanged: ref.read(autoWebtoonModeProvider.notifier).update,
+        ),
         _SectionLabel(context.l10n.readerSectionRotation),
         _ChipRow(
           children: [

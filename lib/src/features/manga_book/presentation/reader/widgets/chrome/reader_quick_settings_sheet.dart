@@ -4,11 +4,13 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../../../constants/db_keys.dart';
 import '../../../../../../constants/enum.dart';
 import '../../../../../../utils/extensions/custom_extensions.dart';
 import '../../../../../../widgets/app_bottom_sheet.dart';
 import '../../../../../../widgets/popup_widgets/app_dialog.dart';
 import '../../../../../../widgets/popup_widgets/radio_list_popup.dart';
+import '../../../../../settings/presentation/reader/widgets/reader_mode_tile/reader_mode_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_navigation_layout_tile/reader_navigation_layout_tile.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_padding_slider/reader_padding_slider.dart';
 import '../../../../../settings/presentation/reader/widgets/reader_tap_invert/reader_tap_invert.dart';
@@ -78,13 +80,20 @@ class _ReaderQuickSettings extends ConsumerWidget {
     );
     final settings = ref.watch(provider);
     final model = ref.read(provider.notifier);
-    final paged = isPagedReaderMode(settings.readerMode);
-    final cropBorders = paged
-        ? settings.cropBorders
-        : settings.cropBordersWebtoon;
     final autoScroll = ref.watch(autoScrollActiveProvider);
     final l10n = context.l10n;
-    // Tap zones are saved per viewer, so edit the one this series shows.
+    final globalMode =
+        ref.watch(readerModeKeyProvider) ?? DBKeys.readerMode.initial;
+    final autoApplies =
+        sessionAutoMode(
+          ref,
+          settings: settings,
+          mangaId: mangaId,
+          localSeriesId: localSeriesId,
+          localFormat: localFormat,
+        ) !=
+        null;
+    // Viewer settings are saved per viewer, so edit the one this series shows.
     final longStripViewer = !isPagedReaderMode(
       sessionReaderMode(
         ref,
@@ -94,6 +103,10 @@ class _ReaderQuickSettings extends ConsumerWidget {
         localFormat: localFormat,
       ),
     );
+    final paged = !longStripViewer;
+    final cropBorders = paged
+        ? settings.cropBorders
+        : settings.cropBordersWebtoon;
     final tapZones =
         (longStripViewer
             ? ref.watch(longStripNavigationLayoutKeyProvider)
@@ -129,13 +142,15 @@ class _ReaderQuickSettings extends ConsumerWidget {
             ListTile(
               leading: const Icon(FluentIcons.phone_24_regular),
               title: Text(l10n.readerMode),
-              subtitle: Text(settings.readerMode.toLocale(context)),
+              subtitle: Text(globalMode.toLocale(context)),
               onTap: () => pick<ReaderMode>(
                 title: l10n.readerMode,
-                options: ReaderMode.displayOrder,
-                value: settings.readerMode,
+                // Saved app-wide, like Settings; Default would mean itself.
+                options: ReaderMode.displayOrder.sublist(1),
+                value: globalMode,
                 label: (mode) => mode.toLocale(context),
-                onChanged: (mode) => unawaited(model.setReaderMode(mode)),
+                onChanged: (mode) =>
+                    model.setReaderMode(mode, overrideAuto: autoApplies),
               ),
             ),
             ListTile(
