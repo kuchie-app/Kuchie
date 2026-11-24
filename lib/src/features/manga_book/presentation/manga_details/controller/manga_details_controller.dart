@@ -117,6 +117,8 @@ class MangaChapterList extends _$MangaChapterList {
         .ifNull();
     // Source fetches refresh metadata too, so refresh MangaWithId afterwards.
     var didSourceFetch = false;
+    // Stored chapters render first; the source scrape then runs in background.
+    var revalidateFromSource = false;
     // Capture before await; the provider may be disposed while fetching.
     final sync = ref.read(offlineSyncProvider);
     // Mirror only genuine server responses — fallback chapter DTOs carry
@@ -127,8 +129,9 @@ class MangaChapterList extends _$MangaChapterList {
         final stored = await repo.getStoredChapterList(mangaId);
         if (!current()) return null;
         fromServer = true;
-        // Re-scrape only when stored chapters are absent or source refresh is enabled.
-        if (!refreshFromSource && stored != null && stored.isNotEmpty) {
+        // With stored chapters, show them now and scrape the source afterwards.
+        if (stored != null && stored.isNotEmpty) {
+          revalidateFromSource = refreshFromSource;
           return stored;
         }
         try {
@@ -165,6 +168,14 @@ class MangaChapterList extends _$MangaChapterList {
       unawaited(
         Future.microtask(() {
           if (current()) ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
+        }),
+      );
+    }
+    if (revalidateFromSource && fromServer) {
+      // refresh() keeps the stored list visible and swaps in the scrape when it lands.
+      unawaited(
+        Future.microtask(() async {
+          if (current()) await refresh();
         }),
       );
     }
