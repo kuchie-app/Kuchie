@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuchie/src/constants/enum.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_hold_gesture_detector.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/double_page_view.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_display_window.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_reader_viewport.dart';
@@ -31,20 +32,21 @@ List<String> _localPages(int count) {
   ];
 }
 
-ReaderInputCallbacks _callbacks() => ReaderInputCallbacks(
-  onTap: () {},
-  onLongPressStart: (_) {},
-  onLongPressMoveUpdate: (_) {},
-  onLongPressEnd: () {},
-  onLongPressCancel: () {},
-  onNext: () {},
-  onPrevious: () {},
-  onNextBoundary: () => false,
-  onPreviousBoundary: () => false,
-  navigationLayout: ReaderNavigationLayout.disabled,
-  tapInvert: TapInvert.none,
-  smallerTapZones: false,
-);
+ReaderInputCallbacks _callbacks({ValueChanged<Offset>? onLongPressStart}) =>
+    ReaderInputCallbacks(
+      onTap: () {},
+      onLongPressStart: onLongPressStart ?? (_) {},
+      onLongPressMoveUpdate: (_) {},
+      onLongPressEnd: () {},
+      onLongPressCancel: () {},
+      onNext: () {},
+      onPrevious: () {},
+      onNextBoundary: () => false,
+      onPreviousBoundary: () => false,
+      navigationLayout: ReaderNavigationLayout.disabled,
+      tapInvert: TapInvert.none,
+      smallerTapZones: false,
+    );
 
 Future<void> _pumpViewport(
   WidgetTester tester, {
@@ -54,6 +56,7 @@ Future<void> _pumpViewport(
   required int initialDisplayIndex,
   required ValueChanged<int> onRawPageChanged,
   required ReaderInputCallbacks callbacks,
+  bool animateTransitions = false,
 }) async {
   final window = buildPagedDisplayWindow(
     chapters: [
@@ -77,7 +80,7 @@ Future<void> _pumpViewport(
         initialDisplayIndex: initialDisplayIndex,
         axis: Axis.horizontal,
         reverse: false,
-        animateTransitions: false,
+        animateTransitions: animateTransitions,
         pageFit: BoxFit.contain,
         pageSize: null,
         pagesAtNaturalSize: false,
@@ -124,6 +127,50 @@ void main() {
         transform.transform.storage[12],
     ];
   }
+
+  testWidgets('a touch that stops a page turn does not become a long press', (
+    tester,
+  ) async {
+    final pages = _localPages(3);
+    final mapping = buildSpreadMapping(
+      pageCount: pages.length,
+      doublePages: false,
+      splitWide: false,
+      splitInvert: false,
+      isWide: (_) => false,
+    );
+    var holds = 0;
+    await _pumpViewport(
+      tester,
+      controller: PagedReaderController(),
+      mapping: mapping,
+      pages: pages,
+      initialDisplayIndex: 0,
+      onRawPageChanged: (_) {},
+      callbacks: _callbacks(onLongPressStart: (_) => holds++),
+      animateTransitions: true,
+    );
+    final center = tester.getCenter(find.byType(PagedReaderViewport));
+    Future<void> hold() async {
+      final gesture = await tester.startGesture(center);
+      await tester.pump(
+        kReaderLongPressDelay + const Duration(milliseconds: 50),
+      );
+      await gesture.up();
+      await tester.pump();
+    }
+
+    // Release a swipe, then catch the page while it is still settling.
+    await tester.dragFrom(center, const Offset(-120, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await hold();
+    expect(holds, 0);
+
+    // On a still page, a hold opens the page actions.
+    await tester.pumpAndSettle();
+    await hold();
+    expect(holds, 1);
+  });
 
   testWidgets('a barely-started turn snaps back instead of skipping a page', (
     tester,

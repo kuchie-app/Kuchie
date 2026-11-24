@@ -33,6 +33,7 @@ import '../../manga_book/presentation/reader/widgets/chrome/reader_page_actions_
 import '../../manga_book/presentation/reader/widgets/chrome/reader_quick_settings_sheet.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_top_bar.dart';
 import '../../manga_book/presentation/reader/widgets/reader_edge_swipe_back.dart';
+import '../../manga_book/presentation/reader/widgets/reader_hold_gesture_detector.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_config.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_feedback.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/measure_size.dart';
@@ -821,10 +822,13 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     final Widget content;
     if (_continuous) {
       final scrollAxis = horizontal ? Axis.horizontal : Axis.vertical;
-      final strip = GestureDetector(
+      // Ignores holds that stop a fling or ride a slow scroll.
+      final strip = ReaderHoldGestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _onStripTap,
-        onLongPress: settings.readWithLongTap ? _openPageActions : null,
+        onLongPressStart: settings.readWithLongTap
+            ? (_) => unawaited(_openPageActions())
+            : null,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;

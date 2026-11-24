@@ -17,6 +17,7 @@ import '../../../../../../constants/enum.dart';
 import '../../../../../../utils/crash/diagnostics.dart';
 import '../../../../../../utils/motion/reduce_motion.dart';
 import '../../../../../../widgets/custom_circular_progress_indicator.dart';
+import '../reader_hold_gesture_detector.dart';
 import '../reader_wrapper.dart';
 import 'double_page_view.dart';
 import 'paged_display_window.dart';
@@ -194,7 +195,7 @@ class _PagedReaderViewportState extends State<PagedReaderViewport>
   static const Duration _doubleTapWindow = Duration(
     milliseconds: _doubleTapWindowMs,
   );
-  static const Duration _longPressDelay = Duration(milliseconds: 480);
+  static const Duration _longPressDelay = kReaderLongPressDelay;
   static const Duration _maxSettleDuration = Duration(milliseconds: 180);
   static const Duration _minSettleDuration = Duration(milliseconds: 70);
   static const Duration _panFlingDuration = Duration(milliseconds: 400);
@@ -782,6 +783,9 @@ class _PagedReaderViewportState extends State<PagedReaderViewport>
 
   void _startLongPressTimer(Offset position) {
     if (_isTransitionSlot(_displayIndex)) return;
+    // A touch that stops a page turn, pan or zoom is not a long press, even
+    // if the finger then rests on the page.
+    if (_interruptedByAnimation) return;
     // Nothing consumes a long press: don't run a timer that would swallow the
     // gesture and, with it, the tap that was meant to turn the page.
     if (ReaderInputScope.maybeOf(context)?.onLongPressStart == null) return;

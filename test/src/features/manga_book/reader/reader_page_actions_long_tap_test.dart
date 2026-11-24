@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/manga_book/domain/chapter_page/chapter_page_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_hold_gesture_detector.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_wrapper.dart';
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
@@ -39,10 +40,7 @@ ChapterPagesDto _pages() => ChapterPagesDto(
 const _copyKey = ValueKey('reader-page-action-copy-image');
 const _shareKey = ValueKey('reader-page-action-share');
 
-Future<void> _pumpReader(
-  WidgetTester tester, {
-  required bool longTapOn,
-}) async {
+Future<void> _pumpReader(WidgetTester tester, {required bool longTapOn}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -94,7 +92,16 @@ void main() {
 
     expect(find.byKey(_copyKey), findsNothing);
 
+    // A hold of the platform's usual length is not enough any more.
     await tester.longPress(find.byType(ReaderView));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_copyKey), findsNothing);
+
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byType(ReaderView)),
+    );
+    await tester.pump(kReaderLongPressDelay + const Duration(milliseconds: 50));
+    await hold.up();
     await tester.pumpAndSettle();
 
     // Sheet with the mobile actions is shown.
