@@ -290,11 +290,10 @@ class ReaderScreen extends HookConsumerWidget {
       return () => setDrawUnderCutout(false);
     }, [underCutout]);
 
-    // Apply rotation once the per-series/global setting resolves; Default leaves the platform unchanged.
+    // Apply the app-wide rotation once the series loads; Default leaves the platform unchanged.
     final readerOrientation = mangaData == null
         ? null
-        : mangaData.metaData.readerOrientation ??
-              ref.watch(readerOrientationKeyProvider) ??
+        : ref.watch(readerOrientationKeyProvider) ??
               ReaderOrientation.defaultRotation;
     useEffect(() {
       final lock = readerOrientation?.deviceOrientations;

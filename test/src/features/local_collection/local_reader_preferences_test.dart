@@ -7,6 +7,7 @@ import 'package:kuchie/src/constants/db_keys.dart';
 import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
 import 'package:kuchie/src/features/local_collection/presentation/local_reader.dart';
+import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/controller/reader_settings_model.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_bottom_controls.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/reader_chrome.dart';
@@ -14,6 +15,8 @@ import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrom
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_mode/paged_reader_viewport.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/reader_navigation_layout/reader_navigation_layout.dart';
 import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
+import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_navigation_layout_tile/reader_navigation_layout_tile.dart';
+import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_tap_invert/reader_tap_invert.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:material_ui/material_ui.dart';
@@ -24,12 +27,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'local reading mode and layout stay with their series across openings',
+    'reading mode stays with its series; tap zones and padding apply everywhere',
     () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final first = readerSettingsModelProvider(0, localSeriesId: 'first');
       final second = readerSettingsModelProvider(0, localSeriesId: 'second');
+      final server = readerSettingsModelProvider(7);
       ProviderContainer launch() => ProviderContainer(
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
@@ -37,10 +41,13 @@ void main() {
       final running = launch();
       final lock = running.listen(first, (_, _) {});
       await running.read(first.notifier).setReaderMode(ReaderMode.webtoon);
-      await running
+      running
           .read(first.notifier)
-          .setNavigationLayout(ReaderNavigationLayout.lShaped);
-      await running.read(first.notifier).setSidePadding(0.2);
+          .setNavigationLayout(ReaderNavigationLayout.lShaped, longStrip: true);
+      running
+          .read(first.notifier)
+          .setTapInvert(TapInvert.both, longStrip: true);
+      running.read(first.notifier).setSidePadding(0.2);
       expect(running.read(first).readerMode, ReaderMode.webtoon);
       expect(running.read(second).readerMode, ReaderMode.defaultReader);
       lock.close();
@@ -49,18 +56,56 @@ void main() {
       final restarted = launch();
       addTearDown(restarted.dispose);
       expect(restarted.read(first).readerMode, ReaderMode.webtoon);
+      expect(restarted.read(second).readerMode, ReaderMode.defaultReader);
+      // Saved where Settings reads them, so other series and readers follow.
       expect(
-        restarted.read(first).navigationLayout,
+        restarted.read(longStripNavigationLayoutKeyProvider),
         ReaderNavigationLayout.lShaped,
       );
-      expect(restarted.read(first).sidePadding, 0.2);
-      expect(restarted.read(second).readerMode, ReaderMode.defaultReader);
+      expect(restarted.read(longStripTapInvertKeyProvider), TapInvert.both);
       expect(
-        restarted.read(second).navigationLayout,
-        ReaderNavigationLayout.defaultNavigation,
+        restarted.read(pagedNavigationLayoutKeyProvider),
+        ReaderNavigationLayout.disabled,
       );
+      for (final series in [first, second, server]) {
+        expect(restarted.read(series).sidePadding, 0.2);
+      }
     },
   );
+
+  test('a per-series tap zone saved by an older version is ignored', () async {
+    SharedPreferences.setMockInitialValues({
+      'local.reader.manga.old': jsonEncode({
+        MangaMetaKeys.readerNavigationLayout.key: 'kindlish',
+        MangaMetaKeys.readerPadding.key: '0.4',
+      }),
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(container.dispose);
+    final settings = container.read(
+      readerSettingsModelProvider(0, localSeriesId: 'old'),
+    );
+    expect(settings.navigationLayout, ReaderNavigationLayout.defaultNavigation);
+    expect(settings.sidePadding, DBKeys.readerPadding.initial);
+  });
+
+  test('tap zones are off until chosen, and Disabled stays an option', () {
+    expect(
+      DBKeys.pagedNavigationLayout.initial,
+      ReaderNavigationLayout.disabled,
+    );
+    expect(
+      DBKeys.longStripNavigationLayout.initial,
+      ReaderNavigationLayout.disabled,
+    );
+    expect(
+      ReaderNavigationLayout.displayOrder,
+      contains(ReaderNavigationLayout.disabled),
+    );
+  });
 
   testWidgets(
     'tagged local manhwa uses auto Webtoon until an explicit override',

@@ -290,16 +290,14 @@ class ReaderWrapper extends HookConsumerWidget {
       sessionVisibility ?? ref.read(readerInitialOverlayProvider).ifNull(),
     );
     final utilsBarExpanded = useState(false);
-    final mangaReaderPadding = useState(
-      manga.metaData.readerPadding ?? localMangaReaderPadding,
-    );
+    // Padding, tap zones and tap inversion are app-wide, not per series.
+    final mangaReaderPadding = useState(localMangaReaderPadding);
 
     final mangaReaderMode =
         manga.metaData.readerMode ?? ReaderMode.defaultReader;
-    final mangaReaderNavigationLayout =
-        manga.metaData.readerNavigationLayout ??
+    const mangaReaderNavigationLayout =
         ReaderNavigationLayout.defaultNavigation;
-    final mangaTapInvert = manga.metaData.readerTapInvert;
+    const TapInvert? mangaTapInvert = null;
 
     final defaultReaderMode = ref.watch(readerModeKeyProvider);
 

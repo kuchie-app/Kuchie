@@ -42,7 +42,7 @@ enum DBKeys<T> {
   // Compensates for Flutter Linux's 53 px mouse-wheel step.
   readerMouseScrollSpeed(1.7),
   // Migration source for per-viewer navigation keys; not read directly.
-  readerNavigationLayout(ReaderNavigationLayout.defaultNavigation),
+  readerNavigationLayout(ReaderNavigationLayout.disabled),
   invertTap(false),
   quickSearchToggle(true),
   swipeToggle(true),
@@ -219,8 +219,8 @@ enum DBKeys<T> {
   splitTallImages(true),
   smallerTapZones(false),
   // Seeded from the global navigation keys on upgrade.
-  pagedNavigationLayout(ReaderNavigationLayout.defaultNavigation),
-  longStripNavigationLayout(ReaderNavigationLayout.defaultNavigation),
+  pagedNavigationLayout(ReaderNavigationLayout.disabled),
+  longStripNavigationLayout(ReaderNavigationLayout.disabled),
   pagedTapInvert(TapInvert.none),
   longStripTapInvert(TapInvert.none),
   showTapZonesOverlay(false),
