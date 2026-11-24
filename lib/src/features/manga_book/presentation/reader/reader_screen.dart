@@ -34,7 +34,6 @@ import '../../../settings/presentation/reader/widgets/reader_orientation/reader_
 import '../../../tracking/domain/track_progress_gate.dart';
 import '../../domain/chapter/chapter_model.dart';
 import '../../domain/chapter_page/chapter_page_model.dart';
-import '../../domain/manga/manga_model.dart';
 import '../manga_details/controller/manga_details_controller.dart';
 import '../manga_details/controller/scanlator_dedup.dart';
 import 'controller/auto_webtoon.dart';
@@ -86,7 +85,8 @@ class ReaderScreen extends HookConsumerWidget {
         ? null
         : sessionAutoReaderMode(
             enabled: ref.watch(autoWebtoonModeProvider).ifNull(true),
-            seriesMode: mangaData.metaData.readerMode,
+            // The reading mode is app-wide; older per-series modes are ignored.
+            seriesMode: null,
             genres: autoSource.genre,
             sourceName: autoSource.source?.name,
           );
@@ -405,9 +405,7 @@ class ReaderScreen extends HookConsumerWidget {
                           ),
                         );
                       }
-                      return switch (autoReaderMode ??
-                          data.metaData.readerMode ??
-                          defaultReaderMode) {
+                      return switch (autoReaderMode ?? defaultReaderMode) {
                         ReaderMode.singleVertical =>
                           MultiChapterPagedReaderMode(
                             chapter: chapterData,

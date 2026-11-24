@@ -4,17 +4,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Reading-mode tab parity contract: 6 chips + honest legacy-orphan chip
-// (§2.5), contextual paged/long-strip sections, tap-invert visibility, and
-// the "For this series" OFF path routing writes to the global provider.
+// Reading-mode tab: everything set here is app-wide, the same preferences
+// Settings edits, and nothing is written to the series.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:kuchie/src/constants/enum.dart';
 import 'package:kuchie/src/features/manga_book/data/manga_book/manga_book_repository.dart';
 import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/manga_book/domain/manga/manga_model.dart';
 import 'package:kuchie/src/features/manga_book/presentation/manga_details/controller/manga_details_controller.dart';
 import 'package:kuchie/src/features/manga_book/presentation/reader/widgets/chrome/tabs/reading_mode_tab.dart';
+import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
+import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_mode_tile/reader_mode_tile.dart';
+import 'package:kuchie/src/features/settings/presentation/reader/widgets/reader_navigation_layout_tile/reader_navigation_layout_tile.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/graphql/__generated__/schema.graphql.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
@@ -56,11 +59,14 @@ class _RecordingRepo implements MangaBookRepository {
       throw UnimplementedError('${invocation.memberName}');
 }
 
-MangaDto _manga({Map<String, String> meta = const {}}) => Fragment$MangaDto(
+MangaDto _manga({
+  Map<String, String> meta = const {},
+  List<String> genre = const [],
+}) => Fragment$MangaDto(
   id: 1,
   title: 'Test Manga',
   chapters: Fragment$MangaDto$chapters(totalCount: 0),
-  genre: const [],
+  genre: genre,
   initialized: true,
   meta: [
     for (final e in meta.entries)
@@ -84,9 +90,10 @@ MangaDto _manga({Map<String, String> meta = const {}}) => Fragment$MangaDto(
 void main() {
   late _RecordingRepo repo;
 
-  Future<void> pumpTab(
+  Future<ProviderContainer> pumpTab(
     WidgetTester tester, {
     Map<String, String> meta = const {},
+    List<String> genre = const [],
   }) async {
     // Tall viewport so the common rows fit without scrolling.
     tester.view.physicalSize = const Size(800, 1600);
@@ -102,9 +109,9 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           mangaBookRepositoryProvider.overrideWithValue(repo),
-          mangaWithIdProvider(
-            mangaId: 1,
-          ).overrideWith(() => _FakeMangaWithId(_manga(meta: meta))),
+          mangaWithIdProvider(mangaId: 1).overrideWith(
+            () => _FakeMangaWithId(_manga(meta: meta, genre: genre)),
+          ),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -116,17 +123,62 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    return ProviderScope.containerOf(
+      tester.element(find.byType(ReadingModeTab)),
+    );
   }
 
-  testWidgets('reading mode always writes a per-series override', (
+  testWidgets('reading mode picked in the reader is saved app-wide', (
     tester,
   ) async {
-    await pumpTab(tester, meta: {'flutter_readerMode': 'singleHorizontalLTR'});
+    // An older per-series mode is ignored rather than kept as an override.
+    final container = await pumpTab(
+      tester,
+      meta: {'flutter_readerMode': 'singleVertical'},
+    );
 
-    await tester.tap(find.text('Webtoon'));
+    await tester.tap(find.text('Paged (left to right)'));
     await tester.pumpAndSettle();
 
-    expect(repo.patches, [('flutter_readerMode', 'webtoon')]);
+    expect(
+      container.read(readerModeKeyProvider),
+      ReaderMode.singleHorizontalLTR,
+    );
+    expect(repo.patches, isEmpty);
     expect(repo.deletes, isEmpty);
+  });
+
+  testWidgets('tap zones are saved for the viewer on screen', (tester) async {
+    // The app-wide default mode is Webtoon, so this edits the long strip.
+    final container = await pumpTab(tester);
+
+    await tester.tap(find.text('L shaped'));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(longStripNavigationLayoutKeyProvider),
+      ReaderNavigationLayout.lShaped,
+    );
+    expect(
+      container.read(pagedNavigationLayoutKeyProvider),
+      ReaderNavigationLayout.disabled,
+    );
+    expect(repo.patches, isEmpty);
+  });
+
+  testWidgets('picking a mode for an auto-detected webtoon turns auto off', (
+    tester,
+  ) async {
+    final container = await pumpTab(tester, genre: const ['Manhwa']);
+    expect(container.read(autoWebtoonModeProvider), isNot(false));
+
+    await tester.tap(find.text('Paged (left to right)'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(autoWebtoonModeProvider), isFalse);
+    expect(
+      container.read(readerModeKeyProvider),
+      ReaderMode.singleHorizontalLTR,
+    );
   });
 }

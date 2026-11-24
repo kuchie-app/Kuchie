@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../constants/db_keys.dart';
 import '../../../constants/enum.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
@@ -636,15 +637,26 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   Future<void> _pickMode() => showAppDialog<void>(
     context: context,
     builder: (dialogContext) => RadioListPopup<ReaderMode>(
-      optionList: ReaderMode.displayOrder,
+      // Saved app-wide, like Settings, so it carries to every series.
+      optionList: ReaderMode.displayOrder.sublist(1),
       separatorBefore: ReaderMode.continuousHorizontalLTR,
       getOptionTitle: (mode) => mode.toLocale(dialogContext),
-      value: _settings.readerMode,
+      value: ref.read(readerModeKeyProvider) ?? DBKeys.readerMode.initial,
       title: dialogContext.l10n.readerMode,
       onChange: (mode) {
         Navigator.pop(dialogContext);
         if (!mounted) return;
-        unawaited(ref.read(_settingsProvider.notifier).setReaderMode(mode));
+        final autoApplies =
+            sessionAutoReaderMode(
+              enabled: ref.read(autoWebtoonModeProvider).ifNull(true),
+              seriesMode: null,
+              genres: _format.genres,
+              sourceName: _format.sourceName,
+            ) !=
+            null;
+        ref
+            .read(_settingsProvider.notifier)
+            .setReaderMode(mode, overrideAuto: autoApplies);
       },
     ),
   );
