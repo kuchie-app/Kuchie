@@ -112,7 +112,7 @@ class MangaDescription extends HookConsumerWidget {
   const MangaDescription({
     super.key,
     required this.manga,
-    required this.removeMangaFromLibrary,
+    required this.editLibraryCategories,
     required this.addMangaToLibrary,
     required this.refresh,
     required this.onMigrate,
@@ -122,7 +122,9 @@ class MangaDescription extends HookConsumerWidget {
   final MangaDto manga;
   final AsyncCallback refresh;
   final AsyncCallback onMigrate;
-  final AsyncCallback removeMangaFromLibrary;
+
+  /// Opens the category picker for a series already in the library.
+  final AsyncCallback editLibraryCategories;
   final AsyncCallback addMangaToLibrary;
 
   static void openWebView(BuildContext context, WidgetRef ref, MangaDto manga) {
@@ -204,37 +206,22 @@ class MangaDescription extends HookConsumerWidget {
     final moreKey = useMemoized(
       () => GlobalKey<PopupMenuButtonState<String>>(),
     );
+    // Shown on the button while categories load or a change is saved.
+    final libraryBusy = useState(false);
     Future<void> toggleLibrary() async {
-      if (inLibrary) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AdaptiveAppAlert(
-            title: Text(context.l10n.removeFromLibrary),
-            content: Text(context.l10n.duplicatesRemoveConfirm(1)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(context.l10n.cancel),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(context.l10n.remove),
-              ),
-            ],
-          ),
-          animationStyle: context.motionStyle,
-        );
-        if (confirmed != true || !context.mounted) return;
-      }
+      if (libraryBusy.value) return;
+      libraryBusy.value = true;
       final val = await AsyncValue.guard(() async {
         if (inLibrary) {
-          await removeMangaFromLibrary();
+          await editLibraryCategories();
         } else {
           await addMangaToLibrary();
         }
         await refresh();
       });
-      if (context.mounted) val.showToastOnError(ref.read(toastProvider));
+      if (!context.mounted) return;
+      libraryBusy.value = false;
+      val.showToastOnError(ref.read(toastProvider));
     }
 
     final prediction = ref.watch(mangaNextUpdateProvider(mangaId: manga.id));
@@ -362,7 +349,8 @@ class MangaDescription extends HookConsumerWidget {
           onCoverPressed: () => openCoverViewer(context, manga),
           onTitleClicked: (query) => openGlobalSearch(context, query: query),
           belowStatus: soonWidget,
-          titleMaxLines: null,
+          // Long titles stop at two lines; a tap still copies all of it.
+          titleMaxLines: 2,
         ),
       ),
     );
@@ -486,11 +474,18 @@ class MangaDescription extends HookConsumerWidget {
                         Expanded(
                           child: MangaActionButton(
                             active: inLibrary,
-                            icon: Icon(
-                              inLibrary
-                                  ? FluentIcons.heart_24_filled
-                                  : FluentIcons.heart_24_regular,
-                            ),
+                            icon: libraryBusy.value
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    inLibrary
+                                        ? FluentIcons.heart_24_filled
+                                        : FluentIcons.heart_24_regular,
+                                  ),
                             label: inLibrary
                                 ? context.l10n.inLibrary
                                 : context.l10n.addToLibrary,

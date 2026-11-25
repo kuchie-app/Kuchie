@@ -10,8 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../../../constants/enum.dart';
-import '../../../../../../widgets/custom_circular_progress_indicator.dart';
 import '../../../../../../widgets/server_image.dart';
+import '../reader_page_loader.dart';
 import 'paged_spread_mapping.dart';
 import 'reader_page_file.dart';
 
@@ -79,7 +79,7 @@ class DoublePageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (pages.isEmpty) {
-      return const Center(child: CenterKuchieShimmerIndicator());
+      return const Center(child: ReaderPageLoader());
     }
 
     if (entry.first.half != PageHalf.full) {
@@ -113,7 +113,7 @@ class DoublePageView extends StatelessWidget {
 
   Widget _slot(PageUnit unit, {Alignment alignment = Alignment.center}) {
     if (unit.raw >= pages.length) {
-      return const Center(child: CenterKuchieShimmerIndicator());
+      return const Center(child: ReaderPageLoader());
     }
     final url = pages[unit.raw];
     final child = ServerImage(
@@ -136,14 +136,20 @@ class DoublePageView extends StatelessWidget {
         onNaturalSize: onNaturalSize,
         naturalSize: naturalSize,
       ),
-      progressIndicatorBuilder: (context, url, downloadProgress) =>
-          CenterKuchieShimmerIndicator(value: downloadProgress.progress),
+      progressRetryBuilder: (context, downloadProgress, retry) => Center(
+        child: ReaderPageLoader(
+          progress: downloadProgress.progress,
+          pageNumber: unit.raw + 1,
+          onRetry: retry,
+        ),
+      ),
     );
     final prepare = preparePage;
     if (prepare == null) return child;
     return ReaderPageFile(
       uri: url,
       prepare: prepare,
+      pageNumber: unit.raw + 1,
       retryCount: retryCount!,
       builder: (_) => child,
     );

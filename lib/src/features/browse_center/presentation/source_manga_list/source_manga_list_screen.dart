@@ -19,9 +19,11 @@ import '../../../../widgets/app_bottom_sheet.dart';
 import '../../../../widgets/desktop/desktop_top_bar.dart';
 import '../../../../widgets/desktop/desktop_view_switch.dart';
 import '../../../../widgets/ios/apple_glass_capability.dart';
+import '../../../../widgets/ios/apple_glass_floating_header.dart';
 import '../../../../widgets/ios/apple_glass_segments.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../widgets/ios/apple_page_title.dart';
+import '../../../../widgets/ios/collapsing_title_scaffold.dart';
 import '../../../../widgets/search_field.dart';
 import '../../../../widgets/server_image.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
@@ -95,10 +97,15 @@ class SourceMangaListScreen extends HookConsumerWidget {
     required this.sourceId,
     required this.sourceType,
     this.initialQuery,
+    this.keptSearch,
   });
   final String sourceId;
   final SourceType sourceType;
   final String? initialQuery;
+
+  /// The search made earlier on this page, kept while browsing popular or
+  /// latest so its tab stays until the search is cleared.
+  final String? keptSearch;
 
   Future<ServerPage<MangaDto>> _fetchPage(
     SourceRepository repository,
@@ -218,6 +225,11 @@ class SourceMangaListScreen extends HookConsumerWidget {
         final title = Text(sourceName);
         final supportsLatest = data?.supportsLatest == true;
 
+        // The search the Search tab returns to.
+        final activeSearch = sourceType == SourceType.SEARCH
+            ? query.value
+            : keptSearch;
+
         void openType(SourceType type, {String? withQuery}) {
           if (type == sourceType) {
             if (type == SourceType.SEARCH) {
@@ -227,11 +239,30 @@ class SourceMangaListScreen extends HookConsumerWidget {
             }
             return;
           }
+          final searching = type == SourceType.SEARCH;
           SourceTypeRoute(
             sourceId: sourceId,
             sourceType: type,
-            query: withQuery,
+            query: searching ? withQuery ?? activeSearch : null,
+            search: !searching && activeSearch.isNotBlank ? activeSearch : null,
           ).go(context);
+        }
+
+        /// Drops the search, and with it the Search tab.
+        void clearSearch() {
+          showSearch.value = false;
+          searchDraft.value = null;
+          if (sourceType == SourceType.SEARCH) {
+            SourceTypeRoute(
+              sourceId: sourceId,
+              sourceType: SourceType.POPULAR,
+            ).go(context);
+          } else if (keptSearch.isNotBlank) {
+            SourceTypeRoute(
+              sourceId: sourceId,
+              sourceType: sourceType,
+            ).go(context);
+          }
         }
 
         Future<void> showFilters() async {
@@ -380,7 +411,8 @@ class SourceMangaListScreen extends HookConsumerWidget {
               ),
           ],
         );
-        final showingResults = sourceType == SourceType.SEARCH;
+        final showingResults =
+            sourceType == SourceType.SEARCH || keptSearch.isNotBlank;
         final resultIndex = supportsLatest ? 2 : 1;
         final filterIndex = resultIndex + (showingResults ? 1 : 0);
         final glassSegments = AppleGlassSegments(
@@ -406,7 +438,9 @@ class SourceMangaListScreen extends HookConsumerWidget {
           onSelected: (index) {
             if (index == filterIndex) {
               showFilters();
-            } else if (!showingResults || index != resultIndex) {
+            } else if (showingResults && index == resultIndex) {
+              openType(SourceType.SEARCH);
+            } else {
               openType(index == 0 ? SourceType.POPULAR : SourceType.LATEST);
             }
           },
@@ -474,19 +508,26 @@ class SourceMangaListScreen extends HookConsumerWidget {
                       ? context.widthScale(scale: .5)
                       : null,
                   child: Padding(
-                    padding: KEdgeInsets.h16v4.size,
+                    // The large-title header already sets the side margins.
+                    padding: glass
+                        ? const EdgeInsets.symmetric(vertical: 4)
+                        : KEdgeInsets.h16v4.size,
                     child: SearchField(
-                      key: ValueKey(query.value),
-                      initialText: query.value,
+                      key: ValueKey(activeSearch),
+                      initialText: activeSearch,
                       autofocus: glass,
                       focusNode: glass ? searchFocus : null,
                       labelText: glass
                           ? context.l10n.searchSourceHint(sourceName)
                           : null,
                       onChanged: (value) => searchDraft.value = value,
-                      onClose: () => showSearch.value = (false),
+                      onClose: glass
+                          ? clearSearch
+                          : () => showSearch.value = (false),
                       onSubmitted: (val) {
-                        if (sourceType == SourceType.SEARCH) {
+                        if (glass && val.isBlank) {
+                          clearSearch();
+                        } else if (sourceType == SourceType.SEARCH) {
                           query.value = val;
                           refresh();
                         } else {
@@ -504,17 +545,21 @@ class SourceMangaListScreen extends HookConsumerWidget {
               ),
           ],
         );
+        Widget displayView({required double topPadding}) =>
+            SourceMangaDisplayView(
+              sourceId: sourceId,
+              sourceType: sourceType,
+              controller: controller,
+              source: data,
+              topPadding: topPadding,
+              onSelectingChanged: (v) {
+                if (context.mounted) selecting.value = v;
+              },
+            );
         final listBody = RefreshIndicator(
           onRefresh: () async => refresh(),
-          child: SourceMangaDisplayView(
-            sourceId: sourceId,
-            sourceType: sourceType,
-            controller: controller,
-            source: data,
+          child: displayView(
             topPadding: glass ? _glassSegmentHeight + _glassResultSpacing : 0,
-            onSelectingChanged: (v) {
-              if (context.mounted) selecting.value = v;
-            },
           ),
         );
         if (context.usesDesktopShell) {
@@ -846,6 +891,24 @@ class SourceMangaListScreen extends HookConsumerWidget {
             ),
             minWidth: searchTopBarSlotMinWidth(slotActionCount, leadingWidth),
             child: desktopScaffold,
+          );
+        }
+        if (glass && !topBar) {
+          // As on iOS: the large title scrolls up into the bar, the
+          // segments stay pinned under it, and pulling down above the title
+          // reloads the catalogue.
+          return CollapsingTitleScaffold(
+            title: sourceName,
+            subtitle: sourceHost,
+            below: showSearch.value ? toolbarBottom : null,
+            pinned: glassSegments,
+            actions: glassActions,
+            onRefresh: () async => refresh(),
+            body: Builder(
+              builder: (context) => displayView(
+                topPadding: AppleGlassFloatingHeader.insetOf(context),
+              ),
+            ),
           );
         }
         final scaffold = Scaffold(

@@ -24,7 +24,6 @@ import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../search/settings_search_registry.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
 import 'widgets/long_strip_width_limit_slider/long_strip_width_limit_slider.dart';
-import 'widgets/reader_feedback_toasts_tile/reader_feedback_toasts_tile.dart';
 import 'widgets/reader_force_horizontal_seekbar_tile/reader_force_horizontal_seekbar_tile.dart';
 import 'widgets/reader_general_prefs/reader_general_prefs.dart';
 import 'widgets/reader_ignore_safe_area_tile/reader_ignore_safe_area_tile.dart';
@@ -302,10 +301,6 @@ class ReaderSettingsScreen extends ConsumerWidget {
                     const SettingsHighlightTarget(
                       id: 'lastPageSwipe',
                       child: ReaderLastPageSwipeTile(),
-                    ),
-                    const SettingsHighlightTarget(
-                      id: 'feedbackToasts',
-                      child: ReaderFeedbackToastsTile(),
                     ),
                   ],
                 ),

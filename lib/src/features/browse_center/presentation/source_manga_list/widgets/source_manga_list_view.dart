@@ -34,8 +34,10 @@ class SourceMangaListView extends ConsumerWidget {
     required this.onToggleSelection,
     this.source,
     this.topPadding = 0,
+    this.sourceType = SourceType.POPULAR,
   });
   final PagingController<int, MangaDto> controller;
+  final SourceType sourceType;
   final SourceDto? source;
   final Set<int> selectedIds;
   final bool selecting;
@@ -126,7 +128,9 @@ class SourceMangaListView extends ConsumerWidget {
             ),
           ),
           noItemsFoundIndicatorBuilder: (context) => Emoticons(
-            illustration: KuchieCharacterPhase.noResults,
+            illustration: sourceType == SourceType.SEARCH
+                ? KuchieCharacterPhase.noResults
+                : KuchieCharacterPhase.empty,
             title: context.l10n.noMangaFound,
             button: TextButton(
               onPressed: () => controller.refresh(),

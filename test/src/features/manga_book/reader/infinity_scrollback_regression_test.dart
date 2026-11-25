@@ -188,6 +188,7 @@ Future<void> _pumpReaderOnChapter2(
   _QuietRepo? repo,
   ChapterPagesDto? chapterPages,
   _PageCache? pageCache,
+  int? textureLimit,
 }) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
@@ -206,7 +207,8 @@ Future<void> _pumpReaderOnChapter2(
         if (pageCache != null) ...[
           textureLimitProvider.overrideWith((ref) async => 256),
           serverPageCacheManagerProvider.overrideWithValue(pageCache),
-        ],
+        ] else if (textureLimit != null)
+          textureLimitProvider.overrideWith((ref) async => textureLimit),
         mangaBookRepositoryProvider.overrideWithValue(repo ?? _QuietRepo()),
         mangaWithIdProvider(
           mangaId: 1,
@@ -305,6 +307,10 @@ void main() {
       tester,
       prevPages: () => null,
       chapterPages: pages,
+      // iPhones report a texture limit, which switches the strip to the
+      // split-image pages that settle their height after loading. Without
+      // it the test took the simpler path on macOS and failed only on Linux.
+      textureLimit: 16384,
     );
     for (var i = 0; i < 12; i++) {
       await tester.runAsync(

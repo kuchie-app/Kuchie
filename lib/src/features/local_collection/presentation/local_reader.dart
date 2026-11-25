@@ -10,11 +10,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../constants/db_keys.dart';
 import '../../../constants/enum.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
 import '../../../widgets/app_bottom_sheet.dart';
-import '../../../widgets/custom_circular_progress_indicator.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
 import '../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
@@ -32,6 +32,7 @@ import '../../manga_book/presentation/reader/widgets/chrome/reader_page_actions_
 import '../../manga_book/presentation/reader/widgets/chrome/reader_quick_settings_sheet.dart';
 import '../../manga_book/presentation/reader/widgets/chrome/reader_top_bar.dart';
 import '../../manga_book/presentation/reader/widgets/reader_edge_swipe_back.dart';
+import '../../manga_book/presentation/reader/widgets/reader_hold_gesture_detector.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_config.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/infinity_continuous_feedback.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/infinity_continuous/measure_size.dart';
@@ -43,6 +44,7 @@ import '../../manga_book/presentation/reader/widgets/reader_mode/paged_spread_ma
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_page_file.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_zoom_view.dart';
 import '../../manga_book/presentation/reader/widgets/reader_navigation_layout/reader_navigation_layout.dart';
+import '../../manga_book/presentation/reader/widgets/reader_page_loader.dart';
 import '../../manga_book/presentation/reader/widgets/reader_wrapper.dart';
 import '../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
@@ -636,15 +638,26 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   Future<void> _pickMode() => showAppDialog<void>(
     context: context,
     builder: (dialogContext) => RadioListPopup<ReaderMode>(
-      optionList: ReaderMode.displayOrder,
+      // Saved app-wide, like Settings, so it carries to every series.
+      optionList: ReaderMode.displayOrder.sublist(1),
       separatorBefore: ReaderMode.continuousHorizontalLTR,
       getOptionTitle: (mode) => mode.toLocale(dialogContext),
-      value: _settings.readerMode,
+      value: ref.read(readerModeKeyProvider) ?? DBKeys.readerMode.initial,
       title: dialogContext.l10n.readerMode,
       onChange: (mode) {
         Navigator.pop(dialogContext);
         if (!mounted) return;
-        unawaited(ref.read(_settingsProvider.notifier).setReaderMode(mode));
+        final autoApplies =
+            sessionAutoReaderMode(
+              enabled: ref.read(autoWebtoonModeProvider).ifNull(true),
+              seriesMode: null,
+              genres: _format.genres,
+              sourceName: _format.sourceName,
+            ) !=
+            null;
+        ref
+            .read(_settingsProvider.notifier)
+            .setReaderMode(mode, overrideAuto: autoApplies);
       },
     ),
   );
@@ -797,6 +810,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
             chapterName: _chapter.title,
             isChapterStart: false,
             alwaysShow: alwaysShow,
+            note: next == null ? context.l10n.noMoreChaptersAhead : null,
           ),
           if (next != null)
             TextButton(onPressed: nextChapter, child: Text(next.title)),
@@ -809,10 +823,13 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     final Widget content;
     if (_continuous) {
       final scrollAxis = horizontal ? Axis.horizontal : Axis.vertical;
-      final strip = GestureDetector(
+      // Ignores holds that stop a fling or ride a slow scroll.
+      final strip = ReaderHoldGestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _onStripTap,
-        onLongPress: settings.readWithLongTap ? _openPageActions : null,
+        onLongPressStart: settings.readWithLongTap
+            ? (_) => unawaited(_openPageActions())
+            : null,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
@@ -885,6 +902,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
                         child: _LocalStripPage(
                           key: ValueKey(pages[page]),
                           url: pages[page],
+                          pageNumber: page + 1,
                           prepare: preparePage,
                           dimensions: _dimensions,
                           measuredSizes: _measuredSizes,
@@ -983,9 +1001,6 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
             ref,
             mode: mode,
             layout: navigationLayout,
-            seriesOverride: settings.tapInvert == TapInvert.none
-                ? null
-                : settings.tapInvert,
           ),
           smallerTapZones: settings.smallerTapZones,
         ),
@@ -1048,9 +1063,6 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       ref,
       mode: mode,
       layout: zonesLayout,
-      seriesOverride: settings.tapInvert == TapInvert.none
-          ? null
-          : settings.tapInvert,
     );
     final pageContent = Stack(
       fit: StackFit.expand,
@@ -1185,9 +1197,13 @@ class _LocalStripPage extends StatefulWidget {
     required this.originalSize,
     required this.cropBorders,
     required this.dpr,
+    this.pageNumber,
   });
 
   final String url;
+
+  /// One-based page number, for the loading caption.
+  final int? pageNumber;
   final Future<File> Function(String uri)? prepare;
   final TallPageDimensionCache dimensions;
   final Map<String, Size> measuredSizes;
@@ -1261,7 +1277,12 @@ class _LocalStripPageState extends State<_LocalStripPage> {
       return SizedBox.fromSize(
         size: size,
         child: snapshot.connectionState != ConnectionState.done
-            ? const Center(child: CenterKuchieShimmerIndicator())
+            ? Center(
+                child: ReaderPageLoader(
+                  pageNumber: widget.pageNumber,
+                  onRetry: _retry,
+                ),
+              )
             : snapshot.hasError
             ? readerPageRetry(context, _retry)
             : ServerImage(

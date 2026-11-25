@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -175,6 +177,7 @@ class ServerImage extends HookConsumerWidget {
     this.fit,
     this.appendApiToUrl = false,
     this.progressIndicatorBuilder,
+    this.progressRetryBuilder,
     this.imageBuilder,
     this.wrapper,
     this.showReloadButton = false,
@@ -202,6 +205,11 @@ class ServerImage extends HookConsumerWidget {
   final bool appendApiToUrl;
   final Widget Function(BuildContext, String, DownloadProgress)?
   progressIndicatorBuilder;
+
+  /// Like [progressIndicatorBuilder], with a callback that starts the fetch
+  /// again, for a loading page that offers a retry once it times out.
+  final Widget Function(BuildContext, DownloadProgress, VoidCallback retry)?
+  progressRetryBuilder;
   // Invoked only after loading, so callers can measure the rendered image.
   final Widget Function(BuildContext, ImageProvider)? imageBuilder;
   final Widget Function(Widget child)? wrapper;
@@ -225,6 +233,7 @@ class ServerImage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final key = useState(UniqueKey());
+    final shownUrl = useRef<String?>(null);
     final failed = useRef(false);
     final reload = useRef<Future<void> Function()?>(null);
     final reloads =
@@ -414,8 +423,40 @@ class ServerImage extends HookConsumerWidget {
         ? ref.watch(coverCacheManagerProvider)
         : ref.watch(serverPageCacheManagerProvider);
 
+    // A refreshed series gets a new cover version, so the cover downloads
+    // again. Until it arrives, the previous version (already cached) stays
+    // up instead of a placeholder.
+    final shownKey = useRef<String?>(null);
+    final previousKey = useRef<String?>(null);
+    if (shownKey.value != cacheKey) {
+      previousKey.value = cover && imageUrl == shownUrl.value
+          ? shownKey.value
+          : null;
+      shownKey.value = cacheKey;
+      shownUrl.value = imageUrl;
+    }
+    final staleKey = previousKey.value;
+
     // Delay shimmer so quick cache re-decodes do not flash a placeholder.
-    final defaultIndicator = cover
+    final Widget defaultIndicator = staleKey != null
+        ? Image(
+            image: ResizeImage.resizeIfNeeded(
+              imageBuilder == null ? cacheWidth : null,
+              imageBuilder == null ? cacheHeight : null,
+              CachedNetworkImageProvider(
+                fetchUrl,
+                cacheKey: staleKey,
+                cacheManager: cacheManager,
+                headers: httpHeaders,
+              ),
+            ),
+            width: size?.width,
+            height: size?.height,
+            fit: fit ?? BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const DelayedShimmer(),
+          )
+        : cover
         ? const DelayedShimmer()
         : const CenterKuchieShimmerIndicator();
     finalProgressIndicatorBuilder(
@@ -424,7 +465,12 @@ class ServerImage extends HookConsumerWidget {
       DownloadProgress progress,
     ) => AppUtils.wrapOn(
       wrapper,
-      progressIndicatorBuilder?.call(context, url, progress) ??
+      progressRetryBuilder?.call(
+            context,
+            progress,
+            () => unawaited(reload.value?.call()),
+          ) ??
+          progressIndicatorBuilder?.call(context, url, progress) ??
           defaultIndicator,
     );
 

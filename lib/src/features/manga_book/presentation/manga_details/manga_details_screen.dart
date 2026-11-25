@@ -140,11 +140,7 @@ class MangaDetailsScreen extends HookConsumerWidget {
     final refresh = useCallback(([bool onlineFetch = false]) async {
       // Bulk callbacks may arrive after the screen has been disposed.
       if (!context.mounted) return;
-      if (onlineFetch) {
-        ref
-            .read(toastProvider)
-            ?.show(context.l10n.updating, withMicrotask: true);
-      }
+      // Progress shows on the line above the chapter list, not as toasts.
       await mangaRefresh(onlineFetch);
       // mangaRefresh can return after disposal without throwing; recheck before chapterListRefresh.
       if (!context.mounted) return;
@@ -159,10 +155,6 @@ class MangaDetailsScreen extends HookConsumerWidget {
           ref
               .read(toastProvider)
               ?.showError(context.l10n.errorSomethingWentWrong);
-        } else {
-          ref
-              .read(toastProvider)
-              ?.show(context.l10n.updateCompleted, withMicrotask: true);
         }
       }
     }, [context, mangaRefresh, chapterListRefresh]);
@@ -510,7 +502,10 @@ class MangaDetailsScreen extends HookConsumerWidget {
                       children: [
                         NotificationListener<ScrollNotification>(
                           onNotification: (n) {
-                            if (n.metrics.axis == Axis.vertical) {
+                            // Only the page itself: a nested list must not
+                            // move the bar.
+                            if (n.depth == 0 &&
+                                n.metrics.axis == Axis.vertical) {
                               scrollPx.value = n.metrics.pixels;
                             }
                             return false;

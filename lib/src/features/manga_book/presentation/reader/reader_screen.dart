@@ -34,7 +34,6 @@ import '../../../settings/presentation/reader/widgets/reader_orientation/reader_
 import '../../../tracking/domain/track_progress_gate.dart';
 import '../../domain/chapter/chapter_model.dart';
 import '../../domain/chapter_page/chapter_page_model.dart';
-import '../../domain/manga/manga_model.dart';
 import '../manga_details/controller/manga_details_controller.dart';
 import '../manga_details/controller/scanlator_dedup.dart';
 import 'controller/auto_webtoon.dart';
@@ -46,6 +45,7 @@ import 'utils/reader_progress_queue.dart';
 import 'widgets/chrome/reader_chrome.dart';
 import 'widgets/reader_mode/infinity_continuous/multichapter_continuous_reader_mode.dart';
 import 'widgets/reader_mode/multichapter_paged_reader_mode.dart';
+import 'widgets/reader_page_loader.dart';
 
 class ReaderScreen extends HookConsumerWidget {
   const ReaderScreen({
@@ -86,19 +86,14 @@ class ReaderScreen extends HookConsumerWidget {
         ? null
         : sessionAutoReaderMode(
             enabled: ref.watch(autoWebtoonModeProvider).ifNull(true),
-            seriesMode: mangaData.metaData.readerMode,
+            // The reading mode is app-wide; older per-series modes are ignored.
+            seriesMode: null,
             genres: autoSource.genre,
             sourceName: autoSource.source?.name,
           );
     final toast = ref.watch(toastProvider);
-    // Resolve l10n during build; inherited-widget lookup is invalid during hook initialization.
-    final autoWebtoonSnack = context.l10n.autoWebtoonSnack;
-    useEffect(() {
-      if (autoReaderMode == ReaderMode.webtoon) {
-        toast?.show(autoWebtoonSnack, withMicrotask: true);
-      }
-      return null;
-    }, [autoReaderMode]);
+    // No toast for automatic webtoon detection: the reader stays free of
+    // pop-ups, and the mode setting shows what was chosen.
 
     // Reading time for Reading Insights, shared with the Local collection.
     final readingTitle = useRef<(String, String?)?>(null);
@@ -290,11 +285,10 @@ class ReaderScreen extends HookConsumerWidget {
       return () => setDrawUnderCutout(false);
     }, [underCutout]);
 
-    // Apply rotation once the per-series/global setting resolves; Default leaves the platform unchanged.
+    // Apply the app-wide rotation once the series loads; Default leaves the platform unchanged.
     final readerOrientation = mangaData == null
         ? null
-        : mangaData.metaData.readerOrientation ??
-              ref.watch(readerOrientationKeyProvider) ??
+        : ref.watch(readerOrientationKeyProvider) ??
               ReaderOrientation.defaultRotation;
     useEffect(() {
       final lock = readerOrientation?.deviceOrientations;
@@ -327,7 +321,15 @@ class ReaderScreen extends HookConsumerWidget {
       ),
       body: SafeArea(top: false, child: body),
     );
-    const loadingChapter = _ReaderChapterLoading();
+    final loadingChapter = _ReaderChapterLoading(
+      // Times out like a page does; Retry asks for the chapter again.
+      onRetry: () {
+        providerContainer.invalidate(chapterProviderWithIndex);
+        providerContainer.invalidate(
+          chapterPagesProvider(chapterId: chapterId),
+        );
+      },
+    );
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) async {
@@ -406,9 +408,7 @@ class ReaderScreen extends HookConsumerWidget {
                           ),
                         );
                       }
-                      return switch (autoReaderMode ??
-                          data.metaData.readerMode ??
-                          defaultReaderMode) {
+                      return switch (autoReaderMode ?? defaultReaderMode) {
                         ReaderMode.singleVertical =>
                           MultiChapterPagedReaderMode(
                             chapter: chapterData,
@@ -635,13 +635,39 @@ class ReaderScreen extends HookConsumerWidget {
   }
 }
 
-class _ReaderChapterLoading extends StatelessWidget {
-  const _ReaderChapterLoading();
+/// Shown while a chapter's pages are fetched: the muted Kuchie brush mark,
+/// which keeps moving while it waits, and a retry once it times out.
+class _ReaderChapterLoading extends StatefulWidget {
+  const _ReaderChapterLoading({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  State<_ReaderChapterLoading> createState() => _ReaderChapterLoadingState();
+}
+
+class _ReaderChapterLoadingState extends State<_ReaderChapterLoading> {
+  late final Timer _delay;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // A quick cache hit shows the chapter without a loader flashing first.
+    _delay = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _delay.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final route = ModalRoute.of(context);
-    final label = context.l10n.readerLoadingChapter;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -649,14 +675,10 @@ class _ReaderChapterLoading extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: 12,
           children: [
-            const _ReaderLoadingIllustration(),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+            AnimatedOpacity(
+              opacity: _visible ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: ReaderPageLoader(size: 56, onRetry: widget.onRetry),
             ),
             if (route?.impliesAppBarDismissal ?? false)
               TextButton(
@@ -667,40 +689,6 @@ class _ReaderChapterLoading extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ReaderLoadingIllustration extends StatefulWidget {
-  const _ReaderLoadingIllustration();
-
-  @override
-  State<_ReaderLoadingIllustration> createState() =>
-      _ReaderLoadingIllustrationState();
-}
-
-class _ReaderLoadingIllustrationState
-    extends State<_ReaderLoadingIllustration> {
-  late final Timer _delay;
-  bool _visible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Short cache hits never need to decode the animation.
-    _delay = Timer(const Duration(milliseconds: 180), () {
-      setState(() => _visible = true);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => _visible
-      ? const KuchieCharacterMotion(phase: KuchieCharacterPhase.loading)
-      : const SizedBox(height: 132);
-
-  @override
-  void dispose() {
-    _delay.cancel();
-    super.dispose();
   }
 }
 

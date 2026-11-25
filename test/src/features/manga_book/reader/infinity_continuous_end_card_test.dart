@@ -177,7 +177,7 @@ void main() {
   ) async {
     await _pumpReaderOnLastChapter(tester);
 
-    final marker = find.text('Finished');
+    final marker = find.text('Finished:');
     expect(
       marker,
       findsOneWidget,
@@ -195,8 +195,9 @@ void main() {
       reason: 'the marker should sit right after the last page',
     );
     expect(
+      // "Finished:", the chapter name, then the note.
       tester.getBottomLeft(note).dy - tester.getTopLeft(marker).dy,
-      lessThan(72),
+      lessThan(100),
       reason: 'the finish note should stay with the marker',
     );
     expect(tester.takeException(), isNull);

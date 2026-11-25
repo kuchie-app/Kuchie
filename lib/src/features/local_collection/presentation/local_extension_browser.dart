@@ -15,6 +15,7 @@ import '../../../constants/app_sizes.dart';
 import '../../../constants/db_keys.dart';
 import '../../../constants/enum.dart';
 import '../../../constants/language_list.dart';
+import '../../../routes/reader_swipe_back_route.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/hooks/paging_controller_hook.dart';
 import '../../../utils/motion/reduce_motion.dart';
@@ -29,12 +30,14 @@ import '../../../widgets/ios/apple_glass_popover.dart';
 import '../../../widgets/ios/apple_glass_segments.dart';
 import '../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../widgets/ios/apple_page_title.dart';
+import '../../../widgets/ios/collapsing_title_scaffold.dart';
 import '../../../widgets/kuchie_character_motion.dart';
 import '../../../widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import '../../../widgets/manga_cover/list/manga_cover_descriptive_list_tile.dart';
 import '../../../widgets/manga_cover/list/manga_cover_list_tile.dart';
 import '../../../widgets/paging_footer.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
+import '../../../widgets/pull_refresh_indicator.dart';
 import '../../../widgets/search_field.dart';
 import '../../../widgets/selection_action_bar.dart';
 import '../../../widgets/server_image.dart';
@@ -47,6 +50,8 @@ import '../../browse_center/presentation/extension/widgets/extension_info_conten
 import '../../browse_center/presentation/source/widgets/source_list_tile.dart';
 import '../../browse_center/presentation/source_manga_list/widgets/source_manga_filter.dart';
 import '../../manga_book/presentation/manga_details/controller/manga_details_controller.dart';
+import '../../manga_book/presentation/manga_details/widgets/add_to_library_category.dart';
+import '../../manga_book/presentation/manga_details/widgets/chapter_check_status.dart';
 import '../../manga_book/presentation/manga_details/widgets/chapter_context_menu.dart'
     show ChapterMenuRow, menuAnchorForPoint;
 import '../../manga_book/presentation/manga_details/widgets/chapter_grid_tile.dart';
@@ -66,7 +71,6 @@ import '../data/local_mihon_runtime.dart';
 import '../data/local_network_settings.dart';
 import '../data/local_sources.dart';
 import '../data/package_catalog_index.dart';
-import 'local_collapsing_header.dart';
 import 'local_reader.dart';
 import 'local_series_personal.dart';
 import 'local_source_settings.dart';
@@ -523,6 +527,8 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
             labels: labels,
             selectedIndex: index,
             onSelected: _goToTab,
+            // Follows the pages while they are swiped.
+            position: _tabs.animation,
             fallback: fallback,
           )
         : fallback;
@@ -2066,8 +2072,10 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
             ),
           )
         : null;
-    return LocalCollapsingHeaderScaffold(
+    return CollapsingTitleScaffold(
       title: extension.name,
+      // Pull down above the title to load the catalogue again.
+      onRefresh: () async => _paging.refresh(),
       subtitle: extension.homepage?.toString(),
       below: _showSearch || savedNote != null
           ? Column(
@@ -2267,36 +2275,31 @@ class _LocalSourcePageState extends State<_LocalSourcePage> {
                 ),
               ),
       );
-      return RefreshIndicator(
-        edgeOffset: inset,
-        onRefresh: () async => _paging.refresh(),
-        child: _showList
-            ? PagedListView<int, LocalSourceManga>(
-                state: state,
-                fetchNextPage: fetchNextPage,
-                padding: padding,
-                physics: const AlwaysScrollableScrollPhysics(),
-                builderDelegate: delegate,
-              )
-            : PagedGridView<int, LocalSourceManga>(
-                state: state,
-                fetchNextPage: fetchNextPage,
-                padding: padding,
-                physics: const AlwaysScrollableScrollPhysics(),
-                showNewPageErrorIndicatorAsGridChild: false,
-                showNewPageProgressIndicatorAsGridChild: false,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount:
-                      context.windowSizeClass == WindowSizeClass.compact
-                      ? 2
-                      : 4,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                  childAspectRatio: .74,
-                ),
-                builderDelegate: delegate,
+      // Pull-to-refresh lives in the header scaffold, above the title.
+      return _showList
+          ? PagedListView<int, LocalSourceManga>(
+              state: state,
+              fetchNextPage: fetchNextPage,
+              padding: padding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              builderDelegate: delegate,
+            )
+          : PagedGridView<int, LocalSourceManga>(
+              state: state,
+              fetchNextPage: fetchNextPage,
+              padding: padding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              showNewPageErrorIndicatorAsGridChild: false,
+              showNewPageProgressIndicatorAsGridChild: false,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:
+                    context.windowSizeClass == WindowSizeClass.compact ? 2 : 4,
+                crossAxisSpacing: 4,
+                mainAxisSpacing: 4,
+                childAspectRatio: .74,
               ),
-      );
+              builderDelegate: delegate,
+            );
     },
   );
 }
@@ -2354,7 +2357,8 @@ class LocalMangaHero extends StatelessWidget {
         coverImage: cover,
         fallbackCoverImage: fallbackCover,
         showBadges: false,
-        titleMaxLines: null,
+        // Long titles stop at two lines; a tap still copies all of it.
+        titleMaxLines: 2,
         onTitleClicked: (text) => onSearch?.call(text ?? ''),
       ),
     );
@@ -2451,8 +2455,45 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
       localSourceSeriesId(widget.extension, widget.manga.id);
   LocalDownloadQueue get _queue => widget.services.downloads;
 
-  Future<List<LocalSourceChapter>> _load() =>
-      widget.services.sources.chapters(widget.extension.id, widget.manga);
+  /// The line above the chapter list: checking, nothing new, or new chapters.
+  ChapterCheck? _check;
+  int _checkRequest = 0;
+
+  Future<List<LocalSourceChapter>> _load() {
+    final chapters = widget.services.sources.chapters(
+      widget.extension.id,
+      widget.manga,
+    );
+    // Callers rebuild right after, so no setState here.
+    _check = (state: ChapterCheckState.checking, count: 0);
+    unawaited(_trackCheck(chapters));
+    return chapters;
+  }
+
+  /// Compares with the chapter count seen last time this series was opened.
+  Future<void> _trackCheck(Future<List<LocalSourceChapter>> chapters) async {
+    final request = ++_checkRequest;
+    ChapterCheck? result;
+    try {
+      final count = (await chapters).length;
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'local.reader.chapterCount.$_seriesId';
+      final before = prefs.getInt(key);
+      await prefs.setInt(key, count);
+      result = switch (before) {
+        // First visit: nothing to compare with.
+        null => null,
+        final before when count > before => (
+          state: ChapterCheckState.newChapters,
+          count: count - before,
+        ),
+        _ => (state: ChapterCheckState.upToDate, count: 0),
+      };
+    } catch (_) {
+      result = (state: ChapterCheckState.failed, count: 0);
+    }
+    if (mounted && request == _checkRequest) setState(() => _check = result);
+  }
 
   @override
   void initState() {
@@ -2571,33 +2612,79 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     }
   }
 
-  Future<void> _toggleLibrary(bool inLibrary) async {
+  /// Adds the series with the categories the user picks (none checked at
+  /// first), or edits them once it is in the library. Unchecking every
+  /// category removes it from the library.
+  Future<void> _editLibrary(LocalSeries? series) async {
     if (_savingLibrary) return;
-    _savingLibrary = true;
+    setState(() => _savingLibrary = true);
     try {
-      if (inLibrary &&
-          !await localConfirm(
-            context,
-            context.l10n.removeFromLibrary,
-            context.l10n.duplicatesRemoveConfirm(1),
-          )) {
-        return;
-      }
+      final catalog = widget.services.catalog;
+      final inLibrary = series?.inLibrary == true;
+      final names = await catalog.categories();
       if (!mounted) return;
-      await widget.services.catalog.setInLibrary(
-        seriesId: _seriesId,
-        title: _manga.title,
-        inLibrary: !inLibrary,
-        source: widget.services.sources.seriesReference(
-          _manga,
-          sourceName: widget.extension.name,
-        ),
-      );
+      final Set<String> picked;
+      if (names.isEmpty) {
+        // Nothing to choose from: add straight away, or confirm the removal.
+        if (inLibrary &&
+            !await localConfirm(
+              context,
+              context.l10n.removeFromLibrary,
+              context.l10n.duplicatesRemoveConfirm(1),
+            )) {
+          return;
+        }
+        picked = const {};
+      } else {
+        final current = {...?series?.categories}.intersection(names.toSet());
+        final choice = await showLibraryCategoryPicker<String>(
+          context,
+          options: [for (final name in names) (id: name, name: name)],
+          initial: inLibrary ? current : const {},
+          inLibrary: inLibrary,
+          subtitle: _manga.title,
+        );
+        if (choice == null || !mounted) return;
+        if (inLibrary &&
+            choice.length == current.length &&
+            choice.containsAll(current)) {
+          return;
+        }
+        picked = choice;
+      }
+      final keep = !inLibrary || picked.isNotEmpty;
+      if (keep) {
+        await catalog.setInLibrary(
+          seriesId: _seriesId,
+          title: _manga.title,
+          inLibrary: true,
+          source: widget.services.sources.seriesReference(
+            _manga,
+            sourceName: widget.extension.name,
+          ),
+        );
+        await catalog.setCategories(_seriesId, picked.toList());
+        if (!inLibrary) {
+          unawaited(keepLocalSourceCover(widget.services, _seriesId, _manga));
+        }
+      } else {
+        // Clear memberships first so a later add starts with nothing checked.
+        await catalog.setCategories(_seriesId, const []);
+        await catalog.setInLibrary(
+          seriesId: _seriesId,
+          title: _manga.title,
+          inLibrary: false,
+        );
+      }
       if (mounted) _reload();
     } catch (error) {
       if (mounted) localFailure(context, error);
     } finally {
-      _savingLibrary = false;
+      if (mounted) {
+        setState(() => _savingLibrary = false);
+      } else {
+        _savingLibrary = false;
+      }
     }
   }
 
@@ -3266,8 +3353,10 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                       }
                       return false;
                     },
-                    child: RefreshIndicator(
+                    // The arrow shows under the bar the page scrolls behind.
+                    child: PullToRefresh(
                       onRefresh: _refresh,
+                      top: MediaQuery.paddingOf(context).top,
                       child: CustomScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
@@ -3310,17 +3399,23 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                     child: MangaActionButton(
                                       horizontal: supportsAppleGlass(context),
                                       active: series?.inLibrary == true,
-                                      icon: Icon(
-                                        series?.inLibrary == true
-                                            ? FluentIcons.heart_24_filled
-                                            : FluentIcons.heart_24_regular,
-                                      ),
+                                      icon: _savingLibrary
+                                          ? const SizedBox.square(
+                                              dimension: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Icon(
+                                              series?.inLibrary == true
+                                                  ? FluentIcons.heart_24_filled
+                                                  : FluentIcons
+                                                        .heart_24_regular,
+                                            ),
                                       label: series?.inLibrary == true
                                           ? context.l10n.inLibrary
                                           : context.l10n.addToLibrary,
-                                      onPressed: () => _toggleLibrary(
-                                        series?.inLibrary == true,
-                                      ),
+                                      onPressed: () => _editLibrary(series),
                                     ),
                                   ),
                                   // Same three actions as server series.
@@ -3459,6 +3554,9 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                               ),
                             ),
                           ),
+                          SliverToBoxAdapter(
+                            child: ChapterCheckStatus(check: _check),
+                          ),
                           if (snapshot.hasError)
                             SliverToBoxAdapter(
                               child: Center(
@@ -3571,8 +3669,9 @@ Future<void> openLocalSourceChapter(
   LocalSeries? savedSeries,
 }) {
   unawaited(keepLocalSourceCover(services, seriesId, manga, replace: false));
+  // Swipe from the left edge to close, back to the series page.
   return Navigator.of(context).push<void>(
-    MaterialPageRoute(
+    ReaderSwipeBackRoute(
       builder: (_) => _LocalChapterSession(
         services: services,
         extension: extension,
@@ -3701,7 +3800,7 @@ Future<void> openSavedLocalChapter(
   LocalSeries series,
   LocalChapter chapter,
 ) => Navigator.of(context).push<void>(
-  MaterialPageRoute(
+  ReaderSwipeBackRoute(
     builder: (_) => _LocalChapterSession(
       services: services,
       chapters: const [],

@@ -14,6 +14,7 @@ import '../../../domain/chapter/chapter_model.dart';
 import '../../../domain/chapter_page/chapter_page_model.dart';
 import '../utils/last_page_swipe_utils.dart';
 import 'reader_gesture_state.dart';
+import 'reader_hold_gesture_detector.dart';
 
 /// Handles chapter-boundary swipes for reader modes that do not own gestures.
 class DirectionalSwipeGestureHandler extends HookConsumerWidget {
@@ -75,8 +76,8 @@ class DirectionalSwipeGestureHandler extends HookConsumerWidget {
   }
 
   Widget _wrapWithTapAndLongPress(Widget child) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
+    // Ignores holds that stop a fling or ride a slow scroll.
+    return ReaderHoldGestureDetector(
       onLongPressStart: onLongPressStart,
       onTap: onTap,
       child: child,

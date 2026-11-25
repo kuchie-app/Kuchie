@@ -27,6 +27,7 @@ import '../../../../offline/data/webui_chapter_sort_meta.dart';
 import '../../../../settings/presentation/library/widgets/refresh_chapters_from_source_tile/refresh_chapters_from_source_tile.dart';
 import '../../../data/manga_book/manga_book_repository.dart';
 import '../../../domain/chapter/chapter_model.dart';
+import '../../../domain/manga/graphql/__generated__/fragment.graphql.dart';
 import '../../../domain/manga/manga_model.dart';
 import '../../upcoming/controller/upcoming_controller.dart';
 import 'chapter_list_entry.dart';
@@ -102,6 +103,16 @@ class MangaWithId extends _$MangaWithId {
   Future<void> refresh() async {
     ref.invalidateSelf();
   }
+
+  /// Shows a library change before the server confirms it; the next refetch
+  /// replaces it with the server's answer.
+  void showInLibrary(bool inLibrary) {
+    final manga = state.value;
+    if (manga == null || manga.user.inLibrary == inLibrary) return;
+    state = AsyncData(
+      manga.copyWith(user: manga.user.copyWith(inLibrary: inLibrary)),
+    );
+  }
 }
 
 @riverpod
@@ -117,6 +128,8 @@ class MangaChapterList extends _$MangaChapterList {
         .ifNull();
     // Source fetches refresh metadata too, so refresh MangaWithId afterwards.
     var didSourceFetch = false;
+    // Stored chapters render first; the source scrape then runs in background.
+    var revalidateFromSource = false;
     // Capture before await; the provider may be disposed while fetching.
     final sync = ref.read(offlineSyncProvider);
     // Mirror only genuine server responses — fallback chapter DTOs carry
@@ -127,8 +140,9 @@ class MangaChapterList extends _$MangaChapterList {
         final stored = await repo.getStoredChapterList(mangaId);
         if (!current()) return null;
         fromServer = true;
-        // Re-scrape only when stored chapters are absent or source refresh is enabled.
-        if (!refreshFromSource && stored != null && stored.isNotEmpty) {
+        // With stored chapters, show them now and scrape the source afterwards.
+        if (stored != null && stored.isNotEmpty) {
+          revalidateFromSource = refreshFromSource;
           return stored;
         }
         try {
@@ -168,6 +182,14 @@ class MangaChapterList extends _$MangaChapterList {
         }),
       );
     }
+    if (revalidateFromSource && fromServer) {
+      // refresh() keeps the stored list visible and swaps in the scrape when it lands.
+      unawaited(
+        Future.microtask(() async {
+          if (current()) await refresh();
+        }),
+      );
+    }
     return result;
   }
 
@@ -190,6 +212,11 @@ class MangaChapterList extends _$MangaChapterList {
     var didSourceFetch = false;
     // Offline refreshes use the catalog; mirror only genuine server responses.
     var fromServer = false;
+    // Chapters the server had before the scrape, to count the new ones.
+    Set<int>? storedIds;
+    var newChapters = 0;
+    final checking = refreshFromSource && !viewOffline;
+    if (checking) _reportCheck((state: ChapterCheckState.checking, count: 0));
     final result = await AsyncValue.guard(
       () => chaptersWithOfflineFallback(
         fetch: () async {
@@ -200,9 +227,22 @@ class MangaChapterList extends _$MangaChapterList {
             return stored;
           }
           try {
-            final fetched = await repo.getMangaAndChapterList(mangaId);
+            // The automatic check asks only for chapters: re-fetching the
+            // series details bumps the cover's version, which re-downloads
+            // and flashes the cover on every visit. A manual refresh, or a
+            // series with nothing stored yet, fetches the details too.
+            final fetched = onlineFetch || stored == null || stored.isEmpty
+                ? await repo.getMangaAndChapterList(mangaId)
+                : await repo.getChapterList(mangaId);
             if (fetched != null && fetched.isNotEmpty) {
               didSourceFetch = true;
+              if (stored != null && stored.isNotEmpty) {
+                final known = {for (final c in stored) c.id};
+                storedIds = known;
+                newChapters = fetched
+                    .where((c) => !known.contains(c.id))
+                    .length;
+              }
               return fetched;
             }
           } catch (_) {}
@@ -218,6 +258,18 @@ class MangaChapterList extends _$MangaChapterList {
     );
     if (!current()) return;
     ref.keepAlive();
+    if (checking) {
+      _reportCheck(switch ((didSourceFetch, storedIds)) {
+        // A first scrape has nothing to compare with.
+        (true, null) => null,
+        (true, _) when newChapters > 0 => (
+          state: ChapterCheckState.newChapters,
+          count: newChapters,
+        ),
+        (true, _) => (state: ChapterCheckState.upToDate, count: 0),
+        (false, _) => (state: ChapterCheckState.failed, count: 0),
+      });
+    }
     // Source scraping also changes metadata, so refresh it alongside chapters.
     if (didSourceFetch && ref.mounted) {
       ref.invalidate(mangaWithIdProvider(mangaId: mangaId));
@@ -238,6 +290,12 @@ class MangaChapterList extends _$MangaChapterList {
     }
   }
 
+  /// Feeds the status line above the series page's chapter list.
+  void _reportCheck(ChapterCheck? check) {
+    if (!ref.mounted) return;
+    ref.read(mangaChapterCheckProvider(mangaId: mangaId).notifier).set(check);
+  }
+
   void updateChapter(int index, ChapterDto chapter) {
     final current = state.value;
     if (current == null || index < 0 || index >= current.length) return;
@@ -245,6 +303,23 @@ class MangaChapterList extends _$MangaChapterList {
     newList[index] = chapter;
     state = AsyncData<List<ChapterDto>?>(newList);
   }
+}
+
+enum ChapterCheckState { checking, upToDate, newChapters, failed }
+
+/// Outcome of checking the source for new chapters; [count] is set for
+/// [ChapterCheckState.newChapters].
+typedef ChapterCheck = ({ChapterCheckState state, int count});
+
+/// The latest check for new chapters of a series, for the line above its
+/// chapter list; null when there is nothing to say. Cleared once the series
+/// page is closed.
+@riverpod
+class MangaChapterCheck extends _$MangaChapterCheck {
+  @override
+  ChapterCheck? build({required int mangaId}) => null;
+
+  void set(ChapterCheck? check) => state = check;
 }
 
 @riverpod

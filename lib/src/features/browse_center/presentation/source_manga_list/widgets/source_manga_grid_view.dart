@@ -102,7 +102,9 @@ class SourceMangaGridView extends ConsumerWidget {
             ),
           ),
           noItemsFoundIndicatorBuilder: (context) => Emoticons(
-            illustration: KuchieCharacterPhase.noResults,
+            illustration: sourceType == SourceType.SEARCH
+                ? KuchieCharacterPhase.noResults
+                : KuchieCharacterPhase.empty,
             title: context.l10n.noMangaFound,
             button: TextButton(
               onPressed: () => controller.refresh(),

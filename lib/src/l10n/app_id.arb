@@ -233,7 +233,7 @@
     "@globalUpdate": {
         "description": "Button text of Global Manga Update"
     },
-    "edit": "Login",
+    "edit": "Ubah",
     "@edit": {
         "description": "Popup button text to edit Category in Edit category screen"
     },
@@ -872,5 +872,13 @@
   "customizeTabs": "Atur tab",
   "customizeTabsSubtitle": "Susun dan pilih tab navigasi",
   "customizeTabsLabels": "Label",
-  "customizeTabsLabelsSubtitle": "Tampilkan atau sembunyikan label di bawah ikon"
+  "customizeTabsLabelsSubtitle": "Tampilkan atau sembunyikan label di bawah ikon",
+    "chapterCheckRefreshing": "Memperbarui",
+    "chapterCheckUpToDate": "Tidak ada bab baru",
+    "chapterCheckNew": "{count, plural, other{{count} bab baru}}",
+    "chapterCheckFailed": "Gagal memeriksa bab baru",
+    "readerChapterFinished": "Selesai:",
+    "readerChapterCurrent": "Sekarang:",
+    "readerPageLabel": "Halaman {number}",
+    "readerPageSlow": "Lebih lama dari biasanya"
 }

@@ -4670,5 +4670,27 @@
   "customizeTabs": "Customize tabs",
   "customizeTabsSubtitle": "Arrange and choose your navigation tabs",
   "customizeTabsLabels": "Labels",
-  "customizeTabsLabelsSubtitle": "Show or hide labels under icons"
+  "customizeTabsLabelsSubtitle": "Show or hide labels under icons",
+  "chapterCheckRefreshing": "Refreshing",
+  "@chapterCheckRefreshing": {
+    "description": "Shown above the chapter list while the source is checked for new chapters"
+  },
+  "chapterCheckUpToDate": "No new chapters found",
+  "chapterCheckNew": "{count, plural, =1{1 new chapter} other{{count} new chapters}}",
+  "chapterCheckFailed": "Couldn't check for new chapters",
+  "readerChapterFinished": "Finished:",
+  "@readerChapterFinished": {
+    "description": "Label above the chapter just read, on the marker between chapters in the reader"
+  },
+  "readerChapterCurrent": "Current:",
+  "readerPageLabel": "Page {number}",
+  "@readerPageLabel": {
+    "description": "Under the loader of a page that is still loading in the reader",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "readerPageSlow": "Taking longer than usual"
 }
