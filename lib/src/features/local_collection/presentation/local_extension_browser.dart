@@ -2357,7 +2357,8 @@ class LocalMangaHero extends StatelessWidget {
         coverImage: cover,
         fallbackCoverImage: fallbackCover,
         showBadges: false,
-        titleMaxLines: null,
+        // Long titles stop at two lines; a tap still copies all of it.
+        titleMaxLines: 2,
         onTitleClicked: (text) => onSearch?.call(text ?? ''),
       ),
     );
