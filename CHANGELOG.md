@@ -17,6 +17,7 @@ All notable changes to Kuchie are listed here. Versions follow [Semantic Version
 - No pop-ups while reading. In Server series, chapters run on like one long strip, with a quiet "Finished / Current" marker between them and a short note after the last one. Local series show the same marker and open the next chapter from a button.
 - Pages load behind a muted Kuchie brush mark with the page number. If nothing arrives for 20 seconds, **Retry** appears.
 - Swipe from the left edge to slide the reader away and land on the series page.
+- In Webtoon, jumping to a page already on screen (the slider or page buttons) lands exactly on it, also right after pages above it finish loading. It used to stop part of a page off.
 
 ### Browse and Library
 - Source pages: the large title folds into the bar, pull down to reload, and the search field spans the page. After a search, its tab stays while you switch to Popular or Latest, until you close the search.

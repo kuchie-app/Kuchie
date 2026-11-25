@@ -167,7 +167,18 @@ class _PositionedListState extends State<PositionedList> {
   @override
   Widget build(BuildContext context) => RegistryWidget(
         elementNotifier: registeredElements,
-        child: UnboundedCustomScrollView(
+        // An item that changes size without a scroll (an image finishing
+        // loading) moves the items after it; report the new positions too,
+        // or a reader seeking to a visible item would use stale offsets.
+        child: NotificationListener<ScrollMetricsNotification>(
+          onNotification: (notification) {
+            if (notification.depth == 0) {
+              _schedulePositionNotificationUpdate();
+              SchedulerBinding.instance.scheduleFrame();
+            }
+            return false;
+          },
+          child: UnboundedCustomScrollView(
           anchor: widget.alignment,
           center: _centerKey,
           controller: scrollController,
@@ -232,6 +243,7 @@ class _PositionedListState extends State<PositionedList> {
                 ),
               ),
           ],
+        ),
         ),
       );
 
