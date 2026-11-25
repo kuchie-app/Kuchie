@@ -502,7 +502,10 @@ class MangaDetailsScreen extends HookConsumerWidget {
                       children: [
                         NotificationListener<ScrollNotification>(
                           onNotification: (n) {
-                            if (n.metrics.axis == Axis.vertical) {
+                            // Only the page itself: a nested list must not
+                            // move the bar.
+                            if (n.depth == 0 &&
+                                n.metrics.axis == Axis.vertical) {
                               scrollPx.value = n.metrics.pixels;
                             }
                             return false;

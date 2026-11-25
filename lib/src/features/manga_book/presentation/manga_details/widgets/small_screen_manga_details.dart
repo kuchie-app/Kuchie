@@ -73,17 +73,18 @@ class SmallScreenMangaDetails extends HookConsumerWidget {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            // Part of the page's own scroll: a scroll view of its own here
+            // would take drags that start on the header, and the chapters
+            // below would never move.
             SliverToBoxAdapter(
-              child: SingleChildScrollView(
-                child: MangaDescription(
-                  manga: manga,
-                  onMigrate: onMigrate,
-                  refresh: () => onDescriptionRefresh(false),
-                  editLibraryCategories: () =>
-                      editMangaLibraryCategories(ref, context, manga),
-                  addMangaToLibrary: () =>
-                      addMangaToLibraryWithCategory(ref, context, manga),
-                ),
+              child: MangaDescription(
+                manga: manga,
+                onMigrate: onMigrate,
+                refresh: () => onDescriptionRefresh(false),
+                editLibraryCategories: () =>
+                    editMangaLibraryCategories(ref, context, manga),
+                addMangaToLibrary: () =>
+                    addMangaToLibraryWithCategory(ref, context, manga),
               ),
             ),
             if (manga.title.isNotBlank && onOpenChapterFilters == null)
