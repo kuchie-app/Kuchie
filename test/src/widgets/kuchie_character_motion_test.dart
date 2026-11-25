@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuchie/src/widgets/kuchie_character_motion.dart';
+import 'package:kuchie/src/widgets/kuchie_face.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
@@ -58,5 +59,41 @@ void main() {
       (resized.imageProvider as ExactAssetImage).assetName,
       endsWith('error.png'),
     );
+  });
+
+  testWidgets('quiet states show Kuchie as a text face, not artwork', (
+    tester,
+  ) async {
+    for (final (phase, face) in [
+      (KuchieCharacterPhase.empty, '( ` ` )>'),
+      (KuchieCharacterPhase.noResults, '( ` ` )>?'),
+      (KuchieCharacterPhase.downloadPaused, '( - - )>'),
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(child: KuchieCharacterMotion(phase: phase, width: 68)),
+        ),
+      );
+      expect(find.byType(Image), findsNothing);
+      final shown = tester.widget<KuchieFace>(find.byType(KuchieFace));
+      expect(shown.face, face);
+      expect(
+        tester.getSize(find.byType(KuchieFace)).width,
+        lessThanOrEqualTo(68),
+        reason: 'it shrinks to fit small spots such as a banner',
+      );
+    }
+  });
+
+  testWidgets('the scarf takes the accent colour', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Center(child: KuchieFace(KuchieFace.empty))),
+    );
+    final text = tester.widget<Text>(find.byType(Text));
+    final spans = (text.textSpan! as TextSpan).children!.cast<TextSpan>();
+    expect(spans.map((s) => s.text).join(), KuchieFace.empty);
+    expect(spans.last.text, '>');
+    final context = tester.element(find.byType(KuchieFace));
+    expect(spans.last.style?.color, Theme.of(context).colorScheme.primary);
   });
 }

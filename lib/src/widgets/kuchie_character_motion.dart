@@ -3,22 +3,28 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'kuchie_face.dart';
+
 enum KuchieCharacterPhase {
   intro('intro'),
   loading('loading'),
   fetchFailed('fetch-failed'),
   offline('offline'),
   error('error'),
-  empty('empty'),
-  noResults('no-results'),
-  downloadPaused('download-paused'),
+  empty('empty', face: KuchieFace.empty),
+  noResults('no-results', face: KuchieFace.noResults),
+  downloadPaused('download-paused', face: KuchieFace.paused),
   complete('complete');
 
-  const KuchieCharacterPhase(this.assetName);
+  const KuchieCharacterPhase(this.assetName, {this.face});
   final String assetName;
+
+  /// Quiet states show Kuchie as a text face instead of artwork.
+  final String? face;
 }
 
-/// Kiri's illustration for a screen or operation state.
+/// Kiri's illustration for a screen or operation state, or Kuchie's text
+/// face for the quiet ones (empty, no results, paused).
 ///
 /// Only the loading WebP loops. Each other scene plays once and retains its
 /// last frame. A static pose is shown with Reduce Motion or a muted TickerMode.
@@ -38,6 +44,11 @@ class KuchieCharacterMotion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (phase.face case final face?) {
+      final label = semanticsLabel;
+      final shown = KuchieFace(face, width: width);
+      return label == null ? shown : Semantics(label: label, child: shown);
+    }
     final stem = 'assets/kuchie/character/${phase.assetName}';
     final stillPath = '$stem.png';
     final bundle = DefaultAssetBundle.of(context);
