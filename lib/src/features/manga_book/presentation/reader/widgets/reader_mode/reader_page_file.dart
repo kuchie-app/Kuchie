@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../../../utils/extensions/custom_extensions.dart';
-import '../../../../../../widgets/custom_circular_progress_indicator.dart';
+import '../reader_page_loader.dart';
 
 Widget readerPageRetry(BuildContext context, VoidCallback onRetry) => Center(
   child: TextButton(onPressed: onRetry, child: Text(context.l10n.retry)),
@@ -17,10 +17,14 @@ class ReaderPageFile extends StatefulWidget {
     required this.prepare,
     required this.retryCount,
     required this.builder,
+    this.pageNumber,
     super.key,
   });
 
   final String uri;
+
+  /// One-based page number, for the loading caption.
+  final int? pageNumber;
   final Future<File> Function(String uri) prepare;
   final ValueListenable<int> retryCount;
   final WidgetBuilder builder;
@@ -63,7 +67,12 @@ class _ReaderPageFileState extends State<ReaderPageFile> {
     future: _file,
     builder: (context, snapshot) =>
         snapshot.connectionState != ConnectionState.done
-        ? const Center(child: CenterKuchieShimmerIndicator())
+        ? Center(
+            child: ReaderPageLoader(
+              pageNumber: widget.pageNumber,
+              onRetry: _retry,
+            ),
+          )
         : snapshot.hasError
         ? readerPageRetry(context, _retry)
         : widget.builder(context),

@@ -52,6 +52,7 @@ import '../../../utils/reader_initial_page.dart';
 import '../../../utils/reader_progress_queue.dart';
 import '../../chrome/chrome_extents.dart';
 import '../../mouse_wheel_speed.dart';
+import '../../reader_page_loader.dart';
 import '../../reader_wrapper.dart';
 import '../reader_zoom_view.dart';
 import 'infinity_continuous_config.dart';
@@ -1252,10 +1253,6 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
       );
     }
 
-    final spinnerColor =
-        (ref.read(readerBackgroundColorKeyProvider) ??
-                DBKeys.readerBackgroundColor.initial)
-            .onColor(context);
 
     Widget buildItem(BuildContext context, int index) {
       final loc = _locate(index, loadedChapters.value);
@@ -1286,12 +1283,13 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
               width: double.infinity,
               child: child,
             );
-      Widget loadingPlaceholder([double? progress]) {
+      Widget loadingPlaceholder([double? progress, VoidCallback? retry]) {
         return placeholderBox(
           child: Center(
-            child: CircularProgressIndicator(
-              value: progress,
-              color: spinnerColor,
+            child: ReaderPageLoader(
+              progress: progress,
+              pageNumber: _pageNumberAt(index, loadedChapters.value),
+              onRetry: retry,
             ),
           ),
         );
@@ -1314,8 +1312,8 @@ class MultiChapterContinuousReaderMode extends HookConsumerWidget {
                   .clamp(1, 1 << 20)
             : null,
         imageUrl: loc.imageUrl,
-        progressIndicatorBuilder: (_, _, progress) =>
-            loadingPlaceholder(progress.progress),
+        progressRetryBuilder: (_, progress, retry) =>
+            loadingPlaceholder(progress.progress, retry),
         imageBuilder: (context, imageProvider) {
           final image = Image(
             image: imageProvider,
@@ -1672,6 +1670,17 @@ void _markChapterRead(
 class _PageLoc {
   const _PageLoc(this.imageUrl);
   final String imageUrl;
+}
+
+/// One-based page number within its chapter, for the loading caption.
+int? _pageNumberAt(int globalIndex, List<_LoadedChapter> loaded) {
+  int cumulative = 0;
+  for (final entry in loaded) {
+    final n = entry.pages.pages.length;
+    if (globalIndex < cumulative + n) return globalIndex - cumulative + 1;
+    cumulative += n;
+  }
+  return null;
 }
 
 _PageLoc? _locate(int globalIndex, List<_LoadedChapter> loaded) {

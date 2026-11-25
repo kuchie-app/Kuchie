@@ -45,6 +45,7 @@ import 'utils/reader_progress_queue.dart';
 import 'widgets/chrome/reader_chrome.dart';
 import 'widgets/reader_mode/infinity_continuous/multichapter_continuous_reader_mode.dart';
 import 'widgets/reader_mode/multichapter_paged_reader_mode.dart';
+import 'widgets/reader_page_loader.dart';
 
 class ReaderScreen extends HookConsumerWidget {
   const ReaderScreen({
@@ -326,7 +327,15 @@ class ReaderScreen extends HookConsumerWidget {
       ),
       body: SafeArea(top: false, child: body),
     );
-    const loadingChapter = _ReaderChapterLoading();
+    final loadingChapter = _ReaderChapterLoading(
+      // Times out like a page does; Retry asks for the chapter again.
+      onRetry: () {
+        providerContainer.invalidate(chapterProviderWithIndex);
+        providerContainer.invalidate(
+          chapterPagesProvider(chapterId: chapterId),
+        );
+      },
+    );
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) async {
@@ -632,13 +641,39 @@ class ReaderScreen extends HookConsumerWidget {
   }
 }
 
-class _ReaderChapterLoading extends StatelessWidget {
-  const _ReaderChapterLoading();
+/// Shown while a chapter's pages are fetched: the muted Kuchie brush mark,
+/// which keeps moving while it waits, and a retry once it times out.
+class _ReaderChapterLoading extends StatefulWidget {
+  const _ReaderChapterLoading({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  State<_ReaderChapterLoading> createState() => _ReaderChapterLoadingState();
+}
+
+class _ReaderChapterLoadingState extends State<_ReaderChapterLoading> {
+  late final Timer _delay;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // A quick cache hit shows the chapter without a loader flashing first.
+    _delay = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _delay.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final route = ModalRoute.of(context);
-    final label = context.l10n.readerLoadingChapter;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -646,14 +681,10 @@ class _ReaderChapterLoading extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: 12,
           children: [
-            const _ReaderLoadingIllustration(),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+            AnimatedOpacity(
+              opacity: _visible ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: ReaderPageLoader(size: 56, onRetry: widget.onRetry),
             ),
             if (route?.impliesAppBarDismissal ?? false)
               TextButton(
@@ -664,40 +695,6 @@ class _ReaderChapterLoading extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ReaderLoadingIllustration extends StatefulWidget {
-  const _ReaderLoadingIllustration();
-
-  @override
-  State<_ReaderLoadingIllustration> createState() =>
-      _ReaderLoadingIllustrationState();
-}
-
-class _ReaderLoadingIllustrationState
-    extends State<_ReaderLoadingIllustration> {
-  late final Timer _delay;
-  bool _visible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Short cache hits never need to decode the animation.
-    _delay = Timer(const Duration(milliseconds: 180), () {
-      setState(() => _visible = true);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => _visible
-      ? const KuchieCharacterMotion(phase: KuchieCharacterPhase.loading)
-      : const SizedBox(height: 132);
-
-  @override
-  void dispose() {
-    _delay.cancel();
-    super.dispose();
   }
 }
 

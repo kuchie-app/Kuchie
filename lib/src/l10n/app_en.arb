@@ -4682,5 +4682,15 @@
   "@readerChapterFinished": {
     "description": "Label above the chapter just read, on the marker between chapters in the reader"
   },
-  "readerChapterCurrent": "Current:"
+  "readerChapterCurrent": "Current:",
+  "readerPageLabel": "Page {number}",
+  "@readerPageLabel": {
+    "description": "Under the loader of a page that is still loading in the reader",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "readerPageSlow": "Taking longer than usual"
 }
