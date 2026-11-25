@@ -70,10 +70,14 @@ class SourceTypeRoute extends GoRouteData with $SourceTypeRoute {
     required this.sourceId,
     required this.sourceType,
     this.query,
+    this.search,
   });
   final String sourceId;
   final SourceType sourceType;
   final String? query;
+
+  /// A search kept while browsing popular or latest, so its tab stays.
+  final String? search;
 
   static final $parentNavigatorKey = _quickOpenNavigatorKey;
 
@@ -82,6 +86,7 @@ class SourceTypeRoute extends GoRouteData with $SourceTypeRoute {
     sourceId: sourceId,
     sourceType: sourceType,
     initialQuery: query,
+    keptSearch: search,
   );
 
   @override
