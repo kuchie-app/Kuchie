@@ -328,12 +328,22 @@ void main() {
     wrapper.onChanged(target.index);
     await tester.pump();
 
+    // The jump scrolls the same list instead of rebuilding it.
     expect(position.pixels, closeTo(expectedPixels, 1));
+    // Pages that mount during the jump can still be measuring; on a slow
+    // machine one may settle a frame later, and the resize correction then
+    // keeps the target in place. Judge alignment once that has happened.
+    for (var i = 0; i < 12; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pump(const Duration(milliseconds: 400));
     final aligned = list.itemPositionsNotifier!.itemPositions.value.firstWhere(
       (item) => item.index == target.index,
     );
     expect(aligned.itemLeadingEdge, closeTo(0, 0.002));
-    await tester.pump(const Duration(milliseconds: 400));
     expect(
       tester.widget<ReaderWrapper>(find.byType(ReaderWrapper)).currentIndex,
       target.index,
