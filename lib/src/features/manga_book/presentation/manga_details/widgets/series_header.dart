@@ -173,8 +173,12 @@ class SeriesHeader extends ConsumerWidget {
                                   copyWithFeedback(context, manga.title),
                               onLongPress: () =>
                                   openGlobalSearch(context, query: manga.title),
+                              // Long titles stop at two lines; tapping still
+                              // copies the full title.
                               child: Text(
                                 manga.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: context.textTheme.titleLarge,
                               ),
                             ),

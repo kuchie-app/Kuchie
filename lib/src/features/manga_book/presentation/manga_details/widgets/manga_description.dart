@@ -349,7 +349,8 @@ class MangaDescription extends HookConsumerWidget {
           onCoverPressed: () => openCoverViewer(context, manga),
           onTitleClicked: (query) => openGlobalSearch(context, query: query),
           belowStatus: soonWidget,
-          titleMaxLines: null,
+          // Long titles stop at two lines; a tap still copies all of it.
+          titleMaxLines: 2,
         ),
       ),
     );
