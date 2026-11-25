@@ -11,9 +11,8 @@ import 'package:material_ui/material_ui.dart';
 import '../constants/app_sizes.dart';
 import '../utils/extensions/custom_extensions.dart';
 import 'kuchie_character_motion.dart';
+import 'kuchie_face.dart';
 import 'web_selection_area.dart';
-
-const errorFaces = ['(･o･;)', 'Σ(ಠ_ಠ)', 'ಥ_ಥ', '(˘･_･˘)', '(；￣Д￣)', '(･Д･。'];
 
 class Emoticons extends HookWidget {
   const Emoticons({
@@ -33,7 +32,7 @@ class Emoticons extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final phase = illustration;
-    final errorFace = useMemoized(() => errorFaces.getRandom!);
+    final errorFace = useMemoized(() => KuchieFace.moods.getRandom!);
     final content = Padding(
       padding: KEdgeInsets.a8.size,
       child: Center(
@@ -48,11 +47,7 @@ class Emoticons extends HookWidget {
                   ? KuchieCharacterMotion(phase: phase)
                   : iconData != null
                   ? Icon(iconData, size: context.height * .2)
-                  : Text(
-                      errorFace,
-                      textAlign: TextAlign.center,
-                      style: context.textTheme.displayMedium,
-                    ),
+                  : KuchieFace(errorFace),
             ),
             if (title.isNotBlank)
               Text(

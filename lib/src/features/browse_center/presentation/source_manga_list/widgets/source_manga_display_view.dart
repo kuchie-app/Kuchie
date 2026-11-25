@@ -268,6 +268,7 @@ class SourceMangaDisplayView extends HookConsumerWidget {
         topPadding: topPadding,
       ),
       DisplayMode.list || DisplayMode.descriptiveList => SourceMangaListView(
+        sourceType: sourceType,
         controller: controller,
         source: source,
         selectedIds: selection.value,
