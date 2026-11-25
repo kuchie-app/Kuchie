@@ -100,7 +100,8 @@ class _PullRefreshIconState extends State<PullRefreshIcon>
 /// letting go past [kPullToRefreshDistance] calls [onRefresh]. The content
 /// bounces back right away; the page shows its own progress.
 ///
-/// [child] must report scrolling through [ScrollNotification]s at depth 0.
+/// [child] must report scrolling through [ScrollNotification]s at depth 0 or
+/// 1.
 class PullToRefresh extends StatefulWidget {
   const PullToRefresh({
     super.key,
@@ -129,7 +130,9 @@ class _PullToRefreshState extends State<PullToRefresh> {
   }
 
   bool _onScroll(ScrollNotification notification) {
-    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+    // Depth 1 too: an empty or error state wraps itself in its own scroll
+    // view, and pulling that should refresh as well.
+    if (notification.depth > 1 || notification.metrics.axis != Axis.vertical) {
       return false;
     }
     final pull = math.max(

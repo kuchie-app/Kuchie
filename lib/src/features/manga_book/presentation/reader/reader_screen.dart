@@ -92,14 +92,8 @@ class ReaderScreen extends HookConsumerWidget {
             sourceName: autoSource.source?.name,
           );
     final toast = ref.watch(toastProvider);
-    // Resolve l10n during build; inherited-widget lookup is invalid during hook initialization.
-    final autoWebtoonSnack = context.l10n.autoWebtoonSnack;
-    useEffect(() {
-      if (autoReaderMode == ReaderMode.webtoon) {
-        toast?.show(autoWebtoonSnack, withMicrotask: true);
-      }
-      return null;
-    }, [autoReaderMode]);
+    // No toast for automatic webtoon detection: the reader stays free of
+    // pop-ups, and the mode setting shows what was chosen.
 
     // Reading time for Reading Insights, shared with the Local collection.
     final readingTitle = useRef<(String, String?)?>(null);

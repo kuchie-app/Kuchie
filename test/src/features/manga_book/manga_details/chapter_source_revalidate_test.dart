@@ -35,8 +35,17 @@ class _Repository extends MangaBookRepository {
     ch(id: 1, number: 1),
   ];
 
+  /// Fetches that also re-read the series details (and bump its cover).
+  int detailFetches = 0;
+
   @override
   Future<List<ChapterDto>?> getMangaAndChapterList(int mangaId) async {
+    detailFetches++;
+    return getChapterList(mangaId);
+  }
+
+  @override
+  Future<List<ChapterDto>?> getChapterList(int mangaId) async {
     sourceRequests++;
     final scraped = this.scraped;
     if (scraped == null) return [ch(id: 1, number: 1), ch(id: 2, number: 2)];
@@ -84,6 +93,8 @@ void main() {
 
       await pumpEventQueue();
       expect(repo.sourceRequests, 1);
+      // The automatic check leaves the details and the cover alone.
+      expect(repo.detailFetches, 0);
       expect(ids(container), [1, 2]);
     },
   );

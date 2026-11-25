@@ -67,10 +67,19 @@ class _CollapsingTitleScaffoldState extends State<CollapsingTitleScaffold> {
   }
 
   bool _onScroll(ScrollNotification notification) {
-    if (notification.depth == 0 && notification.metrics.axis == Axis.vertical) {
-      final pixels = notification.metrics.pixels;
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final pixels = notification.metrics.pixels;
+    if (notification.depth == 0) {
       // While pulling to refresh, the title and filters follow the content.
       _offset.value = widget.onRefresh == null ? math.max(0, pixels) : pixels;
+    } else if (notification.depth == 1 &&
+        widget.onRefresh != null &&
+        _offset.value <= 0) {
+      // An empty or error state scrolls on its own; follow only its pull.
+      _offset.value = math.min(
+        0,
+        pixels - notification.metrics.minScrollExtent,
+      );
     }
     return false;
   }
