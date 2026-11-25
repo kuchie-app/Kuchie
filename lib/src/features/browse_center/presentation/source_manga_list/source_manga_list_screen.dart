@@ -97,10 +97,15 @@ class SourceMangaListScreen extends HookConsumerWidget {
     required this.sourceId,
     required this.sourceType,
     this.initialQuery,
+    this.keptSearch,
   });
   final String sourceId;
   final SourceType sourceType;
   final String? initialQuery;
+
+  /// The search made earlier on this page, kept while browsing popular or
+  /// latest so its tab stays until the search is cleared.
+  final String? keptSearch;
 
   Future<ServerPage<MangaDto>> _fetchPage(
     SourceRepository repository,
@@ -220,6 +225,11 @@ class SourceMangaListScreen extends HookConsumerWidget {
         final title = Text(sourceName);
         final supportsLatest = data?.supportsLatest == true;
 
+        // The search the Search tab returns to.
+        final activeSearch = sourceType == SourceType.SEARCH
+            ? query.value
+            : keptSearch;
+
         void openType(SourceType type, {String? withQuery}) {
           if (type == sourceType) {
             if (type == SourceType.SEARCH) {
@@ -229,11 +239,30 @@ class SourceMangaListScreen extends HookConsumerWidget {
             }
             return;
           }
+          final searching = type == SourceType.SEARCH;
           SourceTypeRoute(
             sourceId: sourceId,
             sourceType: type,
-            query: withQuery,
+            query: searching ? withQuery ?? activeSearch : null,
+            search: !searching && activeSearch.isNotBlank ? activeSearch : null,
           ).go(context);
+        }
+
+        /// Drops the search, and with it the Search tab.
+        void clearSearch() {
+          showSearch.value = false;
+          searchDraft.value = null;
+          if (sourceType == SourceType.SEARCH) {
+            SourceTypeRoute(
+              sourceId: sourceId,
+              sourceType: SourceType.POPULAR,
+            ).go(context);
+          } else if (keptSearch.isNotBlank) {
+            SourceTypeRoute(
+              sourceId: sourceId,
+              sourceType: sourceType,
+            ).go(context);
+          }
         }
 
         Future<void> showFilters() async {
@@ -382,7 +411,8 @@ class SourceMangaListScreen extends HookConsumerWidget {
               ),
           ],
         );
-        final showingResults = sourceType == SourceType.SEARCH;
+        final showingResults =
+            sourceType == SourceType.SEARCH || keptSearch.isNotBlank;
         final resultIndex = supportsLatest ? 2 : 1;
         final filterIndex = resultIndex + (showingResults ? 1 : 0);
         final glassSegments = AppleGlassSegments(
@@ -408,7 +438,9 @@ class SourceMangaListScreen extends HookConsumerWidget {
           onSelected: (index) {
             if (index == filterIndex) {
               showFilters();
-            } else if (!showingResults || index != resultIndex) {
+            } else if (showingResults && index == resultIndex) {
+              openType(SourceType.SEARCH);
+            } else {
               openType(index == 0 ? SourceType.POPULAR : SourceType.LATEST);
             }
           },
@@ -476,19 +508,26 @@ class SourceMangaListScreen extends HookConsumerWidget {
                       ? context.widthScale(scale: .5)
                       : null,
                   child: Padding(
-                    padding: KEdgeInsets.h16v4.size,
+                    // The large-title header already sets the side margins.
+                    padding: glass
+                        ? const EdgeInsets.symmetric(vertical: 4)
+                        : KEdgeInsets.h16v4.size,
                     child: SearchField(
-                      key: ValueKey(query.value),
-                      initialText: query.value,
+                      key: ValueKey(activeSearch),
+                      initialText: activeSearch,
                       autofocus: glass,
                       focusNode: glass ? searchFocus : null,
                       labelText: glass
                           ? context.l10n.searchSourceHint(sourceName)
                           : null,
                       onChanged: (value) => searchDraft.value = value,
-                      onClose: () => showSearch.value = (false),
+                      onClose: glass
+                          ? clearSearch
+                          : () => showSearch.value = (false),
                       onSubmitted: (val) {
-                        if (sourceType == SourceType.SEARCH) {
+                        if (glass && val.isBlank) {
+                          clearSearch();
+                        } else if (sourceType == SourceType.SEARCH) {
                           query.value = val;
                           refresh();
                         } else {

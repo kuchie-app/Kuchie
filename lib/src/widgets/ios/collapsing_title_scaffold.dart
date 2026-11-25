@@ -100,32 +100,49 @@ class _CollapsingTitleScaffoldState extends State<CollapsingTitleScaffold> {
     final glass = supportsAppleGlass(context);
     final surface = theme.scaffoldBackgroundColor;
 
+    final below = widget.below;
     final header = IgnorePointer(
-      ignoring: widget.below == null,
-      child: Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 20, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+      ignoring: below == null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: EdgeInsetsDirectional.fromSTEB(
+              20,
+              4,
+              20,
+              below == null ? 10 : 0,
             ),
-            if (widget.subtitle case final subtitle?)
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: colors.onSurfaceVariant),
-              ),
-            ?widget.below,
-          ],
-        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (widget.subtitle case final subtitle?)
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+          // Full width, on the same side margins as the pinned segments.
+          if (below != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 10),
+              child: below,
+            ),
+        ],
       ),
     );
 
