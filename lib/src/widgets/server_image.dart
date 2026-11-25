@@ -233,6 +233,7 @@ class ServerImage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final key = useState(UniqueKey());
+    final shownUrl = useRef<String?>(null);
     final failed = useRef(false);
     final reload = useRef<Future<void> Function()?>(null);
     final reloads =
@@ -422,8 +423,40 @@ class ServerImage extends HookConsumerWidget {
         ? ref.watch(coverCacheManagerProvider)
         : ref.watch(serverPageCacheManagerProvider);
 
+    // A refreshed series gets a new cover version, so the cover downloads
+    // again. Until it arrives, the previous version (already cached) stays
+    // up instead of a placeholder.
+    final shownKey = useRef<String?>(null);
+    final previousKey = useRef<String?>(null);
+    if (shownKey.value != cacheKey) {
+      previousKey.value = cover && imageUrl == shownUrl.value
+          ? shownKey.value
+          : null;
+      shownKey.value = cacheKey;
+      shownUrl.value = imageUrl;
+    }
+    final staleKey = previousKey.value;
+
     // Delay shimmer so quick cache re-decodes do not flash a placeholder.
-    final defaultIndicator = cover
+    final Widget defaultIndicator = staleKey != null
+        ? Image(
+            image: ResizeImage.resizeIfNeeded(
+              imageBuilder == null ? cacheWidth : null,
+              imageBuilder == null ? cacheHeight : null,
+              CachedNetworkImageProvider(
+                fetchUrl,
+                cacheKey: staleKey,
+                cacheManager: cacheManager,
+                headers: httpHeaders,
+              ),
+            ),
+            width: size?.width,
+            height: size?.height,
+            fit: fit ?? BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const DelayedShimmer(),
+          )
+        : cover
         ? const DelayedShimmer()
         : const CenterKuchieShimmerIndicator();
     finalProgressIndicatorBuilder(
