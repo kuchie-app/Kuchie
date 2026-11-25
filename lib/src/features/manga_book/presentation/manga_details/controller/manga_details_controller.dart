@@ -227,7 +227,13 @@ class MangaChapterList extends _$MangaChapterList {
             return stored;
           }
           try {
-            final fetched = await repo.getMangaAndChapterList(mangaId);
+            // The automatic check asks only for chapters: re-fetching the
+            // series details bumps the cover's version, which re-downloads
+            // and flashes the cover on every visit. A manual refresh, or a
+            // series with nothing stored yet, fetches the details too.
+            final fetched = onlineFetch || stored == null || stored.isEmpty
+                ? await repo.getMangaAndChapterList(mangaId)
+                : await repo.getChapterList(mangaId);
             if (fetched != null && fetched.isNotEmpty) {
               didSourceFetch = true;
               if (stored != null && stored.isNotEmpty) {
