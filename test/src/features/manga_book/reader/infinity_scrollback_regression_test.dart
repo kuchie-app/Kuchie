@@ -188,6 +188,7 @@ Future<void> _pumpReaderOnChapter2(
   _QuietRepo? repo,
   ChapterPagesDto? chapterPages,
   _PageCache? pageCache,
+  int? textureLimit,
 }) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
@@ -206,7 +207,8 @@ Future<void> _pumpReaderOnChapter2(
         if (pageCache != null) ...[
           textureLimitProvider.overrideWith((ref) async => 256),
           serverPageCacheManagerProvider.overrideWithValue(pageCache),
-        ],
+        ] else if (textureLimit != null)
+          textureLimitProvider.overrideWith((ref) async => textureLimit),
         mangaBookRepositoryProvider.overrideWithValue(repo ?? _QuietRepo()),
         mangaWithIdProvider(
           mangaId: 1,
@@ -305,6 +307,10 @@ void main() {
       tester,
       prevPages: () => null,
       chapterPages: pages,
+      // iPhones report a texture limit, which switches the strip to the
+      // split-image pages that settle their height after loading. Without
+      // it the test took the simpler path on macOS and failed only on Linux.
+      textureLimit: 16384,
     );
     for (var i = 0; i < 12; i++) {
       await tester.runAsync(
@@ -328,22 +334,12 @@ void main() {
     wrapper.onChanged(target.index);
     await tester.pump();
 
-    // The jump scrolls the same list instead of rebuilding it.
     expect(position.pixels, closeTo(expectedPixels, 1));
-    // Pages that mount during the jump can still be measuring; on a slow
-    // machine one may settle a frame later, and the resize correction then
-    // keeps the target in place. Judge alignment once that has happened.
-    for (var i = 0; i < 12; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.pump(const Duration(milliseconds: 400));
     final aligned = list.itemPositionsNotifier!.itemPositions.value.firstWhere(
       (item) => item.index == target.index,
     );
     expect(aligned.itemLeadingEdge, closeTo(0, 0.002));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(
       tester.widget<ReaderWrapper>(find.byType(ReaderWrapper)).currentIndex,
       target.index,
