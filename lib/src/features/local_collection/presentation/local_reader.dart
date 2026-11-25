@@ -15,7 +15,6 @@ import '../../../constants/enum.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
 import '../../../widgets/app_bottom_sheet.dart';
-import '../../../widgets/custom_circular_progress_indicator.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
 import '../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../widgets/popup_widgets/app_dialog.dart';
@@ -45,6 +44,7 @@ import '../../manga_book/presentation/reader/widgets/reader_mode/paged_spread_ma
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_page_file.dart';
 import '../../manga_book/presentation/reader/widgets/reader_mode/reader_zoom_view.dart';
 import '../../manga_book/presentation/reader/widgets/reader_navigation_layout/reader_navigation_layout.dart';
+import '../../manga_book/presentation/reader/widgets/reader_page_loader.dart';
 import '../../manga_book/presentation/reader/widgets/reader_wrapper.dart';
 import '../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
@@ -902,6 +902,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
                         child: _LocalStripPage(
                           key: ValueKey(pages[page]),
                           url: pages[page],
+                          pageNumber: page + 1,
                           prepare: preparePage,
                           dimensions: _dimensions,
                           measuredSizes: _measuredSizes,
@@ -1196,9 +1197,13 @@ class _LocalStripPage extends StatefulWidget {
     required this.originalSize,
     required this.cropBorders,
     required this.dpr,
+    this.pageNumber,
   });
 
   final String url;
+
+  /// One-based page number, for the loading caption.
+  final int? pageNumber;
   final Future<File> Function(String uri)? prepare;
   final TallPageDimensionCache dimensions;
   final Map<String, Size> measuredSizes;
@@ -1272,7 +1277,12 @@ class _LocalStripPageState extends State<_LocalStripPage> {
       return SizedBox.fromSize(
         size: size,
         child: snapshot.connectionState != ConnectionState.done
-            ? const Center(child: CenterKuchieShimmerIndicator())
+            ? Center(
+                child: ReaderPageLoader(
+                  pageNumber: widget.pageNumber,
+                  onRetry: _retry,
+                ),
+              )
             : snapshot.hasError
             ? readerPageRetry(context, _retry)
             : ServerImage(

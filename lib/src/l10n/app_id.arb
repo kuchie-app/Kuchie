@@ -878,5 +878,7 @@
     "chapterCheckNew": "{count, plural, other{{count} bab baru}}",
     "chapterCheckFailed": "Gagal memeriksa bab baru",
     "readerChapterFinished": "Selesai:",
-    "readerChapterCurrent": "Sekarang:"
+    "readerChapterCurrent": "Sekarang:",
+    "readerPageLabel": "Halaman {number}",
+    "readerPageSlow": "Lebih lama dari biasanya"
 }

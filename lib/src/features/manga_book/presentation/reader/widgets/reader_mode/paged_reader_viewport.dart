@@ -16,8 +16,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../../../constants/enum.dart';
 import '../../../../../../utils/crash/diagnostics.dart';
 import '../../../../../../utils/motion/reduce_motion.dart';
-import '../../../../../../widgets/custom_circular_progress_indicator.dart';
 import '../reader_hold_gesture_detector.dart';
+import '../reader_page_loader.dart';
 import '../reader_wrapper.dart';
 import 'double_page_view.dart';
 import 'paged_display_window.dart';
@@ -1241,7 +1241,7 @@ class _PagedReaderViewportState extends State<PagedReaderViewport>
   @override
   Widget build(BuildContext context) {
     if (widget.window.isEmpty) {
-      return const Center(child: CenterKuchieShimmerIndicator());
+      return const Center(child: ReaderPageLoader());
     }
     return LayoutBuilder(
       builder: (context, constraints) {
