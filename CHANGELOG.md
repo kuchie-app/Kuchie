@@ -2,6 +2,21 @@
 
 All notable changes to Kuchie are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.2.1] - 2026-11-26
+
+### Downloads
+- **One Downloads page per collection**: More › Downloads shows the server's queue in the Server collection and this iPhone's queue in the Local collection. The Server and On device tabs are gone.
+- **Recently Downloaded** at the top lists titles with saved chapters, newest first and grouped by day. Tap one to open it; in the Local collection, hold it to delete its downloads. Server titles are ordered by when Kuchie saw them finish, or else by when the server fetched the chapter.
+- **Pause/Resume** and **Concurrent downloads** buttons sit above the queue.
+- **Download settings** (the gear in Downloads, or Settings › Downloads) has Concurrent downloads, Background Download and Delete download after reading, with a help button that explains each one. The server's own options (download location, CBZ, auto-download, download ahead) follow below them.
+- Local collection: up to 5 chapters can download at once.
+- Local collection: **Background Download** keeps downloading for the short time iOS allows after you leave Kuchie. When that ends, or with it off, the queue pauses and picks up again when you return, instead of chapters failing.
+- On-device download settings for Server series are no longer listed in Settings.
+
+### Settings and navigation
+- Page titles and tabs no longer hide behind the Liquid Glass back button. This fixes Settings, Downloads, Tracking, About, the category and duplicate pages, account pages, extension info, source pages, recommendations, update errors and migration.
+- A series' title shows in the bar again when you scroll its page.
+
 ## [1.2.0] - 2026-11-26
 
 ### Manga details
@@ -67,7 +82,7 @@ All notable changes to Kuchie are listed here. Versions follow [Semantic Version
 - Search my network scans the Wi-Fi subnet. It used to take the first private address, which on an iPhone can be the cellular (`pdp_ip`, often 10.x) or VPN interface.
 - **More** lists the same rows in the same order in Local and Server: Incognito mode, General, Appearance, Library, Reader, (Sync, Tracking on Server), Extensions, Backup & Restore, Security and privacy, Reading Insights, Downloads, then Settings (Server), Share, Help and About. History is no longer repeated there (it is a tab).
 - **Reading Insights**: total reading time and time per title, counted in both readers while they are open (not in Incognito mode). History rows show each title's reading time.
-- **History** works the same in both: tapping a row opens the manga, Back from the reader lands on the manga page, and long-press opens the row's actions (including Continue reading).
+- **History** works the same in both: tapping a cover opens the manga, tapping the row continues reading, Back from the reader lands on the manga page, and long-press opens the row's actions.
 - **Downloads**: the queue has a Pause/Resume button and Clear in the toolbar in both collections.
 - **Security and privacy → Disable content sharing** blocks sharing manga links, pages and covers.
 
