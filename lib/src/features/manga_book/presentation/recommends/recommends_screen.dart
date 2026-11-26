@@ -41,7 +41,7 @@ class RecommendsScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: setup.when(
         loading: () => const RecommendationLoading(),
         error: (_, _) => Emoticons(title: context.l10n.errorSomethingWentWrong),

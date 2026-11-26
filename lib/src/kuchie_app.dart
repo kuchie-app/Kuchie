@@ -17,6 +17,7 @@ import 'constants/app_constants.dart';
 import 'constants/app_sizes.dart';
 import 'constants/app_theme.dart';
 import 'features/auth/presentation/reauth_banner.dart';
+import 'features/local_collection/data/local_download_lifecycle.dart';
 import 'features/notifications/controller/notifications_controller.dart';
 import 'features/notifications/data/background/notification_worker.dart';
 import 'features/notifications/data/local_notification_service.dart';
@@ -155,6 +156,7 @@ class KuchieApp extends HookConsumerWidget {
                           enabled: !sessionChanging,
                           serverEnabled: serverEnabled,
                         ),
+                        const LocalDownloadLifecycleHost(),
                         Offstage(
                           offstage: sessionChanging,
                           child: TickerMode(

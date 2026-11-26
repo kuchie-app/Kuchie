@@ -32,32 +32,35 @@ class MangaDetailsAppBar extends StatelessWidget
       valueListenable: scrollOffset,
       builder: (context, offset, _) {
         final t = (offset / 160).clamp(0.0, 1.0);
-        return AppBar(
-          leading: detailNavigationBackButton(context),
-          backgroundColor: twoColumn
-              ? surface
-              : Color.lerp(Colors.transparent, surface, t),
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          systemOverlayStyle: coverBehindBar && t < .55
-              ? SystemUiOverlayStyle.light
-              : null,
-          flexibleSpace: twoColumn || t >= 1
-              ? null
-              : DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        OnImage.shadow.withValues(alpha: .45 * (1 - t)),
-                        Colors.transparent,
-                      ],
+        return detailNavigationBar(
+          context,
+          (leading) => AppBar(
+            leading: leading,
+            backgroundColor: twoColumn
+                ? surface
+                : Color.lerp(Colors.transparent, surface, t),
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            systemOverlayStyle: coverBehindBar && t < .55
+                ? SystemUiOverlayStyle.light
+                : null,
+            flexibleSpace: twoColumn || t >= 1
+                ? null
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          OnImage.shadow.withValues(alpha: .45 * (1 - t)),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
                   ),
-                ),
-          title: twoColumn ? title : Opacity(opacity: t, child: title),
-          actions: actions,
+            title: twoColumn ? title : Opacity(opacity: t, child: title),
+            actions: actions,
+          ),
         );
       },
     );

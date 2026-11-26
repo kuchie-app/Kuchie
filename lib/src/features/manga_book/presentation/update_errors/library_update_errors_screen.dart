@@ -35,7 +35,7 @@ class LibraryUpdateErrorsScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: failed.showUiWhenData(
         context,
         (mangas) => RefreshIndicator(

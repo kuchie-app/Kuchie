@@ -18,6 +18,7 @@ import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
 import '../../../widgets/app_bottom_sheet.dart';
 import '../../../widgets/compact_switch.dart';
+import '../../../widgets/emoticons.dart';
 import '../../../widgets/in_app_web_view.dart';
 import '../../../widgets/ios/apple_glass_capability.dart';
 import '../../../widgets/ios/apple_glass_floating_header.dart';
@@ -37,6 +38,7 @@ import '../../manga_book/presentation/manga_details/widgets/chapter_list_tile.da
 import '../../onboarding/data/collection_mode.dart';
 import '../../onboarding/presentation/collection_mode_picker.dart';
 import '../../security/security_settings_screen.dart';
+import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../data/local_backups.dart';
@@ -88,7 +90,6 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   /// When each series was last read online, for the Last read order.
   Map<String, DateTime> _lastOnlineRead = const {};
   int _categoryRevision = 0;
-  bool _showSavedDownloads = false;
   bool _openingManga = false;
   final _query = TextEditingController();
   final _searchFocus = FocusNode();
@@ -334,79 +335,37 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     final queue = _bound?.downloads;
     return Scaffold(
       extendBody: supportsAppleGlass(context) && !_downloads,
-      // Pause or resume the queue, as Server's Downloads does.
-      floatingActionButton: _downloads && !_showSavedDownloads && queue != null
-          ? ValueListenableBuilder(
-              valueListenable: queue,
-              builder: (context, jobs, _) => jobs.isEmpty
-                  ? const SizedBox.shrink()
-                  : FloatingActionButton.extended(
-                      onPressed: () => _runQueue(
-                        queue.running ? queue.pauseAll : queue.resumeAll,
-                      ),
-                      icon: Icon(
-                        queue.running
-                            ? FluentIcons.pause_24_regular
-                            : FluentIcons.play_24_regular,
-                      ),
-                      label: Text(queue.running ? l10n.pause : l10n.resume),
-                    ),
-            )
-          : null,
       appBar: browse
           ? null
+          : _downloads
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(kToolbarHeight),
+              child: detailNavigationBar(
+                context,
+                (leading) => _downloadsBar(leading, queue),
+                back: detailBackButton(
+                  () => setState(() => _downloads = false),
+                ),
+              ),
+            )
           : AppBar(
-              centerTitle: _tab == 4 && !_downloads ? true : false,
+              centerTitle: _tab == 4 ? true : false,
               title: library
                   ? CollectionModePageTitle(
                       title,
                       mode: CollectionMode.local,
                       onPressed: _chooseMode,
                     )
-                  : _tab == 4 && !_downloads
+                  : _tab == 4
                   ? Text(title)
                   : ApplePageTitle(title),
-              leading: _downloads
-                  ? BackButton(
-                      onPressed: () => setState(() => _downloads = false),
-                    )
-                  : null,
               bottom: _searching && (library || history)
                   ? _searchBar(
                       library ? l10n.searchLibraryHint : l10n.searchHistory,
                     )
-                  : _downloads
-                  ? _downloadsTabs()
                   : null,
               actions: [
                 if (library || history) _searchButton(),
-                if (_downloads &&
-                    !_showSavedDownloads &&
-                    (queue?.value.isNotEmpty ?? false))
-                  AppleGlassToolbarButton(
-                    id: 'clear-downloads',
-                    symbol: 'trash',
-                    label: l10n.confirmClearQueueTitle,
-                    fallbackIcon: FluentIcons.delete_24_regular,
-                    onPressed: () async {
-                      if (await localConfirm(
-                            context,
-                            l10n.confirmClearQueueTitle,
-                            l10n.confirmClearQueueMessage,
-                          ) &&
-                          queue != null) {
-                        await _runQueue(queue.clear);
-                      }
-                    },
-                  ),
-                if (_downloads)
-                  AppleGlassToolbarButton(
-                    id: 'download-settings',
-                    symbol: 'gearshape',
-                    label: l10n.settings,
-                    fallbackIcon: FluentIcons.settings_24_regular,
-                    onPressed: () => openLocalDownloadSettings(context),
-                  ),
                 if (history)
                   AppleGlassToolbarButton(
                     id: 'history-incognito',
@@ -1006,132 +965,155 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         onTap: onTap,
       );
 
-  PreferredSizeWidget _downloadsTabs() {
+  /// The Downloads bar: title centred, clear queue and settings on the right.
+  AppBar _downloadsBar(Widget? leading, LocalDownloadQueue? queue) {
     final l10n = context.l10n;
-    final labels = [
-      localText(context, 'Queue', 'Antrean'),
-      l10n.downloadsOnDeviceTab,
-    ];
-    void select(int index) => setState(() => _showSavedDownloads = index == 1);
-    return AppleGlassSegments(
-      labels: labels,
-      selectedIndex: _showSavedDownloads ? 1 : 0,
-      onSelected: select,
-      fallback: PreferredSize(
-        preferredSize: const Size.fromHeight(44),
-        child: Center(
-          child: SegmentedButton<int>(
-            segments: [
-              for (final (index, label) in labels.indexed)
-                ButtonSegment(value: index, label: Text(label)),
-            ],
-            selected: {_showSavedDownloads ? 1 : 0},
-            onSelectionChanged: (selection) => select(selection.first),
+    return AppBar(
+      leading: leading,
+      centerTitle: true,
+      title: Text(l10n.downloads),
+      actions: [
+        if (queue != null && queue.value.isNotEmpty)
+          AppleGlassToolbarButton(
+            id: 'clear-downloads',
+            symbol: 'trash',
+            label: l10n.confirmClearQueueTitle,
+            fallbackIcon: FluentIcons.delete_24_regular,
+            onPressed: () async {
+              if (await localConfirm(
+                context,
+                l10n.confirmClearQueueTitle,
+                l10n.confirmClearQueueMessage,
+              )) {
+                await _runQueue(queue.clear);
+              }
+            },
           ),
+        AppleGlassToolbarButton(
+          id: 'download-settings',
+          symbol: 'gearshape',
+          label: localText(context, 'Download settings', 'Setelan unduhan'),
+          fallbackIcon: FluentIcons.settings_24_regular,
+          onPressed: () => openLocalDownloadSettings(context),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _downloadsPage(
-    LocalCollectionServices services,
-  ) => ValueListenableBuilder(
-    valueListenable: services.downloads,
-    builder: (context, jobs, _) => FutureBuilder<List<LocalSeries>>(
-      future: _library,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: TextButton(
-              onPressed: _refresh,
-              child: Text(context.l10n.retry),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final library = snapshot.requireData;
-        final byId = {for (final book in library) book.id: book};
-        // On device lists one row per title, as Tachimanga does.
-        final saved = _showSavedDownloads
-            ? [
-                for (final book in library)
-                  if (book.chapters.isNotEmpty) book,
-              ]
-            : null;
-        final total = saved?.length ?? jobs.length;
-        if (total == 0) {
-          return _LocalEmpty(
-            icon: Icons.download_for_offline_outlined,
-            title: context.l10n.noDownloads,
-          );
-        }
-        return ListView.builder(
-          padding: EdgeInsets.fromLTRB(12, 8, 12, scrollBottomInset(context)),
-          itemCount: total,
-          itemBuilder: (context, index) {
-            if (saved == null) {
-              final job = jobs[index];
-              return _QueueRow(
-                services: services,
-                queue: services.downloads,
-                job: job,
-                book: byId[job.request.seriesId],
-              );
-            }
-            final book = saved[index];
-            final unread = book.chapters
-                .where((chapter) => chapter.lastReadAt == null)
-                .length;
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              leading: _LocalCover(
-                services: services,
-                seriesId: book.id,
-                book: book,
-              ),
-              title: Text(
-                book.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                [
-                  localText(
-                    context,
-                    '${book.chapters.length} '
-                        '${book.chapters.length == 1 ? 'chapter' : 'chapters'}',
-                    '${book.chapters.length} chapter',
-                  ),
-                  if (unread > 0)
-                    localText(
-                      context,
-                      '$unread unread',
-                      '$unread belum dibaca',
-                    ),
-                ].join(' · '),
-              ),
-              trailing: const Icon(FluentIcons.chevron_right_24_regular),
-              onTap: () async {
-                await Navigator.of(context).push<void>(
+  /// Opens the titles saved on this iPhone, newest download first.
+  Future<void> _openRecentlyDownloaded(LocalCollectionServices services) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => RecentlyDownloadedPage(
+          load: () async => [
+            for (final entry in await localSavedTitlesNewestFirst(
+              services.catalog,
+            ))
+              (
+                cover: _LocalCover(
+                  services: services,
+                  seriesId: entry.book.id,
+                  book: entry.book,
+                ),
+                title: entry.book.title,
+                chapters: entry.book.chapters.length,
+                downloadedAt: entry.savedAt,
+                onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(
                     builder: (_) =>
-                        _SeriesDetail(services: services, series: book),
+                        _SeriesDetail(services: services, series: entry.book),
                   ),
+                ),
+                onLongPress: () => _deleteDownloads(services, entry.book),
+              ),
+          ],
+        ),
+      ),
+    );
+    _refresh();
+  }
+
+  Future<void> _chooseConcurrency() async {
+    final preferences = LocalPreferences.instance;
+    await preferences.load();
+    if (!mounted) return;
+    final chosen = await pickDownloadConcurrency(
+      context,
+      current: preferences.downloadConcurrency.value,
+      max: LocalDownloadQueue.maxConcurrency,
+      note: localText(
+        context,
+        'Some sources slow down or block many requests at once.',
+        'Beberapa sumber melambat atau memblokir terlalu banyak permintaan '
+            'sekaligus.',
+      ),
+    );
+    if (chosen != null) await preferences.setDownloadConcurrency(chosen);
+  }
+
+  Widget _downloadsPage(LocalCollectionServices services) {
+    final queue = services.downloads;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RecentlyDownloadedRow(onTap: () => _openRecentlyDownloaded(services)),
+        ListenableBuilder(
+          listenable: Listenable.merge([
+            queue,
+            LocalPreferences.instance.downloadConcurrency,
+          ]),
+          builder: (context, _) => DownloadsQueueActions(
+            running: queue.running,
+            onToggle: queue.value.isEmpty
+                ? null
+                : () => _runQueue(
+                    queue.running ? queue.pauseAll : queue.resumeAll,
+                  ),
+            concurrency: LocalPreferences.instance.downloadConcurrency.value,
+            onConcurrency: _chooseConcurrency,
+          ),
+        ),
+        Expanded(
+          child: ValueListenableBuilder(
+            valueListenable: queue,
+            builder: (context, jobs, _) => FutureBuilder<List<LocalSeries>>(
+              future: _library,
+              builder: (context, snapshot) {
+                if (jobs.isEmpty) {
+                  return Emoticons(title: context.l10n.noDownloads);
+                }
+                final byId = {
+                  for (final book in snapshot.data ?? const <LocalSeries>[])
+                    book.id: book,
+                };
+                return ListView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    8,
+                    12,
+                    scrollBottomInset(context),
+                  ),
+                  itemCount: jobs.length,
+                  itemBuilder: (context, index) {
+                    final job = jobs[index];
+                    return _QueueRow(
+                      services: services,
+                      queue: queue,
+                      job: job,
+                      book: byId[job.request.seriesId],
+                    );
+                  },
                 );
-                _refresh();
               },
-              onLongPress: () => _deleteDownloads(services, book),
-            );
-          },
-        );
-      },
-    ),
-  );
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// Deletes every saved chapter of [book] from this iPhone.
-  Future<void> _deleteDownloads(
+  Future<bool> _deleteDownloads(
     LocalCollectionServices services,
     LocalSeries book,
   ) async {
@@ -1148,7 +1130,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
           ),
         ) ||
         !mounted) {
-      return;
+      return false;
     }
     try {
       for (final chapter in book.chapters) {
@@ -1156,8 +1138,11 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       }
     } catch (error) {
       if (mounted) localFailure(context, error);
+      return false;
+    } finally {
+      _refresh();
     }
-    _refresh();
+    return true;
   }
 }
 

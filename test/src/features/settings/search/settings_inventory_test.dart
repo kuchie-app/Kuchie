@@ -203,13 +203,32 @@ const Map<String, String> _renamedOrMergedIds = {
   'scrollAnimation': 'animatePageTransitions',
 };
 
+/// Ids deliberately removed from search. The On device downloads tab left
+/// Settings › Downloads, which now shows only the active collection.
+const Set<String> _removedIds = {
+  'deviceDeleteManuallyMarkedRead',
+  'deviceDeleteWhileReading',
+  'deviceDeleteWithBookmark',
+  'downloadProtectionWindow',
+  'removeAllDownloads',
+  'offlineWifiOnly',
+  'backgroundCatchup',
+  'backgroundCheckInterval',
+  'backgroundFetchFiles',
+  'offlineConcurrency',
+  'offlineStorageCapEnable',
+  'offlineStorageCapLimit',
+  'offlineTimeEvictEnable',
+  'offlineKeepDays',
+};
+
 void main() {
   test('no setting went missing in the reorg', () {
     final current = allSettingsSearchEntries.map((e) => e.id).toSet();
     final frozen = _preReorgIds.toSet();
     final renamed = _renamedOrMergedIds.keys.toSet();
     expect(
-      frozen.difference(renamed).difference(current),
+      frozen.difference(renamed).difference(_removedIds).difference(current),
       isEmpty,
       reason: 'every pre-reorg setting is still searchable after the move',
     );

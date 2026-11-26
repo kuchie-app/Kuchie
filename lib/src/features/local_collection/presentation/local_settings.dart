@@ -23,12 +23,14 @@ import '../../security/security_settings_screen.dart';
 import '../../settings/presentation/advanced/copy_crash_log_tile.dart';
 import '../../settings/presentation/appearance/widgets/app_language/app_language_tile.dart';
 import '../../settings/presentation/customize_tabs/customize_tabs_screen.dart';
+import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../data/local_backups.dart';
 import '../data/local_browse_preferences.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_services.dart';
+import '../data/local_download_queue.dart';
 import '../data/local_network_settings.dart';
 import '../data/local_preferences.dart';
 import '../data/local_reading_stats.dart';
@@ -62,6 +64,37 @@ void openLocalLibrarySettings(
 
 void openLocalDownloadSettings(BuildContext context) =>
     _push(context, const _LocalDownloadSettings());
+
+/// Titles with chapters saved on this iPhone, newest download first. A
+/// chapter's folder is last modified when its final page is written.
+Future<List<({LocalSeries book, DateTime? savedAt})>>
+localSavedTitlesNewestFirst(LocalCatalog catalog) async {
+  final saved = <({LocalSeries book, DateTime? savedAt})>[];
+  for (final book in await catalog.list()) {
+    if (book.chapters.isEmpty) continue;
+    DateTime? newest;
+    for (final chapter in book.chapters) {
+      final folder = chapter.pages.firstOrNull?.parent;
+      if (folder == null) continue;
+      try {
+        final modified = (await folder.stat()).modified;
+        if (newest == null || modified.isAfter(newest)) newest = modified;
+      } on FileSystemException {
+        // Removed while measuring.
+      }
+    }
+    saved.add((book: book, savedAt: newest));
+  }
+  saved.sort((a, b) {
+    final left = a.savedAt;
+    final right = b.savedAt;
+    if (left == null || right == null) {
+      return left == null ? (right == null ? 0 : 1) : -1;
+    }
+    return right.compareTo(left);
+  });
+  return saved;
+}
 
 void openLocalBrowseSettings(
   BuildContext context,
@@ -212,39 +245,90 @@ class _LocalLibrarySettings extends StatelessWidget {
   }
 }
 
+/// How Local downloads behave: how many at once, whether they continue in the
+/// background, and whether read chapters are removed.
 class _LocalDownloadSettings extends StatelessWidget {
   const _LocalDownloadSettings();
+
+  Future<void> _chooseConcurrency(BuildContext context) async {
+    final preferences = LocalPreferences.instance;
+    final chosen = await pickDownloadConcurrency(
+      context,
+      current: preferences.downloadConcurrency.value,
+      max: LocalDownloadQueue.maxConcurrency,
+      note: localText(
+        context,
+        'Some sources slow down or block many requests at once.',
+        'Beberapa sumber melambat atau memblokir terlalu banyak permintaan '
+            'sekaligus.',
+      ),
+    );
+    if (chosen != null) await preferences.setDownloadConcurrency(chosen);
+  }
+
+  Future<void> _chooseBackground(BuildContext context) async {
+    final preferences = LocalPreferences.instance;
+    final chosen = await pickBackgroundDownloads(
+      context,
+      current: preferences.backgroundDownloads.value,
+    );
+    if (chosen != null) await preferences.setBackgroundDownloads(chosen);
+  }
 
   @override
   Widget build(BuildContext context) {
     final preferences = LocalPreferences.instance;
     unawaited(preferences.load());
     return SettingsListPage(
-      title: context.l10n.downloads,
+      title: localText(context, 'Download settings', 'Setelan unduhan'),
+      actions: [downloadSettingsHelpButton(context, server: false)],
       children: [
-        ValueListenableBuilder<bool>(
-          valueListenable: preferences.deleteAfterReading,
-          builder: (context, value, _) => SettingsGroupCard(
+        ListenableBuilder(
+          listenable: Listenable.merge([
+            preferences.downloadConcurrency,
+            preferences.backgroundDownloads,
+            preferences.deleteAfterReading,
+          ]),
+          builder: (context, _) => SettingsGroupCard(
             children: [
+              SettingsGroupRow(
+                icon: FluentIcons.flash_24_regular,
+                title: localText(
+                  context,
+                  'Concurrent downloads',
+                  'Unduhan bersamaan',
+                ),
+                subtitle: '${preferences.downloadConcurrency.value}',
+                trailing: _chevron,
+                onTap: () => _chooseConcurrency(context),
+              ),
+              SettingsGroupRow(
+                icon: FluentIcons.arrow_sync_24_regular,
+                title: localText(
+                  context,
+                  'Background Download',
+                  'Unduh di Latar Belakang',
+                ),
+                subtitle: preferences.backgroundDownloads.value
+                    ? localText(context, 'Enable', 'Aktif')
+                    : localText(context, 'Disable', 'Nonaktif'),
+                trailing: _chevron,
+                onTap: () => _chooseBackground(context),
+              ),
               SettingsGroupRow(
                 icon: FluentIcons.delete_24_regular,
                 title: localText(
                   context,
-                  'Delete after reading',
-                  'Hapus setelah dibaca',
-                ),
-                subtitle: localText(
-                  context,
-                  'Remove a saved chapter from this iPhone once you finish '
-                      'it and close the reader',
-                  'Hapus chapter tersimpan dari iPhone ini setelah selesai '
-                      'dibaca dan reader ditutup',
+                  'Delete download after reading',
+                  'Hapus unduhan setelah dibaca',
                 ),
                 trailing: CompactSwitch(
-                  value: value,
+                  value: preferences.deleteAfterReading.value,
                   onChanged: preferences.setDeleteAfterReading,
                 ),
-                onTap: () => preferences.setDeleteAfterReading(!value),
+                onTap: () => preferences.setDeleteAfterReading(
+                  !preferences.deleteAfterReading.value,
+                ),
               ),
             ],
           ),

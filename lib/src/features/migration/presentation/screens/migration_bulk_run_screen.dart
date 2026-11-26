@@ -382,8 +382,8 @@ class MigrationBulkRunBody extends HookConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
+          : detailNavigationAppBar(
+              context,
               title: title,
               actions: actions,
             ),

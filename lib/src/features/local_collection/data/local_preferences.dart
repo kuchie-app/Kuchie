@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'local_download_queue.dart';
+
 /// How the library is ordered, as in Tachimanga's Sort tab.
 enum LocalLibrarySort { alphabetical, lastRead, unread, totalChapters }
 
@@ -19,6 +21,8 @@ class LocalPreferences {
   static const _unreadBadgesKey = 'local.library.unreadBadges';
   static const _gridColumnsKey = 'local.library.gridColumns';
   static const _deleteAfterReadingKey = 'local.downloads.deleteAfterReading';
+  static const _downloadConcurrencyKey = 'local.downloads.concurrency';
+  static const _backgroundDownloadsKey = 'local.downloads.background';
 
   /// The choices for items per row in portrait.
   static const gridColumnChoices = [2, 3, 4];
@@ -32,6 +36,13 @@ class LocalPreferences {
   /// Removes a saved chapter from this iPhone once it has been read to the
   /// end and the reader closes.
   final deleteAfterReading = ValueNotifier<bool>(false);
+
+  /// How many chapters download at the same time.
+  final downloadConcurrency = ValueNotifier<int>(1);
+
+  /// Keeps downloading for the short time iOS allows after leaving Kuchie.
+  /// Off pauses the queue as soon as Kuchie goes to the background.
+  final backgroundDownloads = ValueNotifier<bool>(true);
 
   /// Library filters: titles with unread saved chapters, titles with saved
   /// chapters.
@@ -131,6 +142,9 @@ class LocalPreferences {
     final columns = prefs.getInt(_gridColumnsKey);
     gridColumns.value = gridColumnChoices.contains(columns) ? columns! : 2;
     deleteAfterReading.value = prefs.getBool(_deleteAfterReadingKey) ?? false;
+    downloadConcurrency.value = (prefs.getInt(_downloadConcurrencyKey) ?? 1)
+        .clamp(1, LocalDownloadQueue.maxConcurrency);
+    backgroundDownloads.value = prefs.getBool(_backgroundDownloadsKey) ?? true;
     filterUnread.value = prefs.getBool('local.library.filterUnread') ?? false;
     filterDownloaded.value =
         prefs.getBool('local.library.filterDownloaded') ?? false;
@@ -182,6 +196,27 @@ class LocalPreferences {
     deleteAfterReading.value = value;
     await (await SharedPreferences.getInstance()).setBool(
       _deleteAfterReadingKey,
+      value,
+    );
+  }
+
+  Future<void> setDownloadConcurrency(int value) async {
+    await load();
+    downloadConcurrency.value = value.clamp(
+      1,
+      LocalDownloadQueue.maxConcurrency,
+    );
+    await (await SharedPreferences.getInstance()).setInt(
+      _downloadConcurrencyKey,
+      downloadConcurrency.value,
+    );
+  }
+
+  Future<void> setBackgroundDownloads(bool value) async {
+    await load();
+    backgroundDownloads.value = value;
+    await (await SharedPreferences.getInstance()).setBool(
+      _backgroundDownloadsKey,
       value,
     );
   }

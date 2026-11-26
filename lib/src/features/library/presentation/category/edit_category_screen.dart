@@ -39,7 +39,7 @@ class EditCategoryScreen extends HookConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       floatingActionButton: categoryList.asError?.error != null
           ? null
           : const CategoryCreateFab(),

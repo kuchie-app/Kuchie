@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
+import 'package:kuchie/src/features/local_collection/data/local_download_lifecycle.dart';
 import 'package:kuchie/src/features/local_collection/data/local_download_queue.dart';
+import 'package:kuchie/src/features/local_collection/data/local_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test(
@@ -99,4 +104,96 @@ void main() {
     expect(restarted.value, isEmpty);
     expect((await catalog.list()).single.chapters.single.pages, hasLength(1));
   });
+
+  LocalDownloadRequest runtimeRequest(int index) => LocalDownloadRequest(
+    seriesId: 'source:manga',
+    title: 'Manga',
+    chapterId: 'chapter-$index',
+    chapterTitle: 'Chapter $index',
+    pages: const [],
+    runtimeChapter: (sourceId: 'source', locator: '/chapter/$index'),
+  );
+
+  test('downloads up to the concurrency limit at once', () async {
+    final root = await Directory.systemTemp.createTemp('kuchie-queue-parallel');
+    addTearDown(() => root.delete(recursive: true));
+    final catalog = LocalCatalog(Directory('${root.path}/catalog'));
+    addTearDown(catalog.close);
+    var running = 0;
+    var peak = 0;
+    final gate = Completer<void>();
+    final queue = LocalDownloadQueue(
+      catalog,
+      File('${root.path}/queue.json'),
+      resolveRuntimeChapter: (_, _) async {
+        running++;
+        peak = max(peak, running);
+        await gate.future;
+        running--;
+        throw StateError('Stopped by the test');
+      },
+    )..concurrency = 2;
+    for (var index = 0; index < 3; index++) {
+      await queue.enqueue(runtimeRequest(index));
+    }
+    await pumpEventQueue();
+    expect(peak, 2);
+    expect(
+      queue.value.where((item) => item.state == LocalDownloadState.downloading),
+      hasLength(2),
+    );
+    gate.complete();
+    await queue.idle;
+    expect(peak, 2);
+    expect(
+      queue.value.map((item) => item.state),
+      everyElement(LocalDownloadState.failed),
+    );
+  });
+
+  testWidgets(
+    'background off pauses running downloads and resumes them on return',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(() async {
+        final root = await Directory.systemTemp.createTemp('kuchie-queue-bg');
+        addTearDown(() => root.delete(recursive: true));
+        final catalog = LocalCatalog(Directory('${root.path}/catalog'));
+        addTearDown(catalog.close);
+        final gate = Completer<void>();
+        final queue = LocalDownloadQueue(
+          catalog,
+          File('${root.path}/queue.json'),
+          resolveRuntimeChapter: (_, _) async {
+            await gate.future;
+            throw StateError('Stopped by the test');
+          },
+        );
+        final preferences = LocalPreferences.instance;
+        await preferences.setBackgroundDownloads(false);
+        final lifecycle = LocalDownloadLifecycle(
+          queue,
+          supportsBackgroundTime: false,
+        );
+        await lifecycle.start();
+        addTearDown(lifecycle.dispose);
+
+        await queue.enqueue(runtimeRequest(0));
+        await queue.enqueue(runtimeRequest(1));
+        await pumpEventQueue();
+        expect(queue.running, isTrue);
+
+        await lifecycle.onHidden();
+        expect(
+          queue.value.map((item) => item.state),
+          everyElement(LocalDownloadState.paused),
+        );
+
+        await lifecycle.onShown();
+        expect(queue.running, isTrue);
+        gate.complete();
+        await queue.idle;
+      });
+    },
+  );
 }

@@ -63,7 +63,7 @@ class SourceFilterScreen extends HookConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: sourceMapData.showUiWhenData(context, (data) {
         final sourceMap = {...data};
         // The local source is always available in its own Browse bucket.

@@ -345,10 +345,10 @@ class DownloadsSettingsRoute extends GoRouteData with $DownloadsSettingsRoute {
   /// Scroll to and pulse the matching SettingsHighlightTarget; null skips highlighting.
   final String? highlight;
 
-  /// 0=Server, 1=On device; null or out-of-range values open Server.
+  /// Kept for old links; the page no longer has tabs.
   final int? tab;
 
-  Widget get _screen => DownloadsSettingsScreen(initialTab: tab ?? 0);
+  Widget get _screen => const DownloadsSettingsScreen();
 
   @override
   Widget build(context, state) => DetailNavigationShellScreen(child: _screen);

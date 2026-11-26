@@ -100,7 +100,7 @@ class ExtensionInfoScreen extends HookConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: body,
     );
     return titleTopBarSlot(
