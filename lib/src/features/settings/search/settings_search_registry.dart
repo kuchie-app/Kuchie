@@ -22,11 +22,8 @@ import '../../account/data/account_providers.dart';
 import '../../account/domain/account_access.dart';
 import '../../app_icon/data/apple_app_icon.dart';
 import '../../notifications/controller/notification_settings_providers.dart';
-import '../../offline/data/background/catchup_settings.dart';
-import '../../offline/data/offline_repository.dart';
 import '../controller/server_controller.dart';
 import '../data/backup/backup_settings_repository.dart';
-import '../data/downloads/delete_chapters_settings_repository.dart';
 import '../data/downloads/downloads_settings_repository.dart';
 import '../data/server/server_settings_repository.dart';
 import '../data/server/web_interface_repository.dart';
@@ -1070,176 +1067,39 @@ List<SettingsSearchEntry> get downloadsSettingsSearchEntries => [
     tabIndex: 0,
   ),
   SettingsSearchEntry(
-    id: 'deviceDeleteManuallyMarkedRead',
-    title: (l) => l.deleteChapterAfterManuallyMarkedRead,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
+    id: 'serverConcurrentDownloads',
+    title: (l) =>
+        l.localeName == 'id' ? 'Unduhan bersamaan' : 'Concurrent downloads',
+    breadcrumb: (l) => l.downloads,
     open: (c) => const DownloadsSettingsRoute(
-      highlight: 'deviceDeleteManuallyMarkedRead',
-      tab: 1,
+      highlight: 'serverConcurrentDownloads',
     ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
+    visible: (ref, _) => _serverReachable(ref),
+    tabIndex: 0,
   ),
   SettingsSearchEntry(
-    id: 'deviceDeleteWhileReading',
-    title: (l) => l.deleteFinishedChaptersWhileReading,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
+    id: 'serverDeleteAfterReading',
+    title: (l) => l.localeName == 'id'
+        ? 'Hapus unduhan setelah dibaca'
+        : 'Delete download after reading',
+    breadcrumb: (l) => l.downloads,
     open: (c) => const DownloadsSettingsRoute(
-      highlight: 'deviceDeleteWhileReading',
-      tab: 1,
+      highlight: 'serverDeleteAfterReading',
     ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
+    visible: (ref, _) => _serverReachable(ref),
+    tabIndex: 0,
   ),
   SettingsSearchEntry(
-    id: 'deviceDeleteWithBookmark',
-    title: (l) => l.allowDeletingBookmarkedChapters,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
+    id: 'serverBackgroundDownloads',
+    title: (l) => l.localeName == 'id'
+        ? 'Unduh di latar belakang'
+        : 'Background Download',
+    breadcrumb: (l) => l.downloads,
     open: (c) => const DownloadsSettingsRoute(
-      highlight: 'deviceDeleteWithBookmark',
-      tab: 1,
+      highlight: 'serverBackgroundDownloads',
     ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'downloadProtectionWindow',
-    title: (l) => l.downloadProtectionWindowTitle,
-    subtitle: (l) => l.downloadProtectionWindowDescription,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'downloadProtectionWindow',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) =>
-        ref.watch(offlineEnabledProvider) &&
-        (ref.watch(localDeleteWhileReadingProvider) ?? 0) >= 2,
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'removeAllDownloads',
-    title: (l) => l.offlineRemoveAllDownloads,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'removeAllDownloads',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineWifiOnly',
-    title: (l) => l.downloadOverWifiOnly,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineWifiOnly',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'backgroundCatchup',
-    title: (l) => l.downloadNewChaptersInBackground,
-    subtitle: (l) => l.downloadNewChaptersInBackgroundDescription,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineBackgroundSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'backgroundCatchup',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider) && isAndroidNative,
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'backgroundCheckInterval',
-    title: (l) => l.notificationsCheckInterval,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineBackgroundSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'backgroundCheckInterval',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) =>
-        ref.watch(offlineEnabledProvider) &&
-        isAndroidNative &&
-        ref.watch(backgroundCatchupEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'backgroundFetchFiles',
-    title: (l) => l.backgroundCatchupFetchFiles,
-    subtitle: (l) => l.backgroundCatchupFetchFilesDescription,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineBackgroundSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'backgroundFetchFiles',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) =>
-        ref.watch(offlineEnabledProvider) &&
-        isAndroidNative &&
-        ref.watch(backgroundCatchupEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineConcurrency',
-    title: (l) => l.offlineConcurrencyLabel,
-    breadcrumb: (l) => '${l.downloads} › ${l.downloadsOnDeviceTab}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineConcurrency',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineStorageCapEnable',
-    title: (l) => l.offlineStorageCapEnable,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineStorageSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineStorageCapEnable',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineStorageCapLimit',
-    title: (l) => l.offlineStorageCapLimit,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineStorageSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineStorageCapLimit',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineTimeEvictEnable',
-    title: (l) => l.offlineTimeEvictEnable,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineStorageSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineTimeEvictEnable',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
-  ),
-  SettingsSearchEntry(
-    id: 'offlineKeepDays',
-    title: (l) => l.offlineKeepDaysLabel,
-    breadcrumb: (l) =>
-        '${l.downloads} › ${l.downloadsOnDeviceTab} › ${l.offlineStorageSection}',
-    open: (c) => const DownloadsSettingsRoute(
-      highlight: 'offlineKeepDays',
-      tab: 1,
-    ).push(c),
-    visible: (ref, _) => ref.watch(offlineEnabledProvider),
-    tabIndex: 1,
+    visible: (ref, _) => _serverReachable(ref),
+    tabIndex: 0,
   ),
 ];
 

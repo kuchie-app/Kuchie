@@ -28,6 +28,7 @@ import 'package:kuchie/src/features/manga_book/data/updates/updates_repository.d
 import 'package:kuchie/src/features/manga_book/domain/manga/graphql/__generated__/fragment.graphql.dart';
 import 'package:kuchie/src/features/manga_book/presentation/downloads/downloads_screen.dart';
 import 'package:kuchie/src/features/offline/data/offline_nav_status.dart';
+import 'package:kuchie/src/features/settings/presentation/downloads/widgets/downloads_overview.dart';
 import 'package:kuchie/src/features/settings/presentation/settings/settings_screen.dart';
 import 'package:kuchie/src/features/settings/presentation/syncyomi/data/syncyomi_settings_provider.dart';
 import 'package:kuchie/src/features/tracking/data/graphql/__generated__/query.graphql.dart';
@@ -38,7 +39,6 @@ import 'package:kuchie/src/kuchie_app.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:kuchie/src/widgets/desktop/desktop_page_frame.dart';
 import 'package:kuchie/src/widgets/desktop/desktop_top_bar.dart';
-import 'package:kuchie/src/widgets/desktop/desktop_view_switch.dart';
 import 'package:kuchie/src/widgets/manga_cover/grid/manga_cover_grid_tile.dart';
 import 'package:kuchie/src/widgets/shell/big_screen_navigation_bar.dart';
 import 'package:kuchie/src/widgets/shell/detail_navigation_shell_screen.dart';
@@ -237,14 +237,22 @@ void main() {
       cover,
       top: kCategoryTabStripHeight + DesktopPageHeader.gap,
     );
-    final coverRight = find.byType(MangaCoverGridTile).evaluate().map(
-      (element) => tester.getRect(
-        find.descendant(
-          of: find.byWidget(element.widget),
-          matching: find.byType(Material),
-        ).first,
-      ).right,
-    ).reduce(max);
+    final coverRight = find
+        .byType(MangaCoverGridTile)
+        .evaluate()
+        .map(
+          (element) => tester
+              .getRect(
+                find
+                    .descendant(
+                      of: find.byWidget(element.widget),
+                      matching: find.byType(Material),
+                    )
+                    .first,
+              )
+              .right,
+        )
+        .reduce(max);
     expect(
       tester.view.physicalSize.width - coverRight,
       kDesktopScrollbarGutter,
@@ -271,11 +279,7 @@ void main() {
 
     await pump(const DownloadsScreen());
     expect(tester.takeException(), isNull);
-    expectOnLine('Downloads', find.byType(DesktopViewSwitch));
-    await tester.tap(find.text('On device'));
-    await tester.pump(const Duration(seconds: 1));
-    expect(tester.takeException(), isNull);
-    expectOnLine('Downloads on device', find.byType(DesktopViewSwitch));
+    expectOnLine('Downloads', find.byType(RecentlyDownloadedRow));
 
     await pump(const SettingsScreen());
     expect(tester.takeException(), isNull);

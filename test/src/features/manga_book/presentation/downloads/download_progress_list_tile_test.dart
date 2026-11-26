@@ -17,7 +17,6 @@ import 'package:kuchie/src/features/manga_book/domain/downloads_queue/graphql/__
 import 'package:kuchie/src/features/manga_book/presentation/downloads/controller/downloads_controller.dart';
 import 'package:kuchie/src/features/manga_book/presentation/downloads/downloads_screen.dart';
 import 'package:kuchie/src/features/manga_book/presentation/downloads/widgets/download_progress_list_tile.dart';
-import 'package:kuchie/src/features/manga_book/presentation/downloads/widgets/downloads_fab.dart';
 import 'package:kuchie/src/features/manga_book/presentation/downloads/widgets/server_downloads_body.dart';
 import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/global_providers/global_providers.dart';
@@ -149,13 +148,11 @@ void main() {
   });
 
   group('only my downloads', () {
-    Future<void> pumpBody(
-      WidgetTester tester,
-      AccountAccess access,
-    ) async {
+    Future<void> pumpBody(WidgetTester tester, AccountAccess access) async {
       SharedPreferences.setMockInitialValues(const {});
       final prefs = await SharedPreferences.getInstance();
-      final manageAll = access.canManageUsers ||
+      final manageAll =
+          access.canManageUsers ||
           access.capability == AccountCapability.unsupported;
       await tester.pumpWidget(
         ProviderScope(
@@ -308,9 +305,7 @@ void main() {
               ),
             ),
             sharedPreferencesProvider.overrideWithValue(prefs),
-            downloadStatusProvider.overrideWith(
-              (ref) => Future.value(status),
-            ),
+            downloadStatusProvider.overrideWith((ref) => Future.value(status)),
             downloadUpdatesProvider.overrideWith(
               (ref) => const Stream<DownloadUpdatesDto?>.empty(),
             ),
@@ -324,15 +319,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final l10n =
-          AppLocalizations.of(tester.element(find.byType(DownloadsScreen)))!;
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(DownloadsScreen)),
+      )!;
 
       expect(find.byTooltip(l10n.retryAll), findsNothing);
-      expect(
-        find.byIcon(FluentIcons.delete_dismiss_24_regular),
-        findsNothing,
+      expect(find.byIcon(FluentIcons.delete_dismiss_24_regular), findsNothing);
+      // Without the download permission the Resume button stays disabled.
+      final resume = tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: find.text(l10n.resume),
+          matching: find.byWidgetPredicate((w) => w is FilledButton),
+        ),
       );
-      expect(find.byType(DownloadsFab), findsNothing);
+      expect(resume.onPressed, isNull);
       expect(find.text(l10n.noDownloads), findsOneWidget);
     });
   });

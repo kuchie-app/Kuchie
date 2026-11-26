@@ -5,40 +5,36 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter_hooks/flutter_hooks.dart' hide useTabController;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:material_hooks/material_hooks.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../graphql/__generated__/schema.graphql.dart';
+import '../../../../routes/router_config.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
 import '../../../../utils/misc/app_utils.dart';
 import '../../../../utils/misc/toast/toast.dart';
-import '../../../../utils/motion/reduce_motion.dart';
+import '../../../../widgets/desktop/desktop_page_frame.dart';
 import '../../../../widgets/desktop/desktop_top_bar.dart';
-import '../../../../widgets/desktop/desktop_view_switch.dart';
-import '../../../../widgets/ios/apple_glass_capability.dart';
-import '../../../../widgets/ios/apple_glass_floating_header.dart';
-import '../../../../widgets/ios/apple_glass_segments.dart';
 import '../../../../widgets/ios/apple_glass_toolbar.dart';
 import '../../../../widgets/ios/apple_page_title.dart';
 import '../../../../widgets/popup_widgets/confirm_action.dart';
-import '../../../../widgets/touch_tab_pager.dart';
+import '../../../../widgets/server_image.dart';
 import '../../../account/data/account_providers.dart';
 import '../../../library/presentation/library/widgets/desktop_library_toolbar.dart';
-import '../../../offline/data/offline_download_providers.dart';
-import '../../../offline/data/offline_settings_providers.dart';
-import '../../../offline/presentation/offline_files_view.dart';
+import '../../../local_collection/presentation/local_ui.dart';
 import '../../../quick_open/presentation/unified_search/desktop_search_field.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../quick_open/presentation/unified_search/unified_search_providers.dart';
+import '../../../settings/controller/server_controller.dart';
+import '../../../settings/presentation/downloads/downloads_settings_screen.dart';
+import '../../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../../settings/presentation/library/widgets/persistent_search_bar/persistent_search_bar.dart';
 import '../../data/downloads/downloads_repository.dart';
+import '../../data/downloads/server_downloaded_titles.dart';
 import '../../domain/downloads/downloads_model.dart';
 import '../../domain/downloads_queue/downloads_queue_model.dart';
 import 'controller/downloads_controller.dart';
 import 'widgets/download_completion_feedback.dart';
-import 'widgets/downloads_fab.dart';
 import 'widgets/only_my_downloads.dart';
 import 'widgets/server_downloads_body.dart';
 
@@ -86,7 +82,6 @@ class DownloadsScreen extends HookConsumerWidget {
     final downloadsChapterIds = ref.watch(downloadsChapterIdsProvider);
     final queueStatus = ref.watch(downloadStatusProvider);
     final downloaderRunState = ref.watch(downloaderRunStateProvider);
-    final showDownloadsFAB = ref.watch(showDownloadsFABProvider);
     final visibility = ref.watch(downloadsVisibilityProvider);
     final visibleIds = visibility.visibleIds;
     final visibleSet = visibleIds.toSet();
@@ -95,17 +90,7 @@ class DownloadsScreen extends HookConsumerWidget {
       for (final id in erroredChapterIds)
         if (visibleSet.contains(id)) id,
     ];
-    final tabController = useTabController(
-      initialLength: 2,
-      initialIndex: openOnDevice ? 1 : 0,
-      animationDuration: context.reduceMotion
-          ? Duration.zero
-          : kTabScrollDuration,
-      keys: [context.reduceMotion, openOnDevice],
-    );
-    useListenable(tabController);
-    final onDeviceTab = tabController.index == 1;
-    if (!onDeviceTab && canDownload) {
+    if (canDownload) {
       ref.listen(downloadUpdatesProvider, (_, next) {
         final updates = next.asData?.value;
         if (updates == null ||
@@ -131,32 +116,7 @@ class DownloadsScreen extends HookConsumerWidget {
     final persistentBox =
         phone && ref.watch(libraryPersistentSearchBarProvider).ifNull();
     final desktop = context.usesDesktopShell;
-    final labels = [
-      context.l10n.downloadsServerTab,
-      context.l10n.downloadsOnDeviceTab,
-    ];
-    final materialTabs = TabBar(
-      controller: tabController,
-      // Fill aligns the underline with each tab; the global center alignment serves scrollable categories.
-      tabAlignment: TabAlignment.fill,
-      tabs: [for (final label in labels) Tab(text: label)],
-    );
-    final PreferredSizeWidget tabBar = phone
-        ? AppleGlassSegments(
-            labels: labels,
-            selectedIndex: tabController.index,
-            onSelected: tabController.animateTo,
-            // Follows the pages while they are swiped.
-            position: tabController.animation,
-            fallback: materialTabs,
-          )
-        : materialTabs;
-    final viewSwitch = DesktopViewSwitchBar(
-      labels: labels,
-      selectedIndex: tabController.index,
-      onChanged: tabController.animateTo,
-    );
-    // The shell hosts desktop actions and search; tabs remain in the page body.
+    // The shell hosts desktop actions and search.
     final topBar = showsMergedTopBar(context);
     final search = DesktopSearchField(
       query: ref.watch(unifiedSearchQueryProvider),
@@ -189,21 +149,18 @@ class DownloadsScreen extends HookConsumerWidget {
             onPressed: onPressed,
             fallbackIcon: icon,
           );
-    final showRetry = !onDeviceTab && visibleErrored.isNotEmpty;
-    final showClear = !onDeviceTab && visibleIds.isNotBlank;
-    final showToggle = desktop && !onDeviceTab && visibleIds.isNotEmpty;
-    final toggleLabel = downloaderRunState == DownloaderState.STARTED
-        ? context.l10n.pause
-        : context.l10n.resume;
-    final toggleIcon = downloaderRunState == DownloaderState.STARTED
-        ? FluentIcons.pause_24_regular
-        : FluentIcons.play_24_regular;
+    final showRetry = visibleErrored.isNotEmpty;
+    final showClear = visibleIds.isNotBlank;
+    final running = downloaderRunState == DownloaderState.STARTED;
+    final canManageSettings = ref
+        .watch(settledAccountAccessProvider)
+        .allows(Enum$UserPermission.MANAGE_SETTINGS);
+    final concurrency =
+        ref.watch(settingsProvider).value?.maxSourcesInParallel ?? 1;
     Future<void> toggleDownloads() async {
       final repo = ref.read(downloadsRepositoryProvider);
       (await AsyncValue.guard(
-        downloaderRunState == DownloaderState.STARTED
-            ? repo.stopDownloads
-            : repo.startDownloads,
+        running ? repo.stopDownloads : repo.startDownloads,
       )).showToastOnError(ref.read(toastProvider));
     }
 
@@ -267,32 +224,74 @@ class DownloadsScreen extends HookConsumerWidget {
                 },
           icon: FluentIcons.delete_dismiss_24_regular,
         ),
-      if (showToggle)
-        compact
-            ? Tooltip(
-                message: toggleLabel,
-                child: FilledButton(
-                  onPressed: !canDownload ? null : toggleDownloads,
-                  child: Icon(toggleIcon, size: 18),
-                ),
-              )
-            : FilledButton.icon(
-                onPressed: !canDownload ? null : toggleDownloads,
-                icon: Icon(toggleIcon, size: 18),
-                label: Text(toggleLabel),
-              ),
+      queueAction(
+        id: 'download-settings',
+        symbol: 'gearshape',
+        label: localText(context, 'Download settings', 'Setelan unduhan'),
+        compact: compact,
+        onPressed: () => const DownloadsSettingsRoute().push(context),
+        icon: FluentIcons.settings_24_regular,
+      ),
     ];
     final actions = buildActions();
-    final floatingTabs =
-        !desktop && !topBar && AppleGlassFloatingHeader.enabled(context);
-    final pager = TouchTabPager(
-      controller: tabController,
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ServerDownloads(
-          downloadsChapterIds: downloadsChapterIds,
-          queueStatus: queueStatus,
+        // On desktop the header starts on the shared page line.
+        Padding(
+          padding: EdgeInsets.zero.onDesktopPageLine(context, top: true),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              RecentlyDownloadedRow(
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => RecentlyDownloadedPage(
+                      load: () async {
+                        ref.invalidate(serverDownloadedTitlesProvider);
+                        final titles = await ref.read(
+                          serverDownloadedTitlesProvider.future,
+                        );
+                        return [
+                          for (final title in titles)
+                            (
+                              cover: ServerImage(
+                                imageUrl: title.thumbnailUrl ?? '',
+                                fit: BoxFit.cover,
+                              ),
+                              title: title.title,
+                              chapters: title.chapters,
+                              downloadedAt: title.downloadedAt,
+                              onTap: () => MangaRoute(
+                                mangaId: title.mangaId,
+                              ).push(context),
+                              onLongPress: null,
+                            ),
+                        ];
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              DownloadsQueueActions(
+                running: running,
+                onToggle: canDownload && visibleIds.isNotEmpty
+                    ? toggleDownloads
+                    : null,
+                concurrency: concurrency,
+                onConcurrency: canManageSettings
+                    ? () => chooseServerDownloadConcurrency(context, ref)
+                    : null,
+              ),
+            ],
+          ),
         ),
-        OfflineFilesView(showCompletionFeedback: onDeviceTab),
+        Expanded(
+          child: _ServerDownloads(
+            downloadsChapterIds: downloadsChapterIds,
+            queueStatus: queueStatus,
+          ),
+        ),
       ],
     );
     final scaffold = Scaffold(
@@ -308,41 +307,12 @@ class DownloadsScreen extends HookConsumerWidget {
                       ),
                     )
                   : ApplePageTitle(context.l10n.downloads),
-              bottom: desktop
-                  ? null
-                  : persistentBox
-                  ? PhoneSearchBoxBottom(
-                      origin: PhoneSearchOrigin.plain,
-                      below: floatingTabs ? null : tabBar,
-                    )
-                  : floatingTabs
-                  ? null
-                  : tabBar,
+              bottom: !desktop && persistentBox
+                  ? const PhoneSearchBoxBottom(origin: PhoneSearchOrigin.plain)
+                  : null,
               actions: actions,
             ),
-      // Unknown run state offers Resume: starting an already-running downloader is a no-op.
-      floatingActionButton: desktop && !onDeviceTab
-          ? null
-          : onDeviceTab
-          ? const AppleGlassDockClearance(child: OfflineDownloadsFab())
-          : (showDownloadsFAB && (visibility.manageAll || visibleIds.isNotBlank)
-                ? AppleGlassDockClearance(
-                    child: DownloadsFab(
-                      status: downloaderRunState ?? DownloaderState.STOPPED,
-                    ),
-                  )
-                : null),
-      // Desktop has no page app bar to host these tabs.
-      body: topBar || desktop
-          ? Column(
-              children: [
-                if (desktop) viewSwitch else tabBar,
-                Expanded(child: pager),
-              ],
-            )
-          : floatingTabs
-          ? AppleGlassFloatingHeader.overlay(header: tabBar, child: pager)
-          : pager,
+      body: body,
     );
     return topBar
         ? TopBarSlot(
@@ -353,10 +323,10 @@ class DownloadsScreen extends HookConsumerWidget {
                   constraints,
                   showRetry: showRetry,
                   showClear: showClear,
-                  showToggle: showToggle,
+                  showToggle: false,
                   retryLabel: context.l10n.retryAll,
                   clearLabel: context.l10n.confirmClearQueueTitle,
-                  toggleLabel: toggleLabel,
+                  toggleLabel: '',
                 );
                 return desktopSearchSlotContent(
                   search: search,
@@ -369,33 +339,6 @@ class DownloadsScreen extends HookConsumerWidget {
             child: scaffold,
           )
         : scaffold;
-  }
-}
-
-class OfflineDownloadsFab extends ConsumerWidget {
-  const OfflineDownloadsFab({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final canDownload = ref
-        .watch(settledAccountAccessProvider)
-        .allows(Enum$UserPermission.DOWNLOAD_CHAPTERS);
-    final hasPending = ref.watch(offlineHasPendingProvider).value ?? false;
-    final paused = ref.watch(offlineDownloadsPausedProvider) ?? false;
-    // Hide idle queues, including paused queues with no pending work.
-    if (!hasPending) return const SizedBox.shrink();
-    return FloatingActionButton.extended(
-      icon: Icon(
-        paused ? FluentIcons.play_24_regular : FluentIcons.pause_24_regular,
-      ),
-      label: Text(paused ? context.l10n.resume : context.l10n.pause),
-      tooltip: !canDownload && paused
-          ? context.l10n.accountPermissionDenied
-          : null,
-      onPressed: !canDownload && paused
-          ? null
-          : () => setOfflineDownloadsPaused(ref, !paused),
-    );
   }
 }
 

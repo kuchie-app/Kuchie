@@ -94,12 +94,27 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
   final ValueNotifier<int> completed = ValueNotifier(0);
   Future<void>? _loaded;
   Future<void> _writes = Future.value();
-  Future<void> _worker = Future.value();
-  bool _running = false;
-  http.Client? _client;
-  LocalDownloadRequest? _active;
+  final Set<Future<void>> _workers = {};
+  final Map<LocalDownloadRequest, http.Client> _active = Map.identity();
+  final Map<LocalDownloadRequest, Completer<void>> _finished = Map.identity();
+  int _concurrency = 1;
 
-  Future<void> get idle => _worker;
+  /// Completes once no chapter is downloading or waiting for a worker.
+  Future<void> get idle async {
+    while (_workers.isNotEmpty) {
+      await Future.wait([..._workers]);
+    }
+  }
+
+  /// How many chapters download at the same time.
+  int get concurrency => _concurrency;
+
+  static const maxConcurrency = 5;
+
+  set concurrency(int value) {
+    _concurrency = value.clamp(1, maxConcurrency);
+    _start();
+  }
 
   Future<void> load() => _loaded ??= _load();
 
@@ -135,7 +150,7 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
     final item = _find(seriesId, chapterId);
     if (item == null || item.state == LocalDownloadState.paused) return;
     _set(item.request, LocalDownloadState.paused, done: item.done);
-    if (identical(_active, item.request)) _client?.close();
+    _active[item.request]?.close();
     await _persist();
   }
 
@@ -156,7 +171,6 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
 
   /// Pauses every chapter, as Tachimanga's Pause button does.
   Future<void> pauseAll() async {
-    final active = _active;
     value = [
       for (final item in value)
         item.state == LocalDownloadState.queued ||
@@ -169,7 +183,7 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
               )
             : item,
     ];
-    if (active != null) _client?.close();
+    _closeActive();
     await _persist();
   }
 
@@ -195,10 +209,8 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
   Future<void> clear() async {
     final items = [...value];
     value = const [];
-    if (_active != null) {
-      _client?.close();
-      await _worker;
-    }
+    _closeActive();
+    await idle;
     await _persist();
     for (final item in items) {
       await _catalog.purgePartialRemoteChapter(
@@ -214,10 +226,8 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
     value = value
         .where((candidate) => !identical(candidate.request, item.request))
         .toList();
-    if (identical(_active, item.request)) {
-      _client?.close();
-      await _worker;
-    }
+    _active[item.request]?.close();
+    await _finished[item.request]?.future;
     await _persist();
     await _catalog.purgePartialRemoteChapter(seriesId, chapterId);
   }
@@ -260,34 +270,49 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
     return write;
   }
 
+  void _closeActive() {
+    for (final client in _active.values) {
+      client.close();
+    }
+  }
+
+  /// Starts workers until [concurrency] are running or nothing is waiting.
   void _start() {
-    if (_running) return;
-    _running = true;
-    _worker = _drain().whenComplete(() {
-      _running = false;
-      if (value.any((item) => item.state == LocalDownloadState.queued)) {
-        _start();
-      }
-    });
-    unawaited(
-      _worker.catchError((Object error, StackTrace stack) {
-        FlutterError.reportError(
-          FlutterErrorDetails(exception: error, stack: stack),
-        );
-      }),
-    );
+    var waiting = value
+        .where((item) => item.state == LocalDownloadState.queued)
+        .length;
+    while (_workers.length < _concurrency && waiting > 0) {
+      waiting--;
+      late final Future<void> worker;
+      worker = _drain().whenComplete(() {
+        _workers.remove(worker);
+        if (value.any((item) => item.state == LocalDownloadState.queued)) {
+          _start();
+        }
+      });
+      _workers.add(worker);
+      unawaited(
+        worker.catchError((Object error, StackTrace stack) {
+          FlutterError.reportError(
+            FlutterErrorDetails(exception: error, stack: stack),
+          );
+        }),
+      );
+    }
   }
 
   Future<void> _drain() async {
-    while (true) {
+    // A lowered limit retires the extra workers between chapters.
+    while (_workers.length <= _concurrency) {
       final job = value
           .where((item) => item.state == LocalDownloadState.queued)
           .firstOrNull;
       if (job == null) return;
       final request = job.request;
       final client = _clientFactory();
-      _active = request;
-      _client = client;
+      _active[request] = client;
+      final finished = _finished[request] = Completer<void>();
+      // Claimed synchronously, so no other worker picks the same chapter.
       _set(request, LocalDownloadState.downloading, done: job.done);
       bool isActive() {
         final current = _find(request.seriesId, request.chapterId);
@@ -334,8 +359,9 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
         if (isActive()) _set(request, LocalDownloadState.failed);
       } finally {
         client.close();
-        _client = null;
-        _active = null;
+        _active.remove(request);
+        _finished.remove(request);
+        finished.complete();
       }
       await _persist();
     }

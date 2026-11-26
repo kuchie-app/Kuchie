@@ -47,8 +47,8 @@ class TrackingSettingsScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: topBar
             ? null
-            : AppBar(
-                leading: detailNavigationBackButton(context),
+            : detailNavigationAppBar(
+                context,
                 title: title,
               ),
         body: SettingsHighlightScope(

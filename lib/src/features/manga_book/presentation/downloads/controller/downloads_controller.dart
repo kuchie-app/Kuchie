@@ -8,6 +8,7 @@ import '../../../../account/data/account_providers.dart';
 import '../../../../account/domain/account_access.dart';
 import '../../../../auth/data/auth_credentials_store.dart';
 import '../../../data/downloads/downloads_repository.dart';
+import '../../../data/downloads/server_downloaded_titles.dart';
 import '../../../domain/downloads/downloads_model.dart';
 import '../../../domain/downloads/graphql/__generated__/fragment.graphql.dart';
 import '../../../domain/downloads_queue/downloads_queue_model.dart';
@@ -46,8 +47,12 @@ class DownloadsMap extends _$DownloadsMap {
 
     // Only structural queue changes supersede a re-read; percentage ticks must not starve it.
     var structural = initial != null;
+    final finishedTitles = <int>{};
     for (final element in downloadStatusDto.updates) {
       final chapterId = element.download.chapter.id;
+      if (element.type == DownloadUpdateType.FINISHED) {
+        finishedTitles.add(element.download.manga.id);
+      }
       switch (element.type) {
         case DownloadUpdateType.DEQUEUED:
         case DownloadUpdateType.FINISHED:
@@ -76,11 +81,22 @@ class DownloadsMap extends _$DownloadsMap {
           throw UnimplementedError();
       }
     }
+    _recordFinished(finishedTitles);
     if (changes case final queue?) {
       _publish(queue, structural: structural);
     } else if (structural) {
       // A duplicate structural event can still supersede an in-flight query.
       _generation++;
+    }
+  }
+
+  /// Remembers when titles finished, for the Downloaded list's order.
+  void _recordFinished(Set<int> mangaIds) {
+    if (mangaIds.isEmpty) return;
+    try {
+      ref.read(serverDownloadHistoryProvider.notifier).recordFinished(mangaIds);
+    } catch (_) {
+      // Ordering is best effort; the list falls back to fetch times.
     }
   }
 

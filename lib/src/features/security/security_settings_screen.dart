@@ -27,14 +27,20 @@ class SettingsListPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.children,
+    this.actions,
   });
 
   final String title;
   final List<Widget> children;
+  final List<Widget>? actions;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: detailNavigationAppBar(context, title: Text(title)),
+    appBar: detailNavigationAppBar(
+      context,
+      title: Text(title),
+      actions: actions,
+    ),
     body: Center(
       child: ConstrainedBox(
         constraints: settingsPageConstraints(context),

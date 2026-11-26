@@ -971,9 +971,9 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (detail) => Scaffold(
-          appBar: AppBar(
+          appBar: detailNavigationAppBar(
+            detail,
             title: Text(detail.l10n.extensionInfo),
-            leading: detailNavigationBackButton(detail),
           ),
           body: ExtensionInfoContent(
             name: name,

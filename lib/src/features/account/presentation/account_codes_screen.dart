@@ -177,7 +177,7 @@ class AccountCodesScreen extends HookConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: !admitted
           ? Center(child: Text(context.l10n.accountSettingsUnavailable))
           : Center(

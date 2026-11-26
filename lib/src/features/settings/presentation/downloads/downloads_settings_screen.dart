@@ -1,3 +1,4 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -8,15 +9,16 @@ import '../../../../utils/misc/toast/toast.dart';
 import '../../../../utils/motion/reduce_motion.dart';
 import '../../../../utils/webui_meta/webui_meta_codec.dart';
 import '../../../../utils/webui_meta/webui_settings.dart';
+import '../../../../widgets/compact_switch.dart';
 import '../../../../widgets/desktop/desktop_top_bar.dart';
 import '../../../../widgets/emoticons.dart';
 import '../../../../widgets/input_popup/domain/settings_prop_type.dart';
 import '../../../../widgets/input_popup/settings_prop_tile.dart';
 import '../../../../widgets/shell/detail_navigation_shell_screen.dart';
-import '../../../../widgets/touch_tab_pager.dart';
 import '../../../account/data/account_providers.dart';
 import '../../../library/domain/category/category_model.dart';
 import '../../../library/presentation/category/controller/edit_category_controller.dart';
+import '../../../local_collection/presentation/local_ui.dart';
 import '../../../offline/presentation/offline_settings_screen.dart';
 import '../../controller/server_controller.dart';
 import '../../data/downloads/delete_chapters_settings_repository.dart';
@@ -25,62 +27,64 @@ import '../../data/user_settings.dart';
 import '../../domain/settings/settings.dart';
 import '../../search/settings_search_registry.dart';
 import '../../widgets/settings_group_card/settings_group_card.dart';
+import '../browse/data/browse_settings_repository.dart';
 import 'widgets/auto_download_categories_dialog.dart';
+import 'widgets/downloads_overview.dart';
 
-/// [initialTab]: 0 for Server, 1 for On device; out-of-range values select Server.
+/// Picks how many sources the server downloads from at once and saves it.
+Future<void> chooseServerDownloadConcurrency(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final current = ref.read(settingsProvider).value?.maxSourcesInParallel ?? 1;
+  final chosen = await pickDownloadConcurrency(
+    context,
+    current: current,
+    max: 10,
+    note: localText(
+      context,
+      'The server downloads from this many sources at once, one chapter per '
+          'source. Shared with browsing.',
+      'Server mengunduh dari sebanyak ini sumber sekaligus, satu chapter per '
+          'sumber. Dipakai juga saat browsing.',
+    ),
+  );
+  if (chosen == null || chosen == current) return;
+  final updated = await AppUtils.guard(
+    () => ref
+        .read(browseSettingsRepositoryProvider)
+        .updateSourceInParallel(chosen),
+    ref.read(toastProvider),
+  );
+  if (updated != null) ref.read(settingsProvider.notifier).updateState(updated);
+}
+
+/// How the server's downloader behaves: the three settings both collections
+/// share, then the server's own options.
 class DownloadsSettingsScreen extends StatelessWidget {
-  const DownloadsSettingsScreen({super.key, this.initialTab = 0});
-
-  final int initialTab;
+  const DownloadsSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final topBar = showsMergedTopBar(context);
-    final title = Text(context.l10n.downloads);
-    final tabBar = TabBar(
-      tabs: [
-        Tab(text: context.l10n.downloadsServerTab),
-        Tab(text: context.l10n.downloadsOnDeviceTab),
-      ],
+    final title = Text(
+      localText(context, 'Download settings', 'Setelan unduhan'),
     );
-    final content = DefaultTabController(
-      length: 2,
-      initialIndex: initialTab.clamp(0, 1),
-      animationDuration: context.reduceMotion
-          ? Duration.zero
-          : kTabScrollDuration,
-      child: ListTileTheme(
-        data: ListTileThemeData(
-          subtitleTextStyle: TextStyle(
-            color: context.theme.colorScheme.onSurfaceVariant,
-          ),
+    final content = ListTileTheme(
+      data: ListTileThemeData(
+        subtitleTextStyle: TextStyle(
+          color: context.theme.colorScheme.onSurfaceVariant,
         ),
-        child: Scaffold(
-          appBar: topBar
-              ? null
-              : AppBar(
-                  leading: detailNavigationBackButton(context),
-                  title: title,
-                  bottom: tabBar,
-                ),
-          body: topBar
-              ? Column(
-                  children: [
-                    tabBar,
-                    const Expanded(
-                      child: TouchTabPager(
-                        children: [
-                          _ServerDownloadsTab(),
-                          _OnDeviceDownloadsTab(),
-                        ],
-                      ),
-                    ),
-                  ],
-                )
-              : const TouchTabPager(
-                  children: [_ServerDownloadsTab(), _OnDeviceDownloadsTab()],
-                ),
-        ),
+      ),
+      child: Scaffold(
+        appBar: topBar
+            ? null
+            : detailNavigationAppBar(
+                context,
+                title: title,
+                actions: [downloadSettingsHelpButton(context, server: true)],
+              ),
+        body: const _ServerDownloadsPage(),
       ),
     );
     return titleTopBarSlot(
@@ -92,8 +96,8 @@ class DownloadsSettingsScreen extends StatelessWidget {
   }
 }
 
-class _ServerDownloadsTab extends ConsumerWidget {
-  const _ServerDownloadsTab();
+class _ServerDownloadsPage extends ConsumerWidget {
+  const _ServerDownloadsPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -147,9 +151,82 @@ class _ServerDownloadsTab extends ConsumerWidget {
               child: ListView(
                 padding: settingsPagePadding(context),
                 children: [
+                  SettingsGroupCard(
+                    children: [
+                      SettingsHighlightTarget(
+                        id: 'serverConcurrentDownloads',
+                        child: SettingsGroupRow(
+                          icon: FluentIcons.flash_24_regular,
+                          title: localText(
+                            context,
+                            'Concurrent downloads',
+                            'Unduhan bersamaan',
+                          ),
+                          subtitle: canManage
+                              ? '${data?.maxSourcesInParallel ?? 1}'
+                              : context.l10n.manageSettingsPermissionRequired,
+                          trailing: canManage
+                              ? const Icon(FluentIcons.chevron_right_24_regular)
+                              : null,
+                          onTap: canManage
+                              ? () => chooseServerDownloadConcurrency(
+                                  context,
+                                  ref,
+                                )
+                              : () {},
+                        ),
+                      ),
+                      SettingsHighlightTarget(
+                        id: 'serverBackgroundDownloads',
+                        child: SettingsGroupRow(
+                          icon: FluentIcons.arrow_sync_24_regular,
+                          title: localText(
+                            context,
+                            'Background Download',
+                            'Unduh di Latar Belakang',
+                          ),
+                          subtitle: localText(
+                            context,
+                            'Always on',
+                            'Selalu aktif',
+                          ),
+                          trailing: Icon(
+                            FluentIcons.checkmark_circle_24_filled,
+                            color: context.theme.colorScheme.primary,
+                          ),
+                          onTap: () =>
+                              showDownloadSettingsHelp(context, server: true),
+                        ),
+                      ),
+                      SettingsHighlightTarget(
+                        id: 'serverDeleteAfterReading',
+                        child: SettingsGroupRow(
+                          icon: FluentIcons.delete_24_regular,
+                          title: localText(
+                            context,
+                            'Delete download after reading',
+                            'Hapus unduhan setelah dibaca',
+                          ),
+                          trailing: CompactSwitch(
+                            value: serverDelete.deleteWhileReading != 0,
+                            onChanged: (value) => AppUtils.guard(
+                              () => serverDeleteController
+                                  .setDeleteWhileReading(value ? 1 : 0),
+                              ref.read(toastProvider),
+                            ),
+                          ),
+                          onTap: () => AppUtils.guard(
+                            () => serverDeleteController.setDeleteWhileReading(
+                              serverDelete.deleteWhileReading != 0 ? 0 : 1,
+                            ),
+                            ref.read(toastProvider),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   SettingsGroupHeading(
-                    label: context.l10n.general,
-                    first: true,
+                    label: localText(context, 'Server', 'Server'),
                   ),
                   SettingsGroupCard(
                     children: [
@@ -354,25 +431,6 @@ class _ServerDownloadsTab extends ConsumerWidget {
           ),
         );
       }),
-    );
-  }
-}
-
-class _OnDeviceDownloadsTab extends ConsumerWidget {
-  const _OnDeviceDownloadsTab();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SettingsHighlightScope(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: settingsPageConstraints(context),
-          child: ListView(
-            padding: settingsPagePadding(context),
-            children: buildOnDeviceStorageTiles(context, ref),
-          ),
-        ),
-      ),
     );
   }
 }

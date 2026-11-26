@@ -49,8 +49,8 @@ class RecommendsBrowseScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
+          : detailNavigationAppBar(
+              context,
               title: barTitle,
             ),
       body: recs.when(

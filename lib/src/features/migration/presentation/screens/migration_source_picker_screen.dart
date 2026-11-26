@@ -43,8 +43,8 @@ class MigrationSourcePickerScreen extends StatelessWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
+          : detailNavigationAppBar(
+              context,
               title: title,
             ),
       body: const MigrationSourcePickerBody(),

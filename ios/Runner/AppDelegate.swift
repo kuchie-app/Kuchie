@@ -49,6 +49,50 @@ import UIKit
         name: "m_extension_server", binaryMessenger: registrar.messenger())
       channel.setMethodCallHandler(handleMihonRuntime)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BackgroundDownloads") {
+      let channel = FlutterMethodChannel(
+        name: "kuchie/background_downloads", binaryMessenger: registrar.messenger())
+      backgroundDownloadsChannel = channel
+      channel.setMethodCallHandler(handleBackgroundDownloads)
+    }
+  }
+
+  private var backgroundDownloadsChannel: FlutterMethodChannel?
+  private var backgroundDownloadTask: UIBackgroundTaskIdentifier = .invalid
+
+  /// Asks iOS for the extra time it grants after Kuchie leaves the screen, so
+  /// a running download can continue. When iOS takes the time back, Dart
+  /// pauses the queue before the task ends.
+  private func handleBackgroundDownloads(
+    _ call: FlutterMethodCall, result: @escaping FlutterResult
+  ) {
+    switch call.method {
+    case "begin":
+      if backgroundDownloadTask == .invalid {
+        backgroundDownloadTask = UIApplication.shared.beginBackgroundTask(
+          withName: "Kuchie downloads"
+        ) { [weak self] in
+          guard let self else { return }
+          self.backgroundDownloadsChannel?.invokeMethod("expired", arguments: nil)
+          // Dart pauses synchronously enough; give it a moment, then release.
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            self.endBackgroundDownloadTask()
+          }
+        }
+      }
+      result(backgroundDownloadTask != .invalid)
+    case "end":
+      endBackgroundDownloadTask()
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func endBackgroundDownloadTask() {
+    guard backgroundDownloadTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(backgroundDownloadTask)
+    backgroundDownloadTask = .invalid
   }
 
   #if targetEnvironment(simulator) && DEBUG

@@ -55,7 +55,7 @@ class HotkeysSettingsScreen extends StatelessWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(leading: detailNavigationBackButton(context), title: title),
+          : detailNavigationAppBar(context, title: title),
       body: WebSelectionArea(
         child: Center(
           child: ConstrainedBox(

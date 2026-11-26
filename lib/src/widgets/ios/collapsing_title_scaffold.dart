@@ -159,59 +159,62 @@ class _CollapsingTitleScaffoldState extends State<CollapsingTitleScaffold> {
                 0.0,
                 1.0,
               );
-          return AppBar(
-            leading: detailNavigationBackButton(context),
-            centerTitle: true,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            surfaceTintColor: Colors.transparent,
-            backgroundColor: glass
-                ? Colors.transparent
-                : Color.lerp(surface.withValues(alpha: 0), surface, covered),
-            flexibleSpace: glass
-                ? IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          // Light scrim only, for the status bar and title;
-                          // the covers stay visible behind the bar.
-                          colors: [
-                            OnImage.shadow.withValues(alpha: .35 * covered),
-                            OnImage.shadow.withValues(alpha: 0),
-                          ],
+          return detailNavigationBar(
+            context,
+            (leading) => AppBar(
+              leading: leading,
+              centerTitle: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              backgroundColor: glass
+                  ? Colors.transparent
+                  : Color.lerp(surface.withValues(alpha: 0), surface, covered),
+              flexibleSpace: glass
+                  ? IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            // Light scrim only, for the status bar and title;
+                            // the covers stay visible behind the bar.
+                            colors: [
+                              OnImage.shadow.withValues(alpha: .35 * covered),
+                              OnImage.shadow.withValues(alpha: 0),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                : null,
-            title: Opacity(
-              opacity: titleOpacity,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (widget.subtitle case final subtitle?)
+                    )
+                  : null,
+              title: Opacity(
+                opacity: titleOpacity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      subtitle,
+                      widget.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                ],
+                    if (widget.subtitle case final subtitle?)
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
               ),
+              actions: widget.actions,
             ),
-            actions: widget.actions,
           );
         },
       ),

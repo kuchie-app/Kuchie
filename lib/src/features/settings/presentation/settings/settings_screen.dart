@@ -36,8 +36,8 @@ class SettingsScreen extends ConsumerWidget {
     final scaffold = Scaffold(
       appBar: topBar
           ? null
-          : AppBar(
-              leading: detailNavigationBackButton(context),
+          : detailNavigationAppBar(
+              context,
               title: title,
               bottom: persistentBox
                   ? const PhoneSearchBoxBottom(origin: PhoneSearchOrigin.plain)

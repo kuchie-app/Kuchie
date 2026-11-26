@@ -10,72 +10,97 @@ import '../ios/apple_glass_capability.dart';
 import '../ios/apple_glass_toolbar.dart';
 import 'big_screen_navigation_bar.dart';
 
+/// A detail page's plain app bar with its back button.
+///
+/// Use this, or [detailNavigationBar] for a customised [AppBar], rather than
+/// `AppBar(leading: detailNavigationBackButton(...))`.
 PreferredSizeWidget detailNavigationAppBar(
   BuildContext context, {
   required Widget title,
   List<Widget>? actions,
+  PreferredSizeWidget? bottom,
 }) {
-  final back = detailNavigationBackButton(context);
-  if (back == null || !supportsAppleGlass(context)) {
-    return AppBar(leading: back, title: title, actions: actions);
-  }
-
-  final theme = AppBarTheme.of(context);
-  final toolbarHeight = theme.toolbarHeight ?? kToolbarHeight;
-  final leadingWidth = theme.leadingWidth ?? kToolbarHeight;
+  final toolbarHeight = AppBarTheme.of(context).toolbarHeight ?? kToolbarHeight;
   return PreferredSize(
-    preferredSize: Size.fromHeight(toolbarHeight),
-    child: Stack(
-      children: [
-        AppBar(
-          leading: const SizedBox.shrink(),
-          leadingWidth: leadingWidth,
-          toolbarHeight: toolbarHeight,
-          title: title,
-          actions: actions,
-        ),
-        // Keep the title in Flutter's base layer, before the native glass view.
-        Positioned.fill(
-          child: SafeArea(
-            bottom: false,
-            child: Align(
-              alignment: AlignmentDirectional.topStart,
-              child: SizedBox(
-                width: leadingWidth,
-                height: toolbarHeight,
-                child: back,
-              ),
-            ),
-          ),
-        ),
-      ],
+    preferredSize: Size.fromHeight(
+      toolbarHeight + (bottom?.preferredSize.height ?? 0),
+    ),
+    child: detailNavigationBar(
+      context,
+      (leading) => AppBar(
+        leading: leading,
+        title: title,
+        actions: actions,
+        bottom: bottom,
+      ),
     ),
   );
 }
 
+/// Builds [buildBar] with the page's back button as its leading widget.
+///
+/// The native glass back button hides any Flutter content painted after it,
+/// such as the title, actions and a bottom tab bar. On glass the bar is
+/// built with an empty leading slot and the button is laid over it last.
+/// Pass [back] for a button that does something other than pop the route,
+/// such as one from [detailBackButton].
+Widget detailNavigationBar(
+  BuildContext context,
+  AppBar Function(Widget? leading) buildBar, {
+  Widget? back,
+}) {
+  back ??= detailNavigationBackButton(context);
+  if (back == null || !supportsAppleGlass(context)) return buildBar(back);
+
+  final bar = buildBar(const SizedBox.shrink());
+  final theme = AppBarTheme.of(context);
+  return Stack(
+    children: [
+      bar,
+      Positioned.fill(
+        child: SafeArea(
+          bottom: false,
+          child: Align(
+            alignment: AlignmentDirectional.topStart,
+            child: SizedBox(
+              width: bar.leadingWidth ?? theme.leadingWidth ?? kToolbarHeight,
+              height:
+                  bar.toolbarHeight ?? theme.toolbarHeight ?? kToolbarHeight,
+              child: back,
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// The glass back button detail pages use, running [onPressed].
+Widget detailBackButton(VoidCallback onPressed) => Builder(
+  builder: (context) {
+    final button = AppleGlassToolbarButton(
+      id: 'back',
+      symbol: 'chevron.backward',
+      label: MaterialLocalizations.of(context).backButtonTooltip,
+      onPressed: onPressed,
+      fallback: BackButton(onPressed: onPressed),
+    );
+    if (!supportsAppleGlass(context)) return button;
+    // Mirrors the trailing actions' margin so both edges line up.
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: kAppleGlassBarInset),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        widthFactor: 1,
+        child: button,
+      ),
+    );
+  },
+);
+
 /// Shell ModalRoute.canPop misses outer pages; consult GoRouter for back navigation.
 Widget? detailNavigationBackButton(BuildContext context) {
-  Widget back(VoidCallback onPressed) => Builder(
-    builder: (context) {
-      final button = AppleGlassToolbarButton(
-        id: 'back',
-        symbol: 'chevron.backward',
-        label: MaterialLocalizations.of(context).backButtonTooltip,
-        onPressed: onPressed,
-        fallback: BackButton(onPressed: onPressed),
-      );
-      if (!supportsAppleGlass(context)) return button;
-      // Mirrors the trailing actions' margin so both edges line up.
-      return Padding(
-        padding: const EdgeInsetsDirectional.only(start: kAppleGlassBarInset),
-        child: Align(
-          alignment: AlignmentDirectional.centerStart,
-          widthFactor: 1,
-          child: button,
-        ),
-      );
-    },
-  );
+  const back = detailBackButton;
   final router = GoRouter.maybeOf(context);
   if (router == null) {
     final navigator = Navigator.of(context);

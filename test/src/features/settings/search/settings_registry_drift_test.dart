@@ -32,9 +32,10 @@ import 'package:kuchie/src/features/browse_center/data/extension_store_repositor
 import 'package:kuchie/src/features/library/data/default_category.dart';
 import 'package:kuchie/src/features/library/domain/category/category_model.dart';
 import 'package:kuchie/src/features/library/presentation/category/controller/edit_category_controller.dart';
+import 'package:kuchie/src/features/manga_book/data/downloads/server_downloaded_titles.dart';
+import 'package:kuchie/src/features/manga_book/domain/downloads/downloads_model.dart';
+import 'package:kuchie/src/features/manga_book/presentation/downloads/controller/downloads_controller.dart';
 import 'package:kuchie/src/features/notifications/controller/notification_settings_providers.dart';
-import 'package:kuchie/src/features/offline/data/offline_download_providers.dart';
-import 'package:kuchie/src/features/offline/data/offline_repository.dart';
 import 'package:kuchie/src/features/settings/controller/server_controller.dart';
 import 'package:kuchie/src/features/settings/data/backup/backup_settings_repository.dart';
 import 'package:kuchie/src/features/settings/data/backup/graphql/__generated__/query.graphql.dart';
@@ -457,23 +458,6 @@ void main() {
             .toList(),
       );
 
-      // The background-catchup rows only render on native Android
-      // (isAndroidNative), so they can have registry entries without mounted
-      // targets here. Everything else must match in both directions.
-      final androidOnlyDownloadsIds = {
-        'backgroundCatchup',
-        'backgroundCheckInterval',
-        'backgroundFetchFiles',
-      };
-
-      List<SettingsSearchEntry> testableDownloadsEntries() =>
-          downloadsSettingsSearchEntries
-              .where(
-                (e) =>
-                    e.tabIndex == 1 && !androidOnlyDownloadsIds.contains(e.id),
-              )
-              .toList();
-
       Future<ProviderContainer> downloadsContainer() async {
         final container = await _container(
           extra: [
@@ -504,26 +488,19 @@ void main() {
                 downloadConversions: const [],
               ),
             ),
-            offlineEnabledProvider.overrideWithValue(true),
-            offlineUsageBytesProvider.overrideWith((ref) async => 0),
+            // The Downloading and Downloaded lists read the live queue and
+            // the server; the registry only covers the settings below them.
+            downloadsMapProvider.overrideWith(_EmptyDownloadsMap.new),
+            serverDownloadedTitlesProvider.overrideWith((ref) async => []),
           ],
         );
-        // Mounts the keep-window switch under the on-device delete section.
-        container.read(localDeleteWhileReadingProvider.notifier).update(2);
         return container;
       }
 
-      // TabBarView only mounts the current tab, so each tab is opened once
-      // to prove its ids exist on the tab its entries open.
       await pumpAndCheck(
         await downloadsContainer(),
-        const DownloadsSettingsScreen(initialTab: 0),
-        downloadsSettingsSearchEntries.where((e) => e.tabIndex == 0).toList(),
-      );
-      await pumpAndCheck(
-        await downloadsContainer(),
-        const DownloadsSettingsScreen(initialTab: 1),
-        testableDownloadsEntries(),
+        const DownloadsSettingsScreen(),
+        downloadsSettingsSearchEntries,
       );
 
       // The Server hub itself is a link list with no highlight targets, so
@@ -708,4 +685,9 @@ void main() {
       );
     });
   });
+}
+
+class _EmptyDownloadsMap extends DownloadsMap {
+  @override
+  Map<int, DownloadDto> build() => const {};
 }
