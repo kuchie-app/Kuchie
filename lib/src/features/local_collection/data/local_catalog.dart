@@ -439,6 +439,17 @@ class LocalCatalog {
     return db.transaction(() => action(db));
   });
 
+  /// Records that the reader settings of [seriesId] changed. They live in
+  /// SharedPreferences, so `LocalSeriesReaderMeta` calls this after a write.
+  Future<void> recordReaderMetaChange(String seriesId) =>
+      _metadata.run(() async {
+        if (!_journals()) return;
+        final db = await _database;
+        await db.transaction(
+          () => _journal(db, SyncRecordKind.readerMeta, [seriesId]),
+        );
+      });
+
   bool _journals({bool progress = false}) =>
       journalEnabled &&
       Zone.current[_applyingRemote] != true &&
