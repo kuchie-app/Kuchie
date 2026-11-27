@@ -1,0 +1,320 @@
+{
+  "mangaId": 1,
+  "chapterId": 1,
+  "otherChapterId": 5,
+  "steps": [
+    {
+      "step": "start",
+      "sentAtMs": 1795716438382,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "0",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": false,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "0"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "lastPageRead=3",
+      "sentAtMs": 1795716439707,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716439",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": false,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716439"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "lastPageRead=3 again (no change)",
+      "sentAtMs": 1795716440977,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716440",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": false,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716440"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "lastPageRead=1 (backwards)",
+      "sentAtMs": 1795716442238,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716442",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": false,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716442"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "isBookmarked=true",
+      "sentAtMs": 1795716443488,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716442",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716442"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "isRead=true",
+      "sentAtMs": 1795716444744,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716442",
+        "lastPageRead": 0,
+        "isRead": true,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716442"
+        },
+        "latestReadChapter": {
+          "id": 1
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "isRead=false",
+      "sentAtMs": 1795716446011,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716442",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716442"
+        },
+        "latestReadChapter": null
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "isRead=true on another chapter",
+      "sentAtMs": 1795716447262,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716442",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716442"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "lastPageRead=0",
+      "sentAtMs": 1795716448516,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716448",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "0",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716448"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "inLibrary=true",
+      "sentAtMs": 1795716449770,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716448",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": true,
+        "inLibraryAt": "1795716449",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716448"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "inLibrary=true again",
+      "sentAtMs": 1795716451026,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716448",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": true,
+        "inLibraryAt": "1795716451",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716448"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "inLibrary=false",
+      "sentAtMs": 1795716452291,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716448",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": false,
+        "inLibraryAt": "1795716451",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716448"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    },
+    {
+      "step": "inLibrary=true after removal",
+      "sentAtMs": 1795716453547,
+      "chapter": {
+        "id": 1,
+        "lastReadAt": "1795716448",
+        "lastPageRead": 0,
+        "isRead": false,
+        "isBookmarked": true,
+        "pageCount": -1
+      },
+      "manga": {
+        "id": 1,
+        "inLibrary": true,
+        "inLibraryAt": "1795716453",
+        "lastReadChapter": {
+          "id": 1,
+          "lastReadAt": "1795716448"
+        },
+        "latestReadChapter": {
+          "id": 5
+        }
+      },
+      "chaptersWithLastReadAtSinceStep": 0
+    }
+  ]
+}

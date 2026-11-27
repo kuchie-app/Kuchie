@@ -1,0 +1,214 @@
+{
+  "source": "2131019126180322627",
+  "apk": "tachiyomi-en.weebcentral-v1.6.27.apk",
+  "series": [
+    {
+      "title": "One Piece",
+      "kuchie": "/series/01J76XY7E9FNDZ1DBBM6PBJPFK/One-Piece",
+      "kuchieId": "e67f2e10de91bd512c110560a5a443bd9c049e6e5b37e2a5e6d1d979372d7864",
+      "match": true,
+      "chapters": 1199,
+      "serverChapters": 1199,
+      "chaptersMatched": 1199,
+      "chapterMisses": []
+    },
+    {
+      "title": "Blue Lock",
+      "kuchie": "/series/01J76XYD7E91K8QP6CY0Y53900/Blue-Lock",
+      "kuchieId": "bdc536b9be47eb32000a13426afaea57e7abb13f70ab2d9c4cb8c4b9d87847de",
+      "match": true,
+      "chapters": 371,
+      "serverChapters": 371,
+      "chaptersMatched": 371,
+      "chapterMisses": []
+    },
+    {
+      "title": "Overgeared",
+      "kuchie": "/series/01J76XYDMR2777KEM5BKTBBK83/Overgeared",
+      "kuchieId": "bd0da43d5a7dda7e8b624aadd9f56e671d32413f42c23d3aba667bd16dc3d0d1",
+      "match": true,
+      "chapters": 350,
+      "serverChapters": 350,
+      "chaptersMatched": 350,
+      "chapterMisses": []
+    },
+    {
+      "title": "Black Clover",
+      "kuchie": "/series/01J76XYB8HNWARAQ67A4GAWG5Y/Black-Clover",
+      "kuchieId": "762cc5678b98ca0be1bd8d5078bb423aa4fa9b4a4d1d103f9fd3a2c545b3a3ec",
+      "match": true,
+      "chapters": 393,
+      "serverChapters": 393,
+      "chaptersMatched": 393,
+      "chapterMisses": []
+    },
+    {
+      "title": "One Piece (Color)",
+      "kuchie": "/series/01J76XYAQSGEJPXCSCVPQ3MHZM/One-Piece-Digital-Colored-Comics",
+      "kuchieId": "145ca53fdced52b136d8f151d774003d33a24a70929be11814a424549a665dbf",
+      "match": true,
+      "chapters": 1076,
+      "serverChapters": 1076,
+      "chaptersMatched": 1076,
+      "chapterMisses": []
+    },
+    {
+      "title": "Dandadan",
+      "kuchie": "/series/01J76XYEMWA55C7XTZHP1HNARM/Dandadan",
+      "kuchieId": "63303abecbf682d3bb2463cc81effcf3ee23cd7068c86ae99c25b759e9fdda73",
+      "match": true,
+      "chapters": 256,
+      "serverChapters": 256,
+      "chaptersMatched": 256,
+      "chapterMisses": []
+    },
+    {
+      "title": "Gachiakuta",
+      "kuchie": "/series/01J76XYFD97DRQQKK75FZB7PQH/Gachiakuta",
+      "kuchieId": "d251c0bb810587e530ca7d82b3f911e05d15e011dde27954907ae9f7d5929091",
+      "match": true,
+      "chapters": 179,
+      "serverChapters": 179,
+      "chaptersMatched": 179,
+      "chapterMisses": []
+    },
+    {
+      "title": "Kingdom",
+      "kuchie": "/series/01J76XY7VSG3R5ANYPDWTXDVP6/Kingdom",
+      "kuchieId": "2190bdecf3a5d604dff4ee26eabc8ddf6a2d408f4c311641026d666436d1bdf6",
+      "match": true,
+      "chapters": 898,
+      "serverChapters": 898,
+      "chaptersMatched": 898,
+      "chapterMisses": []
+    },
+    {
+      "title": "Ao Ashi",
+      "kuchie": "/series/01J76XYCRSG391MCSWQARXCZZ2/Ao-Ashi",
+      "kuchieId": "0e17533be3a587f270edfa3d5731e9bf72b5ac897c37b9651561f8b80ec23b6f",
+      "match": true,
+      "chapters": 411,
+      "serverChapters": 411,
+      "chaptersMatched": 411,
+      "chapterMisses": []
+    },
+    {
+      "title": "Even the Student Council Has Its Holes",
+      "kuchie": "/series/01J76XYHGCQ2A1VG5KYTNHEHKF/Seitokai-ni-mo-Ana-wa-Aru",
+      "kuchieId": "4df9f26fce3497ebb61485ece42bb090766d4820a2d1f2ae60206cce82e227f0",
+      "match": true,
+      "chapters": 191,
+      "serverChapters": 191,
+      "chaptersMatched": 191,
+      "chapterMisses": []
+    },
+    {
+      "title": "Kagurabachi",
+      "kuchie": "/series/01J76XYGGM22WZP7T4TKA4ZFAF/Kagurabachi",
+      "kuchieId": "dc08932c6e14fa63879a4d958beccf37954cc289d5e7c902c7e9ee056cfae83e",
+      "match": true,
+      "chapters": 142,
+      "serverChapters": 142,
+      "chaptersMatched": 142,
+      "chapterMisses": []
+    },
+    {
+      "title": "Berserk",
+      "kuchie": "/series/01J76XY7EF75DJNQCV04HTPDZK/Berserk",
+      "kuchieId": "95504cf222ac4f6d29cce30dbbf393938c41fc3262cb55d250360e6b94e36ca8",
+      "match": true,
+      "chapters": 403,
+      "serverChapters": 403,
+      "chaptersMatched": 403,
+      "chapterMisses": []
+    },
+    {
+      "title": "One-Punch Man",
+      "kuchie": "/series/01J76XY7KT7J224EBK6J816Y1Q/Onepunch-Man",
+      "kuchieId": "9f9f673d18178ba006e8ccfc36358b759b9b05386662ce5c4ae2f25250559fd9",
+      "match": true,
+      "chapters": 270,
+      "serverChapters": 270,
+      "chaptersMatched": 270,
+      "chapterMisses": []
+    },
+    {
+      "title": "Jujutsu Kaisen",
+      "kuchie": "/series/01J76XYCERXE60T7FKXVCCAQ0H/Jujutsu-Kaisen",
+      "kuchieId": "b5aa670e45e6bcbcda78633c7bdf1db54058f55cc981dc4adc71168bed82ddfd",
+      "match": true,
+      "chapters": 272,
+      "serverChapters": 272,
+      "chaptersMatched": 272,
+      "chapterMisses": []
+    },
+    {
+      "title": "Chainsaw Man",
+      "kuchie": "/series/01J76XYCRVY3QGYAMRR3STW941/Chainsaw-Man",
+      "kuchieId": "6c3f8109b101e3ef14404dac198b20eaaf93b526f74b98b016fa224f70bb27f0",
+      "match": true,
+      "chapters": 232,
+      "serverChapters": 232,
+      "chaptersMatched": 232,
+      "chapterMisses": []
+    },
+    {
+      "title": "Sakamoto Days",
+      "kuchie": "/series/01J76XYE3130E1W5HKTJ7VD912/Sakamoto-Days",
+      "kuchieId": "497ce877b943df3c90c32ea09816a5f10584c415441b53295478bfb7361cc3e0",
+      "match": true,
+      "chapters": 284,
+      "serverChapters": 284,
+      "chaptersMatched": 284,
+      "chapterMisses": []
+    },
+    {
+      "title": "Shangri-La Frontier",
+      "kuchie": "/series/01J76XYDXH7KT6AABVG3JAT3ZP/Shangri-La-Frontier",
+      "kuchieId": "abc175d9dcf7fcc1b142787ad8246c68ec15d33aa3ef23ae9a83693384180c23",
+      "match": true,
+      "chapters": 288,
+      "serverChapters": 288,
+      "chaptersMatched": 288,
+      "chapterMisses": []
+    },
+    {
+      "title": "Bleach (Color)",
+      "kuchie": "/series/01J76XYEVQ0ZFHSDZBTNA55Y1F/Bleach-Color",
+      "kuchieId": "f6cc6010fa6bca91aaf103a34aaa3d0be5ba9495a09f3fdf30f1e0f96dbf3121",
+      "match": true,
+      "chapters": 698,
+      "serverChapters": 698,
+      "chaptersMatched": 698,
+      "chapterMisses": []
+    },
+    {
+      "title": "Naruto",
+      "kuchie": "/series/01J76XY7E827QQQT0ERKCGH4CD/Naruto",
+      "kuchieId": "1654f17cd0791dc76026c65960267201a25aa7d566a4b9d74b03a6432181fc4a",
+      "match": true,
+      "chapters": 701,
+      "serverChapters": 701,
+      "chaptersMatched": 701,
+      "chapterMisses": []
+    },
+    {
+      "title": "Naruto (Color)",
+      "kuchie": "/series/01J76XYBK4HFZMAWWKX52WN8PK/Naruto-Digital-Colored-Comics",
+      "kuchieId": "17d3c6e375ffc13ff2e9b85fb8b5671cbef963d3d74e16af5567e0aebd02c8a6",
+      "match": true,
+      "chapters": 700,
+      "serverChapters": 700,
+      "chaptersMatched": 700,
+      "chapterMisses": []
+    }
+  ],
+  "summary": {
+    "series": 20,
+    "seriesExact": 20,
+    "chapters": 9314,
+    "chaptersExact": 9314,
+    "seriesRate": 1.0,
+    "chapterRate": 1.0
+  }
+}

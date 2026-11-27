@@ -1,0 +1,38 @@
+{
+  "settings": {
+    "downloadsPath": "",
+    "downloadAsCbz": false
+  },
+  "full": {
+    "trail": [
+      {
+        "t": 0.0,
+        "state": "DOWNLOADING",
+        "tries": 0,
+        "progress": 0.22727273,
+        "downloader": "STARTED"
+      },
+      {
+        "t": 2.0,
+        "state": "NOT_IN_QUEUE",
+        "tries": null,
+        "progress": null,
+        "downloader": "STOPPED"
+      }
+    ],
+    "chapter": {
+      "id": 223,
+      "name": "Chapter 6",
+      "isDownloaded": true,
+      "pageCount": 7,
+      "sourceOrder": 6,
+      "manga": {
+        "id": 80,
+        "title": "One Piece"
+      }
+    },
+    "seconds": 2.0,
+    "filesOnDisk": 8,
+    "sourcePages": 22
+  }
+}

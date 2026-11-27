@@ -1,0 +1,55 @@
+{
+  "fullUnpaged": [
+    {
+      "seriesSeconds": 0.09,
+      "chaptersSeconds": 0.85,
+      "series": 554,
+      "chapters": 50533,
+      "seriesBytes": 88643,
+      "chaptersBytes": 8508317
+    },
+    {
+      "seriesSeconds": 0.02,
+      "chaptersSeconds": 0.64,
+      "series": 554,
+      "chapters": 50533,
+      "seriesBytes": 88643,
+      "chaptersBytes": 8508317
+    },
+    {
+      "seriesSeconds": 0.02,
+      "chaptersSeconds": 0.63,
+      "series": 554,
+      "chapters": 50533,
+      "seriesBytes": 88643,
+      "chaptersBytes": 8508317
+    }
+  ],
+  "fullChaptersGzip": [
+    308483,
+    "gzip"
+  ],
+  "fullPaged2000": {
+    "seconds": 5.53,
+    "pages": 26,
+    "bytes": 8510040
+  },
+  "fullPaged5000": {
+    "seconds": 2.79,
+    "pages": 11,
+    "bytes": 8509020
+  },
+  "fullPaged10000": {
+    "seconds": 1.67,
+    "pages": 6,
+    "bytes": 8508680
+  },
+  "incremental": {
+    "seconds": 0.54,
+    "fingerprintSeconds": 0.44,
+    "fingerprintBytes": 72274,
+    "changedSeries": 1,
+    "chaptersSinceCursor": 3,
+    "chaptersRefetched": 100
+  }
+}

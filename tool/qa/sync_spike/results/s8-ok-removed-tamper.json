@@ -1,0 +1,82 @@
+{
+  "settings": {
+    "downloadsPath": "",
+    "downloadAsCbz": false
+  },
+  "ok": {
+    "trail": [
+      {
+        "t": 0.0,
+        "state": "DOWNLOADING",
+        "tries": 0,
+        "progress": 0.4090909,
+        "downloader": "STARTED"
+      },
+      {
+        "t": 1.5,
+        "state": "NOT_IN_QUEUE",
+        "tries": null,
+        "progress": null,
+        "downloader": "STOPPED"
+      }
+    ],
+    "chapter": {
+      "id": 220,
+      "name": "Chapter 3",
+      "isDownloaded": true,
+      "pageCount": 22,
+      "sourceOrder": 3,
+      "manga": {
+        "id": 80,
+        "title": "One Piece"
+      }
+    },
+    "seconds": 1.5
+  },
+  "tamper": {
+    "filesOnDisk": 22,
+    "deleted": "001.jpg",
+    "afterDelete": {
+      "id": 220,
+      "name": "Chapter 3",
+      "isDownloaded": true,
+      "pageCount": 22,
+      "sourceOrder": 3,
+      "manga": {
+        "id": 80,
+        "title": "One Piece"
+      }
+    },
+    "page0": [
+      200,
+      190881
+    ],
+    "page1": [
+      200,
+      299165
+    ]
+  },
+  "removed": {
+    "trail": [
+      {
+        "t": 0.0,
+        "state": "ERROR",
+        "tries": 3,
+        "progress": 0.0,
+        "downloader": "STOPPED"
+      }
+    ],
+    "chapter": {
+      "id": 9711,
+      "name": "Chapter 2",
+      "isDownloaded": false,
+      "pageCount": -1,
+      "sourceOrder": 99,
+      "manga": {
+        "id": 225,
+        "title": "Spike seed 000"
+      }
+    },
+    "seconds": 0.0
+  }
+}

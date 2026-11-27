@@ -1,0 +1,33 @@
+{
+  "UI_LOGIN": {
+    "anonymous": "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.ser",
+    "bearer": "ok",
+    "claims": {
+      "aud": "suwayomi-server-api",
+      "exp": 1795716764,
+      "iat": null,
+      "sub": null
+    },
+    "refreshClaims": {
+      "aud": "suwayomi-server-api",
+      "exp": 1800900744
+    },
+    "wrongPassword": "Exception while fetching data (/login) : Incorrect username or password.\r\n\r\njava",
+    "bearerAfterExpiry": "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.ser",
+    "refreshed": "ok",
+    "refreshTokenReusable": true,
+    "refreshAsAccess": "HTTP 400: b'Cannot use refresh token to access'",
+    "basicWhileUiLogin": "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.ser"
+  },
+  "BASIC_AUTH": {
+    "anonymous": "HTTP 401: b'Unauthorized'",
+    "basic": "ok",
+    "wrong": "HTTP 401: b'Unauthorized'"
+  },
+  "SIMPLE_LOGIN": {
+    "anonymous": "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.ser",
+    "loginStatus": 303,
+    "cookie": "ok"
+  },
+  "restoredAnonymous": "ok"
+}

@@ -1,0 +1,724 @@
+{
+  "source": "2499283573021220255",
+  "apk": "tachiyomi-all.mangadex-v1.6.5.apk",
+  "series": [
+    {
+      "title": "The World's Strongest Fire Mage",
+      "kuchie": "/manga/a03552f1-89d3-47df-8292-844ebe5354fe",
+      "kuchieId": "cd5ae51c062e40b46f6ec4c7d0a96b587b0943f90eaec4abe6f7f1c7467064ef",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Dwarf Next Door",
+      "kuchie": "/manga/6794951f-5026-4390-ac08-332a72b8dbed",
+      "kuchieId": "d7b093561b2e05d050b354672442e77c82c6f292ffe501e19234ae1746280af4",
+      "match": true,
+      "chapters": 4,
+      "serverChapters": 4,
+      "chaptersMatched": 4,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Youth Begins on a Train Platform with a Top-Tier Gal from Another School.",
+      "kuchie": "/manga/de2bb316-0533-4f1a-b789-4776ef673dd4",
+      "kuchieId": "f950c4763973b4ae6ccbb62169a22f884af5a4d5ba658a105cd730e0f84d6c66",
+      "match": true,
+      "chapters": 6,
+      "serverChapters": 6,
+      "chaptersMatched": 6,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Two Just Don't Fit Into the World",
+      "kuchie": "/manga/0832d45e-847b-494c-a6ee-2523a5baec5d",
+      "kuchieId": "84c0ac78274d53e87c2acf1a3e5b4488648d0b69d13f72921d723c73541bcd59",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "Fun with Music",
+      "kuchie": "/manga/7da86238-28b9-43b1-b727-e31c80960447",
+      "kuchieId": "850d52119b464e66a6a2274697648c36cfcc418d4dcb575ca6bbcfb9064a2494",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Discarded Former Knight Commander Is Taken in by a Single Mother",
+      "kuchie": "/manga/79aba376-0181-4969-936a-aad19f29da88",
+      "kuchieId": "7c5f167b4b1e6ecb32d8bc943e4627e1d98c5b548a4fb1d8ff0909f1854f517f",
+      "match": true,
+      "chapters": 8,
+      "serverChapters": 8,
+      "chaptersMatched": 8,
+      "chapterMisses": []
+    },
+    {
+      "title": "I’ve Ended up Working as a Male Bath Attendant at a Hot Spring in a Chastity-Reversed World",
+      "kuchie": "/manga/327fd7d1-47d6-4df4-979d-20bfb8899cf2",
+      "kuchieId": "21a7c50622fd740af48c19f985694edb7bbc29cffcaf141835a66a814320bf4b",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "You Can't Hide Love With Nail Polish",
+      "kuchie": "/manga/fa5065e5-7385-48b1-9379-6980a0fad60e",
+      "kuchieId": "37ab07991c2067d15e342c47c0ec6d09a40b8e96a4a8eeaae3c2f61cbbe552f3",
+      "match": true,
+      "chapters": 7,
+      "serverChapters": 7,
+      "chaptersMatched": 7,
+      "chapterMisses": []
+    },
+    {
+      "title": "You’re Not Cut Out to Be a Saint!",
+      "kuchie": "/manga/6304233e-98d3-4ba5-8c1b-9c328a82a178",
+      "kuchieId": "8af8b12cf7635d725be571cabd1cd9bdaaa7b23274630d0d144aecfb8153aacf",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "Listen to My Lady's Story: Conquest Record of the Villainess Isabella",
+      "kuchie": "/manga/7d5c90c9-d63d-4d11-b138-037fadfe8978",
+      "kuchieId": "852328b3bc81ae475b7619cab40e51cf80c0bc77492015cf72a42b5d8e51069c",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "The E-Rank Adventurer Mocked as the Eternal Herb Picker Is Actually the Strongest Plant Mage",
+      "kuchie": "/manga/660b033c-f568-4573-ad84-3e5b37524da9",
+      "kuchieId": "77a7bbc4e1a54c0c753d6f8750fd1185785ee80abcba633215059767a289cbba",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "Fall in Love with Me, Not Your Oshi, Oshino-Kun!",
+      "kuchie": "/manga/e81ba13c-acf6-4739-8157-8b5e491daeeb",
+      "kuchieId": "3bbf614b9ee04b9e5b7de3c89baec2c110b8cca2e8783afea659ad0270267f70",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "Even the Demon Teacher Has a Dream!",
+      "kuchie": "/manga/be29ba1f-d402-43fb-b7d6-50435619c2c8",
+      "kuchieId": "50d7fe8cdd850b857f3dc6feda7c7a83f6fbe7235527c936770aefd519aed497",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "After I Saved the Cutest Underclassman at School, She Started Coming Over Like My Wife and Pushing for a Relationship",
+      "kuchie": "/manga/48808725-f75d-4c46-b34c-2111e6b874b7",
+      "kuchieId": "c6bde40b532b0610354c247beb735b04ff1a818eaed9464cbcad3ee16b26ca97",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Adorable Tomboy",
+      "kuchie": "/manga/13728f4a-4306-403a-9b4a-339a70430ce8",
+      "kuchieId": "7ac9310e4c9a22315ff471f4d37d943edbf994394152ae45eaae1bd6f18178d2",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Downer Boss Wants to Drink Outdoors...",
+      "kuchie": "/manga/37fcfa2e-3827-4036-9cea-99a357e96600",
+      "kuchieId": "0ab9a7a64e544696241d67672ceb55f43a74cad906e5dbef33782b21b60a21cf",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Please Follow Salamander!",
+      "kuchie": "/manga/e7bed782-c002-4299-afd9-a2900534b487",
+      "kuchieId": "471c35bad48a889a261a30cea313573a9c78c396229edbac3b4ee688037859af",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "Reincarnated as the Weakest Noble Son, I Master Dark Magic",
+      "kuchie": "/manga/6d17307b-2118-4b10-8718-2621bce7563f",
+      "kuchieId": "a7f281b3a500c46a5da9470dea5729099bd19f5994dbb1b2b8ae93337dd0771e",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "Evershifting Girlfriends",
+      "kuchie": "/manga/7a064df2-b522-4152-829d-d5041935c97b",
+      "kuchieId": "aa0f3554fc44636d83eadeb253592c4a2be4b803a62354594795bbd9bb95e83c",
+      "match": true,
+      "chapters": 0,
+      "serverChapters": 0,
+      "chaptersMatched": 0,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Summoning Magic Is Weird: Banished as Too Weak, I Summon Modern Weapons and Dominate with Leveling Cheats",
+      "kuchie": "/manga/915f3b5d-57bf-464c-b1fe-24b74d50bdbd",
+      "kuchieId": "fbe31748642cd88d31786728fa19631f52f4fdd0a530435b8a1b1ab4b374933e",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "I Was Reincarnated as a Lazy Villain Prince, and I’m Going to Build an Evil Kingdom of Boobs",
+      "kuchie": "/manga/5d0d1d07-54da-4e98-a262-0bb869926479",
+      "kuchieId": "c5c917a3364b8e2f129cf1955e5e266ef321fa60f2c83e394b181d626908c1f8",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Peerless Job-Hopper: Because I Changed Jobs Too Many Times I Failed the S-Rank Guild Application Screening, So I'll Rise to the Top in the Dark Guild",
+      "kuchie": "/manga/a21a80e3-6101-4c27-9597-25ec38945eef",
+      "kuchieId": "ed5969c4a255c0e5c12f04ae213bb81e2641e98cba0e8c38529afbcef8226d0d",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "I'm the Fifth Son of a Count, but Married in and Became a Duke: Using Past-Life Knowledge to Rebuild the Domain and Be Happy with My Wife and Retainers",
+      "kuchie": "/manga/8172c21a-ec76-4088-bf88-b7ee0dd33702",
+      "kuchieId": "fd219417d4bb3efb88ea06d03b0f169be11a933d37f881b5c375b42198609e23",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Hebizuka-san Wants to Eat Her Senpai",
+      "kuchie": "/manga/a3d8d4b6-5365-4994-b0b2-e76ffaded8cf",
+      "kuchieId": "f9b0adcf644ef064de574da22970309d01177ea6e9b039e42e0ad5e9b7070b35",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "I want to kill my wife in a dungeon",
+      "kuchie": "/manga/89e6b134-786f-468f-af3c-7e6961363950",
+      "kuchieId": "b44ca362ab3518a7f5e05e438fdc6534785e4e1f3dbc7fbf5748904ebd1b6fe8",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Strongest Dwarf Martial Artist is Reincarnated as a Young Elf Girl, Becoming the Strongest in Appearance as Well!",
+      "kuchie": "/manga/6462d8d1-9443-480e-905d-27ae30344c9a",
+      "kuchieId": "fa0fc6418610618a69695c14a982d0edd10ec95dc3afba097f84e2f81beda6f4",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Demon Mama Unrivaled: Becoming the Strongest by Being Spoiled Rotten by the Demon Lord Mom! Dominating with the Weakest Skill [Spoiled Child] to Take Revenge on the Tyrannical Hero",
+      "kuchie": "/manga/0effb07e-4e10-4d8d-9303-cc071c5c1bac",
+      "kuchieId": "6c39822f9d84b45744953a2ac662ffb8666af41caee99cd051cd87c6a5757100",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Wholesome Magical Academy Life",
+      "kuchie": "/manga/e1944f13-5b14-4354-b899-ca9d98cce173",
+      "kuchieId": "063bc0c15963a951d02073b5e8a2acce14fde6829c7f326a2b6696a05f46e463",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "School Girlfriend",
+      "kuchie": "/manga/a85e06a6-aca6-4774-9de7-b176ff3c3b02",
+      "kuchieId": "d1c7c0b5e3c23cb5de54dd7688fba3a4f866a6ec9f080c6a987b954098ffcd47",
+      "match": true,
+      "chapters": 5,
+      "serverChapters": 5,
+      "chaptersMatched": 5,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Country Bumpkin Old Man Unknowingly Dominates: While Working as a Gatekeeper All Alone, He Became the Strongest Before He Knew It",
+      "kuchie": "/manga/01c0f143-b810-4f79-a501-688322eb0b42",
+      "kuchieId": "626d44f5118d14fa429ccad14d119a139db528395ecfccddaff20943356bbb98",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Clumsy Shapeshifter",
+      "kuchie": "/manga/32e20563-28f6-4cbc-a664-82db824aecb5",
+      "kuchieId": "753f63d4fc677184594c12b748a0fcc4030991a29b69f75e76299fb8c4e0b596",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Reincarnator Who Was Repairing Junk in the Lower Slums [Reproduces] All Magic and Becomes the World's Greatest Magician: Creator of Original Magic",
+      "kuchie": "/manga/8f0bc838-16c3-4969-9253-dd43dd2e0b8f",
+      "kuchieId": "748491a91ce49765db011da7563637e1e48f54a31e83cdfaf5836c44e5b9968e",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "Bartlet Fairy Basslet",
+      "kuchie": "/manga/37f1ddff-38a5-4e42-ba9a-ce967702dfb6",
+      "kuchieId": "264509ac04441de1fa4a1d22704fecde5e146083bf34802d4d35bddc46f3149f",
+      "match": true,
+      "chapters": 0,
+      "serverChapters": 0,
+      "chaptersMatched": 0,
+      "chapterMisses": []
+    },
+    {
+      "title": "Reincarnated as a Doomed Villain, I'll Crush the Original Plot with My Hidden Talent",
+      "kuchie": "/manga/dc425a5c-979f-45ed-a49f-cd08f7aa1633",
+      "kuchieId": "1e070db2f7a7284be7e4633546a77aea92b5ee66f25e64d3c210f4905cb946d8",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "I'd Never Fall in Love with an Angel",
+      "kuchie": "/manga/8b3da00f-e401-4337-b1ee-9c470bd269dc",
+      "kuchieId": "2ee2ce24f40e71e03e589b8d9a6a5b34f45a1d116cfee0e2fa5e0d4154f85a2a",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Kurenai-san Won't Give Me the Night",
+      "kuchie": "/manga/a10d989e-81bf-448b-ac44-5685a4a85651",
+      "kuchieId": "8762feaa13342b5897c36ef5229e1f67511e627bdf37ec1b157537cd9783c3b8",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "Parlour Maids of Doll Cafe",
+      "kuchie": "/manga/b0af8cb4-4d94-4113-a552-35d6feb18e53",
+      "kuchieId": "6341f4a71471f9e00f3784e5b1853df029fe47f2c9362c3184efdbe17a63aa9b",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Honey Creep",
+      "kuchie": "/manga/de6e9318-d062-4905-b459-56708184bd9d",
+      "kuchieId": "02bea7b7141dd27b97bf87ab9d737cd605c982877e65e5cb3082b29b3b69c781",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "Dazzling and Mellow",
+      "kuchie": "/manga/d4aa7128-86ea-468b-a832-e3164f000f04",
+      "kuchieId": "acb0abdbf3514ae254cf019a92ff352f87fb0efe6586576b517fb923aa9971fc",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Nozomi Kageusu’s Ghost Friendship Book",
+      "kuchie": "/manga/ad60011f-aff3-4035-a9c1-7f5f9922e522",
+      "kuchieId": "587e1e51aaf9b9e06b3b6dc80cd0df15626e4bb5198b2abf516a9e998db175bb",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Nozomi Kageusu’s Ghost Friendship Book",
+      "kuchie": "/manga/ad60011f-aff3-4035-a9c1-7f5f9922e522",
+      "kuchieId": "587e1e51aaf9b9e06b3b6dc80cd0df15626e4bb5198b2abf516a9e998db175bb",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Eldritch Little Shit",
+      "kuchie": "/manga/e95234c7-0c38-4171-a27e-85563788226d",
+      "kuchieId": "b27374e7d027b386e2a40c57ed5adcfc3e98ad048b57fea56285600b4103dc4a",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Rin Wants To Protect Me",
+      "kuchie": "/manga/a5747cd3-eb10-4e6e-b612-a81462df0623",
+      "kuchieId": "15cd679b4d217c9160d39440f44b5c4b223e2581e698529510cc5b884366a448",
+      "match": true,
+      "chapters": 32,
+      "serverChapters": 32,
+      "chaptersMatched": 32,
+      "chapterMisses": []
+    },
+    {
+      "title": "Even so, we're still friends, right?",
+      "kuchie": "/manga/7bd5ca95-9254-439d-87e1-2cea9b5dc9e1",
+      "kuchieId": "605d4d71dc42561676470b9cc53b30625546fba8410f2af6e3cc36efe6951311",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Bare-Knuckle High Disciplinary Committee",
+      "kuchie": "/manga/94bc7c14-d4e7-4fed-92c3-13d8e45a4aa4",
+      "kuchieId": "b47142c6aa82a815d44a11e0a2feabb7fd31cba2a6b83b27a40674a6a2f1400b",
+      "match": true,
+      "chapters": 0,
+      "serverChapters": 0,
+      "chaptersMatched": 0,
+      "chapterMisses": []
+    },
+    {
+      "title": "Black \"TS\" Magic",
+      "kuchie": "/manga/ef26fdab-b97b-4e24-9ac2-66c4bb42bd7b",
+      "kuchieId": "ecebed1cf1542d113db0514368fced986deea628e525dd4841fef561ea90229d",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "I want to protect my favorite character from the BL world.",
+      "kuchie": "/manga/c6709729-a527-4305-b5c3-d6cafb08915e",
+      "kuchieId": "b559fd1285b3e36cf642240757324c34e0d231c9d9a764ab9fe5a4835433a6b8",
+      "match": true,
+      "chapters": 17,
+      "serverChapters": 17,
+      "chaptersMatched": 17,
+      "chapterMisses": []
+    },
+    {
+      "title": "Sunflowers at Night ~Big Sister and the Delinquent~",
+      "kuchie": "/manga/6b615e13-dd45-4a4d-b27c-fd784d8e8d27",
+      "kuchieId": "f90d640948d8254307b155a1505dfb9e1a636bbf0b4b9db7f73852b02c537ed3",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "Collecting Curses",
+      "kuchie": "/manga/f2e89e93-af51-4908-826e-2466e5818e0d",
+      "kuchieId": "323179aab2089ab192914640e1aab8ab260ed1c5dc13b88888782f9c1f12dae3",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Reincarnated Refugee Girl Works Hard to Gain Citizenship from Zero! Part 2",
+      "kuchie": "/manga/b49a7277-a43a-4078-a20d-0a60474352d7",
+      "kuchieId": "55b176b0a70ede148b1470ad7d14a1ee7d600047264e99ef91c366fa0aa1e9eb",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "My Childhood Friend Is a Ryotei Gal",
+      "kuchie": "/manga/24490221-def1-4102-8640-8ac03bdaddb7",
+      "kuchieId": "3a9a88c36676903ce7ae625c567900081de419aeb706f96a43a3827fdef203a0",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Retired Duke's Attendant Ends Up With A Harem On A Journey To Set The World Right",
+      "kuchie": "/manga/9a0ebc7d-a90a-423c-8b30-4b7fae988b42",
+      "kuchieId": "b29ebd7c603e69e97b45b4266044b82f4a239dbae0db13d2e28edfb4009ff890",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Somebody Give Peace to This Former Ace Mobile Weapon Pilot!",
+      "kuchie": "/manga/3540adb8-2563-4974-b7d3-7087bfbbbd32",
+      "kuchieId": "2ff084b9913cb4fbf49a6147eae923ce922630f8cc4beb0ef673d377c9814a2d",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Father's Fantasy",
+      "kuchie": "/manga/6b518ab5-3419-41e1-9251-3e648d6200ba",
+      "kuchieId": "fcba8b07be7aef5587d0ce5768cf3cbfe71de6c9df8d925ec5f9da4f426f96c6",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Juuou Mujin Dandivine Kai",
+      "kuchie": "/manga/9c5ab4a8-7f80-4803-a88b-9b2c83892d20",
+      "kuchieId": "185d9a1f128d92a98732782d915c95a88107b647205d75a0d8ea51ff097c7602",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Sweet Bloom Midnight",
+      "kuchie": "/manga/ed677478-5a4f-48c2-ab38-b571a6fb3769",
+      "kuchieId": "d8479e5c71b1a65a4e34cc9a2b6ed991be4b7ae7eb4100f4ae9895a61cf6fca8",
+      "match": true,
+      "chapters": 3,
+      "serverChapters": 3,
+      "chaptersMatched": 3,
+      "chapterMisses": []
+    },
+    {
+      "title": "S-Witch",
+      "kuchie": "/manga/ba1d520c-149b-460a-bfc5-bfaa84eb8708",
+      "kuchieId": "e2a51356732ea1d0bb330486dde9c5d191093879bd2c1229b4767f1ae751b1c7",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Boy Called the Weakest Has Actually Conquered the Most Difficult Dungeon: While Enjoying Dungeon Exploration, a Beautiful Girl from the Elite Class Asks to Become My Disciple",
+      "kuchie": "/manga/e8789a31-668c-4197-914a-1844ea3c50b3",
+      "kuchieId": "73741b636a7ca7c8192b4651c66f973665356c0c46b830d24ed75de9e4a439f6",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "SPOOKY NIGHT",
+      "kuchie": "/manga/ca51a0e2-1b67-4a51-bda2-e2f02b03b2bd",
+      "kuchieId": "9ca2857bbb788eaf9c860198c956a241f6e70286932644246a7dc1888f5ae99e",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Cosmograph",
+      "kuchie": "/manga/3e560bdb-7d8f-40ae-98e0-07ea9401608f",
+      "kuchieId": "def3d284cfc6fef90b5dba10998c2895df67c5f4f80809b245dbe2d2ab629cae",
+      "match": true,
+      "chapters": 2,
+      "serverChapters": 2,
+      "chaptersMatched": 2,
+      "chapterMisses": []
+    },
+    {
+      "title": "You're Scarier Than a Ghost",
+      "kuchie": "/manga/a4a37c63-5fac-4d0e-9f7a-db7803674aaa",
+      "kuchieId": "61666146a70d23ede99dca98283b7d5e0b057975cfa6f5b9d6ab7c06a773234f",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Touhou Project: Hana no Moto Nite",
+      "kuchie": "/manga/005daac9-0551-4596-bf9e-a8d0343a46bb",
+      "kuchieId": "40c19e3d1bce7c5bd65ec9a321617dc750c10bfa9e13139fae9dc4b044f7741a",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Legend of the Harem Hero",
+      "kuchie": "/manga/bf7e7d40-0193-4f73-939a-60149bf7d665",
+      "kuchieId": "0c07b00894b673a696c6e39a4d96964b3ee0f616651651189a28913f7c32d3c8",
+      "match": true,
+      "chapters": 0,
+      "serverChapters": 0,
+      "chaptersMatched": 0,
+      "chapterMisses": []
+    },
+    {
+      "title": "Phantasma Lily",
+      "kuchie": "/manga/0b2ba664-87a1-4d51-ad11-9cf334694231",
+      "kuchieId": "781ce5b8a5a7f921b9a7ff4e7962b84a742a2570d31a8286ccd81367445b981c",
+      "match": true,
+      "chapters": 0,
+      "serverChapters": 0,
+      "chaptersMatched": 0,
+      "chapterMisses": []
+    },
+    {
+      "title": "An Undead love story",
+      "kuchie": "/manga/75541679-0d90-4881-8f36-877812c87f6c",
+      "kuchieId": "1a4e60b80a81bab87b8717aaa5ad959695a5be522814bff26e2d3f4524838bcd",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Failed Experiment",
+      "kuchie": "/manga/9db7c8e6-3a45-46f2-a13f-307d12818a04",
+      "kuchieId": "1e1c857cb260c1c45e404a7e93f0cc96688a0b4cab2d4714435de61bdc11aef5",
+      "match": true,
+      "chapters": 8,
+      "serverChapters": 8,
+      "chaptersMatched": 8,
+      "chapterMisses": []
+    },
+    {
+      "title": "Cretaceous Dinosaur Legend: Yuta of the Land of Dragons",
+      "kuchie": "/manga/5ec17af0-050c-4f69-88c6-17e43a8351b9",
+      "kuchieId": "1366ad0d9b871c15376850dde429ae287e5b84141169167e1a22cebe6dabe9a6",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Chinchilla-chan",
+      "kuchie": "/manga/ec44395a-8049-4b21-9aeb-419a442bb5cc",
+      "kuchieId": "575182c5ab2ae43c0c6b9a0a1904a3cf5418d1c69671ddec49a72eeb6e60e571",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "The Hanging Tree",
+      "kuchie": "/manga/365517b2-6458-41d2-a368-484693e5a9e8",
+      "kuchieId": "1bd21e8f6c0abab0684778081a95c317b6b8587642e4995eb6a0b4c8e9292a28",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Creepy Girl",
+      "kuchie": "/manga/0406742e-a381-4cfe-b4a4-6c91a060bbeb",
+      "kuchieId": "a5277ea893928233b4aca6945099565388637c972c41d173fdb98781379bef52",
+      "match": true,
+      "chapters": 1,
+      "serverChapters": 1,
+      "chaptersMatched": 1,
+      "chapterMisses": []
+    },
+    {
+      "title": "Dears: Official Fan Book",
+      "kuchie": "/manga/b14ff785-ae41-4246-b2cc-79b264a79ff1",
+      "kuchieId": "70aa7fc8282ce0b9090030786cd07207fe86e0c6b9e16935f8460f84ca11d350",
+      "match": true,
+      "chapters": 24,
+      "serverChapters": 24,
+      "chaptersMatched": 24,
+      "chapterMisses": []
+    }
+  ],
+  "summary": {
+    "series": 71,
+    "seriesExact": 71,
+    "chapters": 218,
+    "chaptersExact": 218,
+    "seriesRate": 1.0,
+    "chapterRate": 1.0
+  }
+}
