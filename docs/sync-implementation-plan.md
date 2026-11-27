@@ -254,6 +254,17 @@ lib/src/features/local_collection/data/local_catalog_sync.dart
 
 **Selesai kalau:** `local_catalog_test.dart` dan `local_history_test.dart` yang sudah ada tetap hijau.
 
+**Status (27 November 2026):** skema v7, `sync_journal.dart`, dan hook outbox selesai. Keputusan yang diambil saat mengerjakan:
+
+- `local_catalog_sync.dart` (`applyRemote`, `snapshot`) pindah ke PR 8. Bentuk `SyncApplyBatch` ditentukan engine. Penanda Zone sudah ada sebagai `runApplyingRemote(body)` di `local_catalog.dart`, dan tesnya membuktikan tulisan di dalamnya tidak masuk outbox.
+- Nama kind, op, dan format key ada di `sync/domain/sync_change.dart`. Key `chapter_state` adalah array JSON `[seriesId, chapterId]`, key `category` adalah `categoryKey(name)`.
+- `LocalCatalog.incognito` hanya menahan progres baca (`setProgress`, `recordRemoteRead`). Reader memang tidak menulis progres saat penyamaran, jadi ini pengaman. Tanda baca dan bookmark yang diset manual tetap ikut sync.
+- `deleteCategory` juga mencatat `membership` untuk series yang ada di kategori itu.
+- `restoreMetadata` mencatat kategori, favorit, chapter yang dipulihkan, dan keanggotaan.
+- Tidak dicatat: `renameSeries`, `setCover`, import/unduh chapter, dan `removeChapter`. Semuanya di luar data sync.
+- Tulisan yang tidak mengubah apa pun (chapter tidak ada, kategori tidak ada) tidak menghasilkan entri.
+- Tes migrasi memakai `test/src/features/sync/data/fixtures/catalog_v6/`, yang ditulis oleh catalog 1.2.1.
+
 ### PR 3: Setelan reader per series ke lapisan data
 
 - Baru: `local_collection/data/local_series_reader_meta.dart`, berisi `read(seriesId)` dan `patch(seriesId, key, value)`. Format SharedPreferences `local.reader.manga.<id>` tetap sama.

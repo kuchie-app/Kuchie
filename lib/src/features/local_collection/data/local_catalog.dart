@@ -13,11 +13,16 @@ import 'package:path/path.dart' as p;
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../sync/domain/sync_change.dart';
+import '../../sync/domain/sync_records.dart' show categoryKey;
+
 const _maxPages = 4000;
 const _maxPageBytes = 64 * 1024 * 1024;
 const _maxChapterBytes = 4 * 1024 * 1024 * 1024;
 const _maxBackupBytes = 16 * 1024 * 1024;
 const _transferTimeout = Duration(seconds: 30);
+const _insertChange =
+    'INSERT INTO sync_changes (kind, key, op, changed_at) VALUES (?, ?, ?, ?)';
 const _imageExtensions = {
   '.jpg',
   '.jpeg',
@@ -273,11 +278,28 @@ class LocalPreviewPages {
   ]);
 }
 
+/// Runs [body] so that the catalog writes it makes stay out of the sync
+/// outbox. The sync engine applies remote changes through it.
+Future<T> runApplyingRemote<T>(Future<T> Function() body) =>
+    runZoned(body, zoneValues: {_applyingRemote: true});
+
+const _applyingRemote = #kuchieSyncApplying;
+
 /// A device-owned library with no dependency on a server or authenticated session.
 class LocalCatalog {
   LocalCatalog(this._root);
 
   final Directory _root;
+
+  /// Whether writes add entries to the sync outbox (`sync_changes`). Set by
+  /// the sync controller while a sync method is on.
+  bool journalEnabled = false;
+
+  /// Keeps reading progress out of the outbox while incognito mode is on.
+  /// The reader already skips progress then; marks the reader sets by hand
+  /// still sync.
+  bool incognito = false;
+
   final _metadata = _SerialOperations();
   final _transfers = <String, _SerialOperations>{};
   late final Future<_CatalogDatabase> _database = _open();
@@ -408,6 +430,73 @@ class LocalCatalog {
 
   Future<void> close() => _metadata.run(() async => (await _database).close());
 
+  /// Runs [action] in one transaction on the catalog database, queued behind
+  /// other catalog writes. Only the sync journal uses it, for its own tables.
+  Future<T> withSyncTables<T>(
+    Future<T> Function(DatabaseConnectionUser db) action,
+  ) => _metadata.run(() async {
+    final db = await _database;
+    return db.transaction(() => action(db));
+  });
+
+  bool _journals({bool progress = false}) =>
+      journalEnabled &&
+      Zone.current[_applyingRemote] != true &&
+      !(progress && incognito);
+
+  // Called inside the transaction of the write it records.
+  Future<void> _journal(
+    _CatalogDatabase db,
+    SyncRecordKind kind,
+    Iterable<String> keys, {
+    SyncChangeOp op = SyncChangeOp.upsert,
+    bool progress = false,
+  }) async {
+    if (!_journals(progress: progress)) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final key in keys) {
+      await db.customStatement(_insertChange, [
+        kind.storedName,
+        key,
+        op.name,
+        now,
+      ]);
+    }
+  }
+
+  // The chapters of [seriesId] (or of every series) that History shows.
+  Future<List<String>> _historyKeys(
+    _CatalogDatabase db, [
+    String? seriesId,
+  ]) async {
+    final where = seriesId == null ? '' : 'WHERE series_id = ?';
+    final rows = await db
+        .customSelect(
+          '''
+          SELECT series_id, chapter_id FROM remote_history $where
+          UNION
+          SELECT series_id, id AS chapter_id FROM chapters
+          WHERE last_read_at IS NOT NULL
+          ${seriesId == null ? '' : 'AND series_id = ?'}
+          ORDER BY series_id, chapter_id
+          ''',
+          variables: [
+            if (seriesId != null) ...[
+              Variable.withString(seriesId),
+              Variable.withString(seriesId),
+            ],
+          ],
+        )
+        .get();
+    return [
+      for (final row in rows)
+        chapterStateKey(
+          row.read<String>('series_id'),
+          row.read<String>('chapter_id'),
+        ),
+    ];
+  }
+
   Future<List<LocalSeries>> list() =>
       _metadata.run(() async => _list(await _database));
 
@@ -444,6 +533,7 @@ class LocalCatalog {
         );
         await _removeEmptySeries(db);
       }
+      await _journal(db, SyncRecordKind.series, [seriesId]);
     });
   });
 
@@ -779,10 +869,15 @@ class LocalCatalog {
     if (row == null) return;
     final pageCount = _decodePageNames(row.read<String>('page_names')).length;
     final page = index.clamp(0, pageCount - 1);
-    await db.customStatement(
-      'UPDATE chapters SET progress = ?, last_read_at = ? WHERE series_id = ? AND id = ?',
-      [page, DateTime.now().millisecondsSinceEpoch, seriesId, chapterId],
-    );
+    await db.transaction(() async {
+      await db.customStatement(
+        'UPDATE chapters SET progress = ?, last_read_at = ? WHERE series_id = ? AND id = ?',
+        [page, DateTime.now().millisecondsSinceEpoch, seriesId, chapterId],
+      );
+      await _journal(db, SyncRecordKind.chapterState, [
+        chapterStateKey(seriesId, chapterId),
+      ], progress: true);
+    });
   });
 
   /// Kept apart from [setProgress] so online reads never touch saved files.
@@ -793,8 +888,9 @@ class LocalCatalog {
     required int progress,
   }) => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement(
-      '''
+    await db.transaction(() async {
+      await db.customStatement(
+        '''
       INSERT INTO remote_history
         (series_id, series_title, source, chapter_id, chapter_title, progress, last_read_at)
       -- Reads within one millisecond still order newest first in History.
@@ -807,35 +903,50 @@ class LocalCatalog {
         progress = excluded.progress,
         last_read_at = excluded.last_read_at
       ''',
-      [
-        series.id,
-        _nonEmptyName(series.title, 'title'),
-        _encodeSeriesSource(series.source),
-        chapterId,
-        _nonEmptyName(chapterTitle, 'chapterTitle'),
-        progress < 0 ? 0 : progress,
-        DateTime.now().millisecondsSinceEpoch,
-      ],
-    );
+        [
+          series.id,
+          _nonEmptyName(series.title, 'title'),
+          _encodeSeriesSource(series.source),
+          chapterId,
+          _nonEmptyName(chapterTitle, 'chapterTitle'),
+          progress < 0 ? 0 : progress,
+          DateTime.now().millisecondsSinceEpoch,
+        ],
+      );
+      await _journal(db, SyncRecordKind.chapterState, [
+        chapterStateKey(series.id, chapterId),
+      ], progress: true);
+    });
   });
 
   /// Takes a series off History. Saved pages and reading progress stay.
+  /// Sync sends the cleared read times; the server keeps its History.
   Future<void> removeFromHistory(String seriesId) => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement('DELETE FROM remote_history WHERE series_id = ?', [
-      seriesId,
-    ]);
-    await db.customStatement(
-      'UPDATE chapters SET last_read_at = NULL WHERE series_id = ?',
-      [seriesId],
-    );
+    await db.transaction(() async {
+      final keys = _journals() ? await _historyKeys(db, seriesId) : <String>[];
+      await db.customStatement(
+        'DELETE FROM remote_history WHERE series_id = ?',
+        [seriesId],
+      );
+      await db.customStatement(
+        'UPDATE chapters SET last_read_at = NULL WHERE series_id = ?',
+        [seriesId],
+      );
+      await _journal(db, SyncRecordKind.chapterState, keys);
+    });
   });
 
   /// Empties History. Saved pages and reading progress stay.
+  /// Sync sends the cleared read times; the server keeps its History.
   Future<void> clearHistory() => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement('DELETE FROM remote_history');
-    await db.customStatement('UPDATE chapters SET last_read_at = NULL');
+    await db.transaction(() async {
+      final keys = _journals() ? await _historyKeys(db) : <String>[];
+      await db.customStatement('DELETE FROM remote_history');
+      await db.customStatement('UPDATE chapters SET last_read_at = NULL');
+      await _journal(db, SyncRecordKind.chapterState, keys);
+    });
   });
 
   /// Newest first.
@@ -937,13 +1048,16 @@ class LocalCatalog {
   Future<void> _updateMeta(String seriesId, String column, Object value) =>
       _metadata.run(() async {
         final db = await _database;
-        await db.customStatement(
-          '''
-          INSERT INTO series_meta (series_id, $column) VALUES (?, ?)
-          ON CONFLICT(series_id) DO UPDATE SET $column = excluded.$column
-          ''',
-          [seriesId, value],
-        );
+        await db.transaction(() async {
+          await db.customStatement(
+            '''
+            INSERT INTO series_meta (series_id, $column) VALUES (?, ?)
+            ON CONFLICT(series_id) DO UPDATE SET $column = excluded.$column
+            ''',
+            [seriesId, value],
+          );
+          await _journal(db, SyncRecordKind.seriesMeta, [seriesId]);
+        });
       });
 
   /// Saved chapters report their own bookmark; marks cover the rest.
@@ -986,8 +1100,9 @@ class LocalCatalog {
   }) => _metadata.run(() async {
     if (read == null && bookmarked == null) return;
     final db = await _database;
+    final ids = chapterIds.toSet();
     await db.transaction(() async {
-      for (final id in chapterIds.toSet()) {
+      for (final id in ids) {
         await db.customStatement(
           '''
           INSERT INTO chapter_marks (series_id, chapter_id, read, bookmarked)
@@ -1012,6 +1127,9 @@ class LocalCatalog {
           );
         }
       }
+      await _journal(db, SyncRecordKind.chapterState, [
+        for (final id in ids) chapterStateKey(seriesId, id),
+      ]);
     });
   });
 
@@ -1054,10 +1172,20 @@ class LocalCatalog {
     bool bookmarked,
   ) => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement(
-      'UPDATE chapters SET bookmarked = ? WHERE series_id = ? AND id = ? AND ready = 1',
-      [bookmarked ? 1 : 0, seriesId, chapterId],
-    );
+    await db.transaction(() async {
+      final changed = await db.customUpdate(
+        'UPDATE chapters SET bookmarked = ? WHERE series_id = ? AND id = ? AND ready = 1',
+        variables: [
+          Variable.withInt(bookmarked ? 1 : 0),
+          Variable.withString(seriesId),
+          Variable.withString(chapterId),
+        ],
+      );
+      if (changed == 0) return;
+      await _journal(db, SyncRecordKind.chapterState, [
+        chapterStateKey(seriesId, chapterId),
+      ]);
+    });
   });
 
   Future<List<String>> categories() => _metadata.run(() async {
@@ -1072,17 +1200,43 @@ class LocalCatalog {
 
   Future<void> createCategory(String name) => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement(
-      'INSERT OR IGNORE INTO categories (name) VALUES (?)',
-      [_nonEmptyName(name, 'name')],
-    );
+    final trimmed = _nonEmptyName(name, 'name');
+    await db.transaction(() async {
+      await db.customStatement(
+        'INSERT OR IGNORE INTO categories (name) VALUES (?)',
+        [trimmed],
+      );
+      await _journal(db, SyncRecordKind.category, [categoryKey(trimmed)]);
+    });
   });
 
+  /// Series in the category leave it, so their membership is recorded too.
   Future<void> deleteCategory(String name) => _metadata.run(() async {
     final db = await _database;
-    await db.customStatement('DELETE FROM categories WHERE name = ?', [
-      name.trim(),
-    ]);
+    final trimmed = name.trim();
+    await db.transaction(() async {
+      final members = _journals()
+          ? [
+              for (final row
+                  in await db
+                      .customSelect(
+                        'SELECT series_id FROM series_categories WHERE name = ? ORDER BY series_id',
+                        variables: [Variable.withString(trimmed)],
+                      )
+                      .get())
+                row.read<String>('series_id'),
+            ]
+          : const <String>[];
+      final deleted = await db.customUpdate(
+        'DELETE FROM categories WHERE name = ?',
+        variables: [Variable.withString(trimmed)],
+      );
+      if (deleted == 0) return;
+      await _journal(db, SyncRecordKind.category, [
+        categoryKey(trimmed),
+      ], op: SyncChangeOp.delete);
+      await _journal(db, SyncRecordKind.membership, members);
+    });
   });
 
   Future<void> setCategories(String seriesId, List<String> categories) {
@@ -1102,6 +1256,7 @@ class LocalCatalog {
             [seriesId, name],
           );
         }
+        await _journal(db, SyncRecordKind.membership, [seriesId]);
       });
     });
   }
@@ -1201,7 +1356,10 @@ class LocalCatalog {
               .map((row) => row.read<String>('id'))
               .toSet();
       final matchedSeries = <String, Set<String>>{};
+      final restoredChapters = <String>{};
       var restored = 0;
+      final journals = _journals();
+      final now = DateTime.now().millisecondsSinceEpoch;
       await db.batch((batch) {
         for (final name in backup.categories) {
           batch.customStatement(
@@ -1233,6 +1391,7 @@ class LocalCatalog {
           final seriesId = row.read<String>('series_id');
           final id = row.read<String>('id');
           matchedSeries.putIfAbsent(chapter.seriesId, () => {}).add(seriesId);
+          restoredChapters.add(chapterStateKey(seriesId, id));
           if (chapter.bookmarked) {
             batch.customStatement(
               'UPDATE chapters SET bookmarked = 1 WHERE series_id = ? AND id = ?',
@@ -1259,14 +1418,36 @@ class LocalCatalog {
             );
           }
         }
+        final members = <String>{};
         for (final (seriesId, name) in backup.memberships) {
           for (final matched in matchedSeries[seriesId] ?? const <String>{}) {
+            members.add(matched);
             batch.customStatement(
               'INSERT OR IGNORE INTO series_categories (series_id, name) VALUES (?, ?)',
               [matched, name],
             );
           }
         }
+        if (!journals) return;
+        void journal(SyncRecordKind kind, Iterable<String> keys) {
+          for (final key in keys) {
+            batch.customStatement(_insertChange, [
+              kind.storedName,
+              key,
+              SyncChangeOp.upsert.name,
+              now,
+            ]);
+          }
+        }
+
+        journal(SyncRecordKind.category, {
+          for (final name in backup.categories) categoryKey(name),
+        });
+        journal(SyncRecordKind.series, {
+          for (final favorite in backup.favorites) favorite.id,
+        });
+        journal(SyncRecordKind.chapterState, restoredChapters);
+        journal(SyncRecordKind.membership, members);
       });
       return (restored: restored, skipped: backup.chapters.length - restored);
     });
@@ -1429,7 +1610,7 @@ class _CatalogDatabase extends GeneratedDatabase {
   _CatalogDatabase(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
@@ -1463,6 +1644,7 @@ class _CatalogDatabase extends GeneratedDatabase {
       await _createRemoteHistory();
       await _createSeriesMeta();
       await _createChapterMarks();
+      await _createSyncTables();
     },
     onUpgrade: (_, from, to) async {
       await transaction(() async {
@@ -1486,12 +1668,64 @@ class _CatalogDatabase extends GeneratedDatabase {
         if (from < 4) await _createRemoteHistory();
         if (from < 5) await _createSeriesMeta();
         if (from < 6) await _createChapterMarks();
+        if (from < 7) await _createSyncTables();
       });
     },
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  // The sync outbox, what each local key is called on a backend, the last
+  // state both sides agreed on, and chapters waiting to move between them.
+  // No foreign keys: sync also covers series that aren't saved here.
+  Future<void> _createSyncTables() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS sync_changes (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        key TEXT NOT NULL,
+        op TEXT NOT NULL,
+        changed_at INTEGER NOT NULL
+      )
+      ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS sync_changes_key ON sync_changes(kind, key)',
+    );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS sync_links (
+        backend TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        local_key TEXT NOT NULL,
+        remote_id TEXT NOT NULL,
+        PRIMARY KEY (backend, kind, local_key)
+      )
+      ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS sync_links_remote ON sync_links(backend, kind, remote_id)',
+    );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS sync_base (
+        backend TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (backend, kind, key)
+      )
+      ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS sync_transfers (
+        series_id TEXT NOT NULL,
+        chapter_id TEXT NOT NULL,
+        remote_chapter_id INTEGER,
+        keep_local INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        error TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (series_id, chapter_id)
+      )
+      ''');
+  }
 
   // No foreign key: ratings and notes also apply to series that aren't saved.
   Future<void> _createChapterMarks() => customStatement('''
