@@ -310,6 +310,8 @@ Jalankan `tool/bootstrap`.
 
 **Selesai kalau:** codegen bersih, `graphql_operation_variables_test.dart` hijau, dan semua field yang dipakai tidak `@deprecated`. Pakai `user.*`, bukan field lama di `ChapterType`.
 
+**Status (27 November 2026):** dokumen selesai. Semua operasi dan fragment diberi awalan `Sync` supaya tidak bentrok dengan dokumen mode Server. `MangaBySourceUrl` menjadi `SyncMangaBySourceUrl`, dan `ChapterDownloadState` menjadi `SyncChapterDownloadState`. `sync_graphql_test.dart` menolak field atau input field yang `@deprecated` atau tidak ada di skema. `SyncExtensions` juga mengambil `storeIndexUrl`. Belum diuji ke server nyata, karena dokumen ini baru dipakai di PR 7–8. Uji ulang S2/S3b/S4/S8 dengan JAR preview masih perlu dilakukan sebelum PR 8.
+
 ### PR 6: Halaman Sinkronisasi, diagram hidup, dan ikon Library
 
 Desain: [sync-plan.md](sync-plan.md) bagian 3.1, 3.2, dan 3.9. Prototipe acuan (versi 4): https://claude.ai/artifact/UgsfGprka4iH1t9dYFQoSN, sumbernya di `design/sync-prototype/index.html`. Logika animasi prototipe (scene per metode, token, kedatangan, orbit) bisa langsung diterjemahkan ke Dart.

@@ -1,0 +1,268 @@
+# Documents for Sync with a Suwayomi server. Read and write state through
+# `user { … }`, not the deprecated fields on MangaType and ChapterType;
+# LegacyUserFieldsLink rewrites them for stable servers without `user`.
+# test/src/features/sync/data/suwayomi/sync_graphql_test.dart rejects any
+# deprecated field.
+
+fragment SyncMangaDto on MangaType {
+  id
+  sourceId
+  url
+  title
+  thumbnailUrl
+  user {
+    inLibrary
+    inLibraryAt
+  }
+  categories {
+    nodes {
+      id
+      name
+    }
+  }
+  meta {
+    key
+    value
+  }
+}
+
+fragment SyncChapterDto on ChapterType {
+  id
+  mangaId
+  url
+  name
+  pageCount
+  user {
+    isRead
+    isBookmarked
+    lastPageRead
+    lastReadAt
+    isDownloaded
+  }
+}
+
+fragment SyncPageInfo on PageInfo {
+  endCursor
+  hasNextPage
+}
+
+query SyncLibraryPage($first: Int!, $after: Cursor) {
+  mangas(
+    condition: { inLibrary: true }
+    order: [{ by: ID, byType: ASC }]
+    first: $first
+    after: $after
+  ) {
+    nodes {
+      ...SyncMangaDto
+    }
+    pageInfo {
+      ...SyncPageInfo
+    }
+  }
+}
+
+query SyncCategories {
+  categories(order: [{ by: ORDER, byType: ASC }]) {
+    nodes {
+      id
+      name
+      order
+      default
+    }
+  }
+}
+
+# Chapters of [mangaIds] read after [lastReadAfter] (server seconds).
+query SyncChaptersSince(
+  $mangaIds: [Int!]!
+  $lastReadAfter: LongString!
+  $first: Int!
+  $after: Cursor
+) {
+  chapters(
+    filter: {
+      mangaId: { in: $mangaIds }
+      lastReadAt: { greaterThan: $lastReadAfter }
+    }
+    order: [{ by: ID, byType: ASC }]
+    first: $first
+    after: $after
+  ) {
+    nodes {
+      ...SyncChapterDto
+    }
+    pageInfo {
+      ...SyncPageInfo
+    }
+  }
+}
+
+# Every chapter of one manga, for a full reconciliation.
+query SyncChaptersOfManga($mangaId: Int!) {
+  chapters(
+    condition: { mangaId: $mangaId }
+    order: [{ by: SOURCE_ORDER, byType: ASC }]
+  ) {
+    nodes {
+      ...SyncChapterDto
+    }
+  }
+}
+
+query SyncMangaBySourceUrl($sourceId: LongString!, $url: String!) {
+  mangas(condition: { sourceId: $sourceId, url: $url }, first: 1) {
+    nodes {
+      id
+    }
+  }
+}
+
+query SyncExtensions {
+  extensions {
+    nodes {
+      pkgName
+      name
+      lang
+      isInstalled
+      storeIndexUrl
+    }
+  }
+}
+
+# Stores match by signing key, not by URL (spike).
+query SyncExtensionStores {
+  extensionStores {
+    nodes {
+      indexUrl
+      signingKey
+      name
+    }
+  }
+}
+
+# A chapter counts as downloaded only when its page count matches (spike
+# S8: a full disk still reports isDownloaded with fewer pages).
+query SyncChapterDownloadState($ids: [Int!]!) {
+  chapters(filter: { id: { in: $ids } }) {
+    nodes {
+      id
+      pageCount
+      user {
+        isDownloaded
+      }
+    }
+  }
+}
+
+mutation SyncUpdateMangas($input: UpdateMangasInput!) {
+  updateMangas(input: $input) {
+    mangas {
+      id
+      user {
+        inLibrary
+        inLibraryAt
+      }
+    }
+  }
+}
+
+mutation SyncUpdateMangasCategories($input: UpdateMangasCategoriesInput!) {
+  updateMangasCategories(input: $input) {
+    mangas {
+      id
+      categories {
+        nodes {
+          id
+        }
+      }
+    }
+  }
+}
+
+mutation SyncCreateCategory($input: CreateCategoryInput!) {
+  createCategory(input: $input) {
+    category {
+      id
+      name
+      order
+      default
+    }
+  }
+}
+
+mutation SyncUpdateChapters($input: UpdateChaptersInput!) {
+  updateChapters(input: $input) {
+    chapters {
+      ...SyncChapterDto
+    }
+  }
+}
+
+mutation SyncSetMangaMetas($input: SetMangaMetasInput!) {
+  setMangaMetas(input: $input) {
+    metas {
+      mangaId
+      key
+      value
+    }
+  }
+}
+
+mutation SyncFetchMangaAndChapters($input: FetchMangaAndChaptersInput!) {
+  fetchMangaAndChapters(input: $input) {
+    manga {
+      ...SyncMangaDto
+    }
+    chapters {
+      ...SyncChapterDto
+    }
+  }
+}
+
+mutation SyncFetchSourceManga($input: FetchSourceMangaInput!) {
+  fetchSourceManga(input: $input) {
+    hasNextPage
+    mangas {
+      id
+      url
+      title
+    }
+  }
+}
+
+mutation SyncEnqueueChapterDownloads($input: EnqueueChapterDownloadsInput!) {
+  enqueueChapterDownloads(input: $input) {
+    clientMutationId
+  }
+}
+
+mutation SyncDeleteDownloadedChapters($input: DeleteDownloadedChaptersInput!) {
+  deleteDownloadedChapters(input: $input) {
+    chapters {
+      id
+      user {
+        isDownloaded
+      }
+    }
+  }
+}
+
+mutation SyncFetchChapterPages($input: FetchChapterPagesInput!) {
+  fetchChapterPages(input: $input) {
+    pages
+    chapter {
+      id
+      pageCount
+    }
+  }
+}
+
+mutation SyncUpdateExtension($input: UpdateExtensionInput!) {
+  updateExtension(input: $input) {
+    extension {
+      pkgName
+      isInstalled
+    }
+  }
+}
