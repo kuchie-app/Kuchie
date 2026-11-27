@@ -452,6 +452,15 @@ lib/src/features/sync/presentation/suwayomi_connect_flow.dart
 
 **Selesai kalau:** pengguna bisa menghubungkan server QA dan melihat laporan yang angkanya benar.
 
+**Status (28 November 2026):** kode dan tes selesai. Belum dicoba ke server QA nyata. Keputusan yang diambil:
+
+- Langkah server di onboarding menjadi `ServerStep` publik dengan `ServerStepHost`, yang berisi awalan kunci draf dan cara menyelesaikan sign-in. Onboarding tetap memakai `ServerStepHost.onboarding` dengan kunci dan perilaku yang sama persis. Alur sync memakai awalan `sync.connect.` dan tidak menulis `onboarding.step`. Seluruh tes `test/onboarding/` tetap hijau.
+- Sign-in di alur sync memakai koneksi yang sama dengan bagian lain aplikasi (alamat, kredensial, keputusan 9.2).
+- `suwayomi_library_reader.dart` membaca library server per halaman (`SyncLibraryPage`) dan extension yang terpasang (`SyncExtensions`). Tidak ada yang ditulis ke server.
+- Pencocokan memakai `sourceId` dan URL apa adanya (spike S1). Satu manga server hanya terhubung ke satu series lokal. Series yang hanya ada di iPhone diberi alasan: `ImportedFile`, `KuchieRepo`, `BuiltIn` (Shinigami bawaan), `ExtensionMissing(pkg)` (server belum punya extension-nya), atau `Sendable`.
+- Tombol akhir menyimpan `ConnectChoice` di `sync.suwayomi.connectChoice` (`SyncStateStore`, ikut terhapus saat putuskan koneksi). Metode sync belum diubah ke Suwayomi; engine di PR 8 yang menyalakannya setelah sync pertama.
+- Fixture S1 MangaDex memuat satu series dua kali, karena halaman popular bisa mengulang. Tesnya menghapus duplikat dulu, karena library tidak bisa berisi duplikat.
+
 ### PR 8: Engine
 
 **File baru:**

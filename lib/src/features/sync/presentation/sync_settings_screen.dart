@@ -13,7 +13,9 @@ import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../controller/sync_controller.dart';
 import '../data/sync_state_store.dart';
 import '../domain/diagram/sync_methods.dart';
+import '../domain/diagram/sync_scene.dart';
 import 'diagram/sync_explainer.dart';
+import 'suwayomi_connect_flow.dart';
 import 'sync_faq.dart';
 import 'sync_hero_card.dart';
 import 'sync_method_list.dart';
@@ -116,6 +118,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                 ? () => controller.playPreviewRun(
                     onFirstSync: _celebrateFirstSync,
                   )
+                : scene.cta == SyncCta.connect
+                ? () => openSuwayomiConnect(context)
                 : null,
           ),
         ),
@@ -127,7 +131,14 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
               ? (kind) => controller.setPreview(
                   SyncPreview(kind, syncMethods[kind]!.defaultStatus),
                 )
-              : null,
+              : (kind) {
+                  // Turning sync off and the Suwayomi details come with
+                  // the engine and Disconnect (PR 8, PR 17).
+                  if (kind == SyncMethodKind.suwayomi &&
+                      overview.methodSpec.kind == SyncMethodKind.local) {
+                    openSuwayomiConnect(context);
+                  }
+                },
         ),
         SettingsGroupHeading(
           label: localText(context, 'Common questions', 'Pertanyaan umum'),
