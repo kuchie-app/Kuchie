@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuchie/src/constants/app_theme.dart';
@@ -7,7 +9,12 @@ import 'package:kuchie/src/features/sync/presentation/diagram/sync_diagram.dart'
 import 'package:kuchie/src/utils/theme/app_theme_builder.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Antialiasing differs a little between macOS and the Linux CI runner.
+/// Goldens are recorded on macOS. Linux antialiases paths and text a few
+/// percent differently, so they run only on macOS: locally, and in CI's
+/// macOS job.
+final _recordedHere = Platform.isMacOS;
+
+/// Allows the small antialiasing differences between Macs.
 class _TolerantComparator extends LocalFileComparator {
   _TolerantComparator(super.testFile);
 
@@ -74,7 +81,7 @@ void main() {
   for (final themeName in ['light', 'dark', 'black']) {
     for (final (method, status) in _scenes) {
       final name = '${method.kind.name}_${status.name}_$themeName';
-      testWidgets(name, (tester) async {
+      testWidgets(name, skip: !_recordedHere, (tester) async {
         tester.view.physicalSize = const Size(360, 262);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);

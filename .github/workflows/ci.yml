@@ -60,6 +60,10 @@ jobs:
       - name: Generate code
         run: tool/bootstrap
 
+      # Recorded on macOS; the Linux job skips them.
+      - name: Sync diagram goldens
+        run: flutter test test/src/features/sync/presentation/diagram/sync_diagram_golden_test.dart
+
       - name: Build for the iOS Simulator
         run: flutter build ios --simulator --debug --no-codesign
 
