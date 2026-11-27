@@ -282,6 +282,13 @@ lib/src/features/sync/data/suwayomi/suwayomi_reachability.dart
 - Identitas server: memakai `offline/data/graphql/server_identity.graphql`.
 - Sumber konfigurasi server sama dengan mode Server (keputusan desain 9.2).
 
+**Catatan pengerjaan:**
+
+- Tidak ada kunci `sync.backupUrl`. Alamat cadangan memakai pasangan yang sudah ada: alamat utama `ServerExternalUrl` dan alamat LAN `ServerLanUrl`, dicoba berurutan (`syncServerAddresses`).
+- `authCoordinator` tidak memasang refresh berkala saat runtime Server mati, tapi `usableUiAccessToken` dan `refreshUiAccessToken` tetap berjalan, jadi klien sync memakainya sesuai kebutuhan.
+- Klien sync memasang `LegacyUserFieldsLink`, tanpa `reachabilityLink` atau banner milik mode Server.
+- Probe membaca meta identitas, yang sekaligus memeriksa auth. Batas waktu per alamat 6 detik.
+
 **Tes:** reachability dengan `unreachable_server_stubs.dart`, fallback ke alamat cadangan, dan deteksi identitas berubah.
 
 ### PR 5: Dokumen GraphQL sync
