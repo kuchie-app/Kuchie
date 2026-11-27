@@ -10,8 +10,11 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../global_providers/global_providers.dart';
+import 'local_catalog.dart';
 import 'local_collection_services.dart';
 import 'local_download_queue.dart';
+import 'local_series_reader_meta.dart';
 
 part 'local_collection_providers.g.dart';
 
@@ -37,8 +40,28 @@ Future<LocalCollectionServices> localCollectionServices(Ref ref) async {
   ref
       .read(activeLocalDownloadQueueProvider.notifier)
       .attach(services.downloads);
+  ref.read(activeLocalCatalogProvider.notifier).attach(services.catalog);
   return services;
 }
+
+/// The catalog of the Local collection once it has opened. Watching this
+/// never opens the collection by itself.
+@Riverpod(keepAlive: true)
+class ActiveLocalCatalog extends _$ActiveLocalCatalog {
+  @override
+  LocalCatalog? build() => null;
+
+  void attach(LocalCatalog catalog) => state = catalog;
+}
+
+/// Per-series reader settings of the Local collection. Changes reach the sync
+/// outbox through the open catalog; saving them never opens it.
+@Riverpod(keepAlive: true)
+LocalSeriesReaderMeta localSeriesReaderMeta(Ref ref) => LocalSeriesReaderMeta(
+  ref.watch(sharedPreferencesProvider),
+  onChanged: (seriesId) =>
+      ref.read(activeLocalCatalogProvider)?.recordReaderMetaChange(seriesId),
+);
 
 /// The queue Live Activities follow once the Local collection has opened.
 ///

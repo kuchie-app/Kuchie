@@ -273,6 +273,8 @@ lib/src/features/local_collection/data/local_catalog_sync.dart
 
 **Selesai kalau:** `local_reader_preferences_test.dart` hijau dan ada tes baru untuk patch → journal.
 
+**Status (27 November 2026):** selesai. Callback-nya `LocalCatalog.recordReaderMetaChange(seriesId)`, yang mengikuti aturan journal yang sama (sync aktif, bukan `runApplyingRemote`). `localSeriesReaderMetaProvider` memanggilnya lewat `activeLocalCatalogProvider`. Provider itu diisi saat koleksi Local dibuka, mengikuti pola `ActiveLocalDownloadQueue`, jadi menyimpan setelan reader tidak membuka koleksi. `ref.exists` tidak dipakai karena sudah deprecated di Riverpod 3.5.
+
 ### PR 4: State dan koneksi sync
 
 **File baru:**
