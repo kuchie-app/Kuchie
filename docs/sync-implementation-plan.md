@@ -420,6 +420,16 @@ SyncScene sceneFor(SyncMethodSpec method, SyncStatusKind status, SyncProgress? p
 - Di perangkat nyata, animasi stabil di 60/120 fps saat Menyinkronkan, sekitar 30 fps saat diam, dan tanpa repaint saat Reduce Motion aktif.
 - Semua scene bisa dicoba lewat menu debug dengan status palsu, karena engine baru ada di PR 8.
 
+**Status (27 November 2026):** kode dan tes selesai. Belum diukur di perangkat nyata (60/120 fps dan 30 fps). Keputusan yang diambil:
+
+- `sync_methods.dart` dan `sync_scene.dart` pindah ke `sync/domain/diagram/`. Keduanya Dart murni, dan `sync_controller.dart` membutuhkannya, sementara `layer_boundaries_test.dart` melarang controller mengimpor `presentation/`. Status animasi ada di `sync_diagram_motion.dart`, sehingga painter hanya membaca.
+- Diagram mengganti scene hanya saat metode atau status berubah. Perubahan angka saja tidak mereset animasi.
+- Low Power Mode dibaca lewat channel `kuchie/power` (`AppDelegate.swift`, `lib/src/utils/power/low_power_mode.dart`). Saat aktif, gerakan ambien berhenti setelah transisi selesai.
+- Tombol utama dan pilihan metode belum punya aksi di luar pratinjau. Hubungkan (PR 7) dan sync (PR 8) belum ada. Menu "Preview (debug)" hanya muncul di build debug dan bisa memutar alur Memeriksa → Menyinkronkan → Tersinkron, termasuk Kiri `complete`.
+- Bagian *Kapan* (pemicu) dan *Lanjutan → Log* belum ditampilkan. Keduanya ikut PR 9 dan PR 13, supaya tidak ada toggle tanpa efek.
+- Ikon status ditaruh di sebelah pemilih mode di judul Library. Pemilih mode baru hilang di PR 19.
+- Golden: 24 scene × 3 tema = 72 gambar di `test/src/features/sync/presentation/diagram/goldens/`, dengan toleransi 0,5% untuk perbedaan antialiasing antara macOS dan runner Linux.
+
 ### PR 7: Alur hubungkan dan analisis (dry-run)
 
 **File baru:**

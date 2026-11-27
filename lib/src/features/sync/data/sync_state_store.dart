@@ -32,6 +32,7 @@ class SyncStateStore {
   static const lastSuccessAtKey = 'sync.lastSuccessAt';
   static const lastErrorKey = 'sync.lastError';
   static const chapterCursorKey = 'sync.cursor.chapters';
+  static const explainerSeenKey = 'sync.explainerSeen';
 
   /// Keys that belong to the connected server; cleared on disconnect.
   static const _serverKeys = [
@@ -95,6 +96,11 @@ class SyncStateStore {
 
   Future<void> setIncludes(SyncDataKind kind, bool include) =>
       _prefs.setBool(kind.preferenceKey, include);
+
+  /// Whether the Sync page has played its three-step explainer once.
+  bool get explainerSeen => _prefs.getBool(explainerSeenKey) ?? false;
+
+  Future<void> setExplainerSeen() => _prefs.setBool(explainerSeenKey, true);
 
   /// Disconnect: sync turns off and forgets the server, keeping the
   /// reader's choice of what to sync for next time.

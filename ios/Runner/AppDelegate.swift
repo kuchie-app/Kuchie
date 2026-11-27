@@ -49,6 +49,24 @@ import UIKit
         name: "m_extension_server", binaryMessenger: registrar.messenger())
       channel.setMethodCallHandler(handleMihonRuntime)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PowerState") {
+      let channel = FlutterMethodChannel(
+        name: "kuchie/power", binaryMessenger: registrar.messenger())
+      powerChannel = channel
+      channel.setMethodCallHandler { call, result in
+        if call.method == "isLowPowerModeEnabled" {
+          result(ProcessInfo.processInfo.isLowPowerModeEnabled)
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      }
+      NotificationCenter.default.addObserver(
+        forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+      ) { [weak self] _ in
+        self?.powerChannel?.invokeMethod(
+          "lowPowerModeChanged", arguments: ProcessInfo.processInfo.isLowPowerModeEnabled)
+      }
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BackgroundDownloads") {
       let channel = FlutterMethodChannel(
         name: "kuchie/background_downloads", binaryMessenger: registrar.messenger())
@@ -57,6 +75,7 @@ import UIKit
     }
   }
 
+  private var powerChannel: FlutterMethodChannel?
   private var backgroundDownloadsChannel: FlutterMethodChannel?
   private var backgroundDownloadTask: UIBackgroundTaskIdentifier = .invalid
 

@@ -41,6 +41,9 @@ import '../../security/security_settings_screen.dart';
 import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../../sync/controller/sync_controller.dart';
+import '../../sync/presentation/sync_settings_screen.dart';
+import '../../sync/presentation/sync_status_icon.dart';
 import '../data/local_backups.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_providers.dart';
@@ -351,10 +354,20 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
           : AppBar(
               centerTitle: _tab == 4 ? true : false,
               title: library
-                  ? CollectionModePageTitle(
-                      title,
-                      mode: CollectionMode.local,
-                      onPressed: _chooseMode,
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: CollectionModePageTitle(
+                            title,
+                            mode: CollectionMode.local,
+                            onPressed: _chooseMode,
+                          ),
+                        ),
+                        SyncStatusIcon(
+                          onPressed: () => openSyncSettings(context),
+                        ),
+                      ],
                     )
                   : _tab == 4
                   ? Text(title)
@@ -920,6 +933,15 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         FluentIcons.arrow_counterclockwise_24_regular,
         localText(context, 'Backup & Restore', 'Backup & Pulihkan'),
         () => openLocalBackups(context, services, onRestored: _refresh),
+      ),
+      Consumer(
+        builder: (context, ref, _) => SettingsGroupRow(
+          icon: FluentIcons.arrow_sync_24_regular,
+          title: localText(context, 'Sync', 'Sinkronisasi'),
+          subtitle: syncSummary(context, ref.watch(syncControllerProvider)),
+          trailing: const Icon(FluentIcons.chevron_right_24_regular),
+          onTap: () => openSyncSettings(context),
+        ),
       ),
       _moreRow(
         FluentIcons.shield_lock_24_regular,
