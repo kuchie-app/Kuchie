@@ -54,6 +54,7 @@ import '../../settings/presentation/reader/widgets/reader_initial_overlay_tile/r
 import '../../settings/presentation/reader/widgets/reader_keep_screen_on_tile/reader_keep_screen_on_tile.dart';
 import '../../settings/presentation/reader/widgets/reader_mode_tile/reader_mode_tile.dart';
 import '../../settings/presentation/reader/widgets/reader_orientation/reader_orientation.dart';
+import '../../sync/controller/sync_scheduler.dart';
 import '../data/local_catalog.dart';
 import '../data/local_preferences.dart';
 import '../data/local_reading_stats.dart';
@@ -204,10 +205,14 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
           ),
       ];
 
+  /// Told when reading stops, so progress reaches the sync server soon.
+  late final SyncScheduler _syncScheduler = ref.read(syncSchedulerProvider);
+
   @override
   void initState() {
     super.initState();
     unawaited(LocalPreferences.instance.load());
+    _syncScheduler;
     _positions.itemPositions.addListener(_positionChanged);
     _lifecycle = AppLifecycleListener(
       onHide: () {
@@ -240,6 +245,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
     _resizeCorrection.dispose();
     _saveTimer?.cancel();
     _save();
+    _syncScheduler.notifyChapterRead();
     _recordReading();
     for (final chapterId in _readToDelete) {
       unawaited(
@@ -277,6 +283,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
   void _pause() {
     _save();
     ref.read(autoScrollActiveProvider.notifier).stop();
+    _syncScheduler.notifyChapterRead();
   }
 
   ReaderMode _resolvedMode(
@@ -388,6 +395,7 @@ class _LocalReaderState extends ConsumerState<LocalReader> {
       await widget.catalog.setChapterMarks(widget.series.id, [
         chapterId,
       ], read: true);
+      _syncScheduler.notifyChapterRead();
     } catch (_) {
       if (mounted) _showStorageError();
     }

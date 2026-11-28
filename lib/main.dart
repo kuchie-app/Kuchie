@@ -135,7 +135,10 @@ Future<void> _startApp() async {
   await _setUpCrashReporting();
   // Initialize after the binding and before starting any download service.
   initForegroundTaskService();
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  // Android checks for new chapters; iOS runs Sync's background refresh.
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
     unawaited(Workmanager().initialize(notificationCallbackDispatcher));
   }
   if (isFlatpak) {

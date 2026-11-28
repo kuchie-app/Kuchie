@@ -538,6 +538,15 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 
 **Selesai kalau:** tes scheduler dengan clock palsu, dan background task terverifikasi di perangkat lewat `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.kuchie.reader.sync"]`.
 
+**Status (28 November 2026):** selesai. Keputusan yang diambil:
+
+- `SyncScheduler` (controller) menerima kejadian lewat method (`appShown`, `appHidden`, `notifyChapterRead`) dan aliran konektivitas yang disuntikkan, jadi dites dengan clock palsu dan `fakeAsync`. Provider-nya memasang `AppLifecycleListener` dan `Connectivity().onConnectivityChanged`.
+- App masuk background membatalkan siklus yang berjalan dan push yang tertunda. Yang sudah terkirim tetap tersimpan.
+- Reader memberi tahu scheduler saat berhenti (`_pause`), saat ditutup, dan saat chapter selesai. Presentation boleh memanggil controller langsung, jadi tidak perlu callback.
+- Library Local: scheduler dimulai saat Library dibuka; pull-to-refresh menjalankan sync manual saat sync aktif; Library dimuat ulang setiap kali siklus selesai.
+- Background iOS: `BGTaskSchedulerPermittedIdentifiers` dan `UIBackgroundModes: fetch` di `Info.plist`; `WorkmanagerPlugin.registerPeriodicTask` di `AppDelegate`; `Workmanager` sekarang diinisialisasi juga di iOS, dengan dispatcher yang sama untuk task Android. Task dijadwalkan setiap 30 menit selama sync aktif dan dibatalkan saat mati. Callback background membuat `ProviderContainer` sendiri, memuat kredensial seperti `main()`, lalu menjalankan satu siklus.
+- **Belum terverifikasi:** BGTaskScheduler tidak berjalan di simulator, jadi perintah `_simulateLaunchForTaskWithIdentifier` di atas perlu dijalankan di iPhone. Sync saat foreground tetap jalur utama (risiko di bagian 5).
+
 ### PR 10: Metadata series dan reader
 
 - Pull meta: `flutter_rating` → `rating`, `flutter_tags` → `tags`, `kuchie_notes` → `notes`. Kunci `flutter_reader*` dan kunci lain dari `MangaMetaKeys` disalin ke `local_series_reader_meta`.
