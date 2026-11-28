@@ -495,7 +495,17 @@ lib/src/features/sync/controller/sync_engine.dart
 
 **Selesai kalau:** sync berjalan dua arah terhadap server QA nyata. Cek manual dengan WebUI Suwayomi.
 
-**Status (28 November 2026):** engine, backend Suwayomi, dan tes fake backend selesai. Belum dicoba ke server QA nyata. Keputusan yang diambil:
+**Status (28 November 2026):** engine, backend Suwayomi, dan tes fake backend selesai. Sudah dicoba ke server QA nyata, Stable v2.4.2366 dan preview v2.4.2512, lewat `tool/qa/sync_spike/sync_engine_qa_test.dart` (source lokal server, tanpa extension). Keduanya lolos semua langkah:
+
+1. Sync pertama (merge): series di server masuk ke iPhone beserta progres chapter-nya, dan series di iPhone yang ada di server tapi di luar library masuk ke library server.
+2. Baca di iPhone sampai halaman 7 pada chapter yang belum pernah dibuka server: halaman sampai di server (percobaan ulang S2 lewat `fetchChapterPages` berjalan).
+3. Dua sync manual tanpa perubahan: nol mutasi dan nol tulisan lokal.
+4. Read dan bookmark dari server sampai di iPhone.
+5. Unread di iPhone sampai di server.
+6. Kategori baru di iPhone dibuat di server dan series masuk ke kategori itu.
+7. Series dihapus dari library server tanpa dibaca di iPhone: ikut keluar dari library iPhone, lalu sync berikutnya tenang.
+
+Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan belum dengan server yang memakai login. Keputusan yang diambil:
 
 - `LocalCatalog` mendapat `syncSeries()`, `syncChapterStates()`, dan `applySync()`. `applySync` menulis semua hasil pull dalam satu transaksi dan tidak menulis outbox.
 - ID chapter lokal adalah SHA-256 dari URL chapter (`kuchieLocatorId`), jadi chapter server dicocokkan lewat `url` tanpa tabel link. Hanya series yang disimpan di `sync_links`.
