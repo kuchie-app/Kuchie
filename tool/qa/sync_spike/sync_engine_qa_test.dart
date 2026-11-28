@@ -15,14 +15,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
+import 'package:http/http.dart' as http;
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
 import 'package:kuchie/src/features/local_collection/data/local_collection_services.dart';
 import 'package:kuchie/src/features/local_collection/data/local_series_reader_meta.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
+import 'package:kuchie/src/features/sync/controller/server_chapter_pages.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_backend.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_reachability.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_sync_client.dart';
+import 'package:kuchie/src/features/sync/data/sync_journal.dart';
 import 'package:kuchie/src/features/sync/data/sync_state_store.dart';
 import 'package:kuchie/src/features/sync/domain/sync_records.dart';
 import 'package:kuchie/src/utils/graphql/legacy_user_fields_link.dart';
@@ -242,6 +246,30 @@ void main() {
       expect(pulled?.read, isTrue);
       expect(pulled?.page, 5);
       expect(pulled?.readAt, isNotNull);
+
+      // Reading through the server (PR 14): its pages, with the headers the
+      // sync client sends, load as images.
+      final pages =
+          await SuwayomiChapterPages(
+            engine: engine,
+            client: SuwayomiSyncClient(
+              addresses: [_server!],
+              build: (_) => client,
+            ),
+            probe: () async =>
+                SuwayomiReachable(_server!, store.serverIdentity),
+            journal: () async => SyncJournal(catalog),
+          ).pages(
+            seriesId('QA - Lantern Station'),
+            kuchieLocatorId(lantern1['url'] as String),
+          );
+      expect(pages, hasLength(18));
+      final image = await http.get(
+        pages!.first.url,
+        headers: pages.first.headers,
+      );
+      expect(image.statusCode, 200);
+      expect(image.headers['content-type'], startsWith('image/'));
 
       // 2. Read here; it reaches the server, even on a chapter the server
       // never opened (spike S2).

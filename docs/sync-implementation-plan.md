@@ -597,6 +597,8 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 
 **Tes:** resolver dengan fake untuk setiap cabang, dan urutan fallback saat server timeout (batas 3 detik sebelum turun ke langkah 3).
 
+**Status (28 November 2026):** selesai untuk membaca. `ChapterPageResolver` (data) mendapat `ServerChapterPages` sebagai interface, jadi Local tidak bergantung pada Sync; implementasinya `SuwayomiChapterPages` (controller) mencari link series, memetakan chapter lewat SHA-256 URL ke ID server (di-cache per manga), lalu memanggil `fetchChapterPages` dan menyusun URL halaman dengan header auth dan header kustom yang sama dengan klien sync. Server yang lambat lebih dari 3 detik, menolak, atau tidak terjangkau memberi jalan ke extension di iPhone. Pesan `ChapterNeedsServer` dan `ChapterOffline` sesuai desain 3.6 tampil di layar baca. Harness QA memuat 18 halaman lewat server dan mengambil gambarnya di Stable dan preview. **Belum:** state "Butuh server" dan daftar chapter dari server untuk series yang extension-nya tidak ada di iPhone. Engine hanya membuat series lokal untuk source yang terpasang di iPhone, jadi kasus ini baru muncul kalau extension dicopot setelahnya.
+
 ### PR 15: Unduhan ke server dan Simpan untuk offline
 
 - `local_extension_browser.dart` sekitar baris 3716: kalau sync aktif dan chapter punya link, panggil `enqueueChapterDownloads`. Kalau server tidak terjangkau, masukkan ke antrean server di journal. Selain itu, perilaku sekarang (`LocalDownloadQueue`).

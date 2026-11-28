@@ -31,14 +31,22 @@ class SuwayomiSyncClient {
   SuwayomiSyncClient({
     required this.addresses,
     required GraphQLClient Function(String baseUrl) build,
-  }) : _build = build;
+    Future<Map<String, String>> Function(String baseUrl)? headers,
+  }) : _build = build,
+       _headers = headers;
 
   /// Base URLs to try, in order: the main address, then the backup address
   /// (design 3.8). Never empty.
   final List<String> addresses;
 
   final GraphQLClient Function(String baseUrl) _build;
+  final Future<Map<String, String>> Function(String baseUrl)? _headers;
   final _clients = <String, GraphQLClient>{};
+
+  /// The auth and custom headers for plain HTTP requests to [baseUrl], such
+  /// as page images, the same the GraphQL requests carry.
+  Future<Map<String, String>> headers(String baseUrl) async =>
+      await _headers?.call(baseUrl) ?? const {};
 
   /// The client for one of [addresses].
   GraphQLClient at(String baseUrl) => _clients[baseUrl] ??= _build(baseUrl);
@@ -176,7 +184,32 @@ final suwayomiSyncClientProvider = Provider<SuwayomiSyncClient>((ref) {
     );
   }
 
+  Future<Map<String, String>> headers(String baseUrl) async {
+    final Map<String, String>? auth;
+    switch (authType) {
+      case AuthType.none:
+        auth = null;
+      case AuthType.basic:
+        final stored = await ref.read(credentialsProvider.future);
+        auth = stored.isNotBlank ? {'Authorization': stored!} : null;
+      case AuthType.simpleLogin:
+        auth = (await ref.read(
+          authCredentialsStoreProvider.future,
+        )).simpleLoginCookieHeader;
+      case AuthType.uiLogin:
+        final token = await ref
+            .read(authCoordinatorProvider.notifier)
+            .usableUiAccessToken(
+              gqlClient: () => unauthenticated(baseUrl),
+              trigger: 'sync-pages',
+            );
+        auth = token == null ? null : {'Authorization': 'Bearer $token'};
+    }
+    return applyCustomHeaders({...?auth}, custom());
+  }
+
   return SuwayomiSyncClient(
+    headers: headers,
     addresses: syncServerAddresses(
       main: ref.watch(serverExternalUrlProvider),
       lan: ref.watch(serverLanUrlProvider),

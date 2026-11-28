@@ -64,8 +64,10 @@ import '../../manga_book/presentation/manga_details/widgets/manga_details_app_ba
 import '../../manga_book/presentation/reader/controller/auto_webtoon.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../../sync/controller/extension_sync.dart';
+import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/server_series.dart';
 import '../../tracking/presentation/hub/track_sheet.dart';
+import '../data/chapter_page_resolver.dart';
 import '../data/local_browse_preferences.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_services.dart';
@@ -3901,6 +3903,10 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
   final _requests = <String, Future<LocalReaderChapterContent>>{};
   Future<Directory>? _directory;
   bool _closed = false;
+  late final ServerChapterPages _serverPages = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(serverChapterPagesProvider);
 
   @override
   void initState() {
@@ -3945,10 +3951,18 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
     return _requests.putIfAbsent(id, () async {
       try {
         final chapter = _chapters[id]!;
-        final pages = await widget.services.sources.chapterPages(
-          _extension!.id,
-          chapter,
-        );
+        // This iPhone's copy was handled above; then the sync server, then
+        // the extension here (design 3.6).
+        final pages =
+            await ChapterPageResolver(
+              sources: widget.services.sources,
+              server: _serverPages,
+            ).pages(
+              seriesId: widget.series.id,
+              chapterId: chapter.id,
+              extensionId: _extension?.id,
+              chapter: chapter,
+            );
         if (_closed) throw const LocalTransferCancelled();
         final directory = await (_directory ??= Directory.systemTemp.createTemp(
           'kuchie-preview-',
@@ -4004,41 +4018,67 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      FutureBuilder<LocalReaderChapterContent>(
-        future: _initial,
-        initialData: switch (_saved[widget.initialId]) {
-          final chapter? => LocalReaderChapterContent(chapter: chapter),
-          _ => null,
-        },
-        builder: (context, snapshot) {
-          if (snapshot.data case final content?) {
-            return LocalReader(
-              series: widget.series,
-              chapter: content.chapter,
-              catalog: widget.services.catalog,
-              readerFormat: widget.readerFormat,
-              ephemeral: content.ephemeral,
-              preparePage: content.preparePage,
-              chapterEntries: _entries,
-              loadChapter: _load,
-            );
-          }
-          return Scaffold(
-            appBar: detailNavigationAppBar(
-              context,
-              title: Text(widget.initialTitle),
-            ),
-            body: Center(
-              child: snapshot.hasError
-                  ? OutlinedButton(
-                      onPressed: () =>
-                          setState(() => _initial = _load(widget.initialId)),
-                      child: Text(context.l10n.retry),
-                    )
-                  : const CircularProgressIndicator(),
-            ),
-          );
-        },
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<LocalReaderChapterContent>(
+    future: _initial,
+    initialData: switch (_saved[widget.initialId]) {
+      final chapter? => LocalReaderChapterContent(chapter: chapter),
+      _ => null,
+    },
+    builder: (context, snapshot) {
+      if (snapshot.data case final content?) {
+        return LocalReader(
+          series: widget.series,
+          chapter: content.chapter,
+          catalog: widget.services.catalog,
+          readerFormat: widget.readerFormat,
+          ephemeral: content.ephemeral,
+          preparePage: content.preparePage,
+          chapterEntries: _entries,
+          loadChapter: _load,
+        );
+      }
+      return Scaffold(
+        appBar: detailNavigationAppBar(
+          context,
+          title: Text(widget.initialTitle),
+        ),
+        body: Center(
+          child: snapshot.hasError
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (switch (snapshot.error) {
+                            ChapterNeedsServer() => localText(
+                              context,
+                              "This chapter is on your server, which can't be reached. Use Save for offline to read it without internet.",
+                              'Chapter ini disimpan di server, yang tidak terjangkau. Gunakan Simpan untuk offline supaya bisa dibaca tanpa internet.',
+                            ),
+                            ChapterOffline() => localText(
+                              context,
+                              'No internet. Saved chapters still open.',
+                              'Tidak ada internet. Chapter yang disimpan tetap bisa dibuka.',
+                            ),
+                            _ => null,
+                          }
+                          case final message?) ...[
+                        Text(message, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                      ],
+                      OutlinedButton(
+                        onPressed: () =>
+                            setState(() => _initial = _load(widget.initialId)),
+                        child: Text(context.l10n.retry),
+                      ),
+                    ],
+                  ),
+                )
+              : const CircularProgressIndicator(),
+        ),
       );
+    },
+  );
 }
