@@ -693,6 +693,29 @@ void main() {
     expect(await journal.pending(), isNotEmpty);
   });
 
+  test('a page the server holds without a read time is left alone', () async {
+    final manga = server.addManga('/a');
+    server.addChapter(manga, '/a/1').state = const ChapterState(page: 12);
+    server.addChapter(manga, '/a/2').state = const ChapterState(
+      read: true,
+      page: 30,
+    );
+    await engine().sync(manual: true);
+    server.writes.clear();
+    // Full passes compare every chapter again.
+    await engine().sync(manual: true);
+    await engine().sync(manual: true);
+    expect(server.writes, isNot(contains('updateChapters')));
+    expect(server.chapter('/a/1').state.page, 12);
+    expect(server.chapter('/a/2').state.page, 30);
+
+    // Reading here still goes out.
+    clock = clock.add(const Duration(minutes: 1));
+    await readHere('/a', '/a/1', 3);
+    await engine().sync(manual: true);
+    expect(server.chapter('/a/1').state.page, 3);
+  });
+
   group('series no extension here reads ("Needs server")', () {
     test('join the library and sync their reading', () async {
       final manga = server.addManga('/n', sourceId: '9');

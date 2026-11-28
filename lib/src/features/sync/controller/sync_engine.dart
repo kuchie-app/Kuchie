@@ -759,7 +759,16 @@ class _Cycle {
             final json? => ChapterState.fromJson(json),
             null => null,
           };
-          final local = localStates[chapterId] ?? const ChapterState();
+          var local = localStates[chapterId] ?? const ChapterState();
+          // This iPhone keeps a page only with a read time (History). A page
+          // the server holds without one was never changed here: keep it,
+          // instead of sending page 0 back.
+          if (local.readAt == null &&
+              local.page == 0 &&
+              base != null &&
+              base.readAt == null) {
+            local = local.copyWith(page: base.page);
+          }
           var remote = chapter.state;
           // The read time the server stamped on Kuchie's own update stands
           // for the iPhone's; only a newer one is a read elsewhere.
