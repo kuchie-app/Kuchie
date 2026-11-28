@@ -64,6 +64,8 @@ import '../../manga_book/presentation/manga_details/widgets/manga_details_app_ba
 import '../../manga_book/presentation/reader/controller/auto_webtoon.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../../sync/controller/extension_sync.dart';
+import '../../sync/controller/server_series.dart';
+import '../../tracking/presentation/hub/track_sheet.dart';
 import '../data/local_browse_preferences.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_services.dart';
@@ -2625,6 +2627,50 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
   /// Adds the series with the categories the user picks (none checked at
   /// first), or edits them once it is in the library. Unchecking every
   /// category removes it from the library.
+  /// Tracking runs on the sync server (design 4.6): its sheet opens with the
+  /// server's manga id. Without one, the dialog says why.
+  Future<void> _openTracking(LocalSeries? series) async {
+    final server = series == null
+        ? (mangaId: null, gap: ServerSeriesGap.notSynced)
+        : await ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(serverSeriesProvider(series).future);
+    if (!mounted) return;
+    if (server.mangaId case final id?) {
+      return showTrackSheet(context, id, mangaTitle: _manga.title);
+    }
+    await showAppDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(dialog.l10n.tracking),
+        content: Text(switch (server.gap) {
+          ServerSeriesGap.noServerSource => localText(
+            dialog,
+            'Tracking with AniList, MyAnimeList and others runs on your Suwayomi server, which has no source for this series: it comes from a file import or a Kuchie repo.',
+            'Pelacakan AniList, MyAnimeList, dan lainnya berjalan di server Suwayomi, yang tidak punya source untuk series ini: series ini dari file impor atau repo Kuchie.',
+          ),
+          ServerSeriesGap.notSynced => localText(
+            dialog,
+            'Add this series to your library and sync it first; tracking runs on your Suwayomi server.',
+            'Tambahkan series ini ke library dan sinkronkan dulu; pelacakan berjalan di server Suwayomi.',
+          ),
+          _ => localText(
+            dialog,
+            'Tracking with AniList, MyAnimeList and others runs on a Suwayomi server. Connect one in More → Sync to track this series.',
+            'Pelacakan AniList, MyAnimeList, dan lainnya berjalan di server Suwayomi. Hubungkan server di Lainnya → Sinkronisasi untuk melacak series ini.',
+          ),
+        }),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: Text(dialog.l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editLibrary(LocalSeries? series) async {
     if (_savingLibrary) return;
     setState(() => _savingLibrary = true);
@@ -3436,26 +3482,8 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                                         FluentIcons.arrow_sync_24_regular,
                                       ),
                                       label: context.l10n.tracking,
-                                      onPressed: () => showAppDialog<void>(
-                                        context: context,
-                                        builder: (dialog) => AlertDialog(
-                                          title: Text(dialog.l10n.tracking),
-                                          content: Text(
-                                            localText(
-                                              dialog,
-                                              'Tracking with AniList, MyAnimeList and others runs on a Kuchie server. Connect one in Settings to track this series.',
-                                              'Pelacakan AniList, MyAnimeList, dan lainnya berjalan di server Kuchie. Hubungkan server di Pengaturan untuk melacak seri ini.',
-                                            ),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(dialog),
-                                              child: Text(dialog.l10n.close),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                      onPressed: () =>
+                                          unawaited(_openTracking(series)),
                                     ),
                                   ),
                                   Expanded(

@@ -111,6 +111,27 @@ class SyncJournal {
             ?.read<String>('local_key'),
   );
 
+  /// The remote id [localKey] is linked to, if any.
+  Future<String?> remoteIdFor(
+    String backend,
+    SyncLinkKind kind,
+    String localKey,
+  ) => _run(
+    (db) async =>
+        (await db
+                .customSelect(
+                  'SELECT remote_id FROM sync_links '
+                  'WHERE backend = ? AND kind = ? AND local_key = ? LIMIT 1',
+                  variables: [
+                    Variable.withString(backend),
+                    Variable.withString(kind.name),
+                    Variable.withString(localKey),
+                  ],
+                )
+                .getSingleOrNull())
+            ?.read<String>('remote_id'),
+  );
+
   Future<void> putLink(String backend, SyncLink link) => _run(
     (db) => db.customStatement(
       '''
