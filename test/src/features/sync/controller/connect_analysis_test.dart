@@ -40,9 +40,9 @@ class _RecordingEngine extends SyncEngine {
 
 /// Records installs from the server, and what the engine had run by then.
 class _FakeExtensionSync extends Fake implements ExtensionSync {
-  _FakeExtensionSync(this.engine);
+  _FakeExtensionSync(this.recording);
 
-  final _RecordingEngine engine;
+  final _RecordingEngine recording;
   final syncsBeforeInstall = <int>[];
   bool? syncAfter;
 
@@ -52,7 +52,7 @@ class _FakeExtensionSync extends Fake implements ExtensionSync {
     void Function(String step)? onStep,
     bool syncAfter = true,
   }) async {
-    syncsBeforeInstall.add(engine.runs.length);
+    syncsBeforeInstall.add(recording.runs.length);
     this.syncAfter = syncAfter;
     for (final extension in suggestions.toInstall) {
       onStep?.call(extension.name);
