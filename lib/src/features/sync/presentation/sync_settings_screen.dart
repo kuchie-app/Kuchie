@@ -17,6 +17,7 @@ import '../domain/diagram/sync_scene.dart';
 import '../domain/sync_method.dart';
 import 'diagram/sync_explainer.dart';
 import 'extension_suggestions.dart';
+import 'move_to_server_sheet.dart';
 import 'suwayomi_connect_flow.dart';
 import 'suwayomi_detail_screen.dart';
 import 'sync_faq.dart';
@@ -129,6 +130,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                   },
           ),
         ),
+        if (!previewing && overview.method == SyncMethod.suwayomi)
+          const MoveToServerCard(),
         SettingsGroupHeading(label: localText(context, 'Method', 'Metode')),
         SyncMethodList(
           selected: (overview.preview?.method ?? overview.methodSpec.kind),

@@ -54,6 +54,7 @@ class SyncStateStore {
   static const lastFullSyncAtKey = 'sync.lastFullSyncAt';
   static const logKey = 'sync.log';
   static const seriesErrorsKey = 'sync.seriesErrors';
+  static const moveSuggestedKey = 'sync.moveSuggested';
 
   /// Cycles the sync log keeps (design 3.2, Advanced → Sync log).
   static const logLength = 200;
@@ -69,6 +70,7 @@ class SyncStateStore {
     lastFullSyncAtKey,
     logKey,
     seriesErrorsKey,
+    moveSuggestedKey,
   ];
 
   SyncMethod get method => SyncMethod.fromName(_prefs.getString(methodKey));
@@ -182,6 +184,11 @@ class SyncStateStore {
 
   Future<void> setConnectChoice(ConnectChoice choice) =>
       _prefs.setString(connectChoiceKey, choice.name);
+
+  /// Whether the one-time "Move to server" card was answered.
+  bool get moveSuggested => _prefs.getBool(moveSuggestedKey) ?? false;
+
+  Future<void> setMoveSuggested() => _prefs.setBool(moveSuggestedKey, true);
 
   /// Whether the Sync page has played its three-step explainer once.
   bool get explainerSeen => _prefs.getBool(explainerSeenKey) ?? false;

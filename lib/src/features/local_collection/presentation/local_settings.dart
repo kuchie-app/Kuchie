@@ -26,6 +26,8 @@ import '../../settings/presentation/customize_tabs/customize_tabs_screen.dart';
 import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/general/widgets/force_portrait_tile.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../../sync/controller/sync_engine_provider.dart';
+import '../../sync/presentation/move_to_server_sheet.dart';
 import '../data/local_backups.dart';
 import '../data/local_browse_preferences.dart';
 import '../data/local_catalog.dart';
@@ -1070,6 +1072,35 @@ class _LocalStorageSettingsState extends State<_LocalStorageSettings> {
                     ),
                   ],
                 ),
+                if (usage.titles.isNotEmpty &&
+                    ProviderScope.containerOf(
+                      context,
+                      listen: false,
+                    ).read(syncEngineProvider).enabled) ...[
+                  const SizedBox(height: 8),
+                  SettingsGroupCard(
+                    children: [
+                      SettingsGroupRow(
+                        icon: FluentIcons.cloud_arrow_up_24_regular,
+                        title: localText(
+                          context,
+                          'Move to server',
+                          'Pindahkan ke server',
+                        ),
+                        subtitle: localText(
+                          context,
+                          'The server keeps them; this iPhone gets its space back.',
+                          'Server menyimpannya; ruang iPhone kembali lega.',
+                        ),
+                        onTap: () async {
+                          if (await showMoveToServerSheet(context) && mounted) {
+                            _reload();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
                 if (usage.titles.isNotEmpty) ...[
                   SettingsGroupHeading(
                     label: localText(

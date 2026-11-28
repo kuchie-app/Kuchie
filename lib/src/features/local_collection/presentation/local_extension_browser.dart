@@ -68,6 +68,7 @@ import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/server_series.dart';
 import '../../sync/controller/server_transfers.dart';
 import '../../sync/data/sync_journal.dart' show SyncTransferState;
+import '../../sync/presentation/move_to_server_sheet.dart';
 import '../../tracking/presentation/hub/track_sheet.dart';
 import '../data/chapter_page_resolver.dart';
 import '../data/local_browse_preferences.dart';
@@ -3386,6 +3387,25 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
           ),
           onPressed: () => _mark(ids, bookmarked: !allBookmarked),
         ),
+        if (_onServer && ids.any(downloaded.containsKey))
+          IconButton(
+            tooltip: localText(
+              context,
+              'Move to server',
+              'Pindahkan ke server',
+            ),
+            icon: const Icon(FluentIcons.cloud_arrow_up_24_regular),
+            onPressed: () async {
+              final picked = {...ids.where(downloaded.containsKey)};
+              setState(_selection.clear);
+              await showMoveToServerSheet(
+                context,
+                seriesId: _seriesId,
+                chapterIds: picked,
+              );
+              await _loadServer();
+            },
+          ),
         IconButton(
           tooltip: localText(context, 'Save to device', 'Simpan ke perangkat'),
           icon: const Icon(FluentIcons.arrow_circle_down_24_regular),

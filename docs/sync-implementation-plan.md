@@ -642,6 +642,8 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 - State machine dengan fake server: sukses, gagal di source, disk penuh, terputus, dan ditutup paksa (state dibaca ulang dari DB).
 - Properti utama: **tidak ada `removeChapter` sebelum `verified`**.
 
+**Status (28 November 2026):** selesai, kecuali progres di Live Activity. Job-nya `ServerTransfers` dari PR 15 (`server_transfers.dart`, bukan `server_transfer_job.dart`). Salinan iPhone baru dihapus setelah server melaporkan `isDownloaded` dengan jumlah halaman yang sama dengan salinan iPhone. Unduhan yang tidak selesai dalam 6 jam (source menghapus chapter, disk penuh) menjadi `failed`, dan salinan iPhone tetap ada. Titik masuk: kartu satu kali di halaman Sinkronisasi setelah sync pertama, *Pindahkan ke server* di Penyimpanan (semua unduhan), dan bilah pilih-banyak di daftar chapter. Lembar konfirmasi default ke *Hapus dari iPhone*, menampilkan ukuran yang dihemat, dan menyebut chapter impor/repo Kuchie yang tetap di iPhone. Tes: sukses, disk penuh (halaman kurang), tidak selesai, chapter hilang di server, server terputus, app ditutup paksa, dan katalog penjaga yang menggagalkan tes kalau `removeChapter` dipanggil sebelum `verified`.
+
 ### PR 17: Putuskan koneksi
 
 - Dialog berisi jumlah dan ukuran chapter di server, ruang kosong iPhone, serta pilihan *Simpan semuanya ke iPhone* (antrean Simpan untuk offline) atau *Putuskan saja*.
