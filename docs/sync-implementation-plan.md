@@ -692,10 +692,21 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
   - README ditulis ulang: satu library, *Getting started* dengan bagian "Sinkronisasi dengan Suwayomi", dan bagian dua collection dihapus.
   - CHANGELOG 2.0.
 
+**Status (28 November 2026):** selesai, dengan QA otomatis menggantikan pemakaian harian seminggu (keputusan pemilik proyek). Yang dijalankan:
+
+- `flutter analyze` bersih dan seluruh `flutter test` hijau (1.596 tes), termasuk engine dengan fake server (skenario desain 1–8, 12–14), state machine transfer, resolver halaman, scheduler, dan onboarding baru.
+- Harness `tool/qa/sync_spike/sync_engine_qa_test.dart` ke server segar Stable v2.4.2366 dan preview v2.4.2512: sync pertama, pembuatan manga lewat restore, baca dua arah, unread, kategori, meta, baca lewat server, permintaan unduh ke server, penghapusan di server, dan siklus tenang.
+- Simulator, instalasi baru, ke server Suwayomi nyata milik developer (Stable, 907 series): onboarding *Tambah server*, alur hubungkan, analisis, sync pertama, ikon status, detail, saran extension, dan log. Ditemukan dan diperbaiki: sesi app dibuat ulang saat alamat server berubah sehingga alur hubungkan tertutup, dan label onboarding yang terpotong.
+- `flutter build ios --simulator` berhasil.
+
+**Belum diuji:** BGTaskScheduler di perangkat, penyelesaian unduhan server dari source sungguhan (S8), dan server dengan login. Dokumentasi: `docs/sync.md`, README untuk satu library, dan CHANGELOG 2.0.0.
+
 ### PR 21: Rilis Kuchie 2.0
 
 - Gabung `feature/sync` ke `main`.
 - Bump `pubspec.yaml` ke `2.0.0`, lalu tag `v2.0.0` (`release.yml`).
+
+**Status (28 November 2026):** `pubspec.yaml` menjadi `2.0.0+5`. `feature/sync` digabung ke `main` lewat PR rilis, lalu tag `v2.0.0` dan GitHub Release dengan catatan dari CHANGELOG; `release.yml` melampirkan IPA unsigned.
 
 ---
 

@@ -2,6 +2,35 @@
 
 All notable changes to Kuchie are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [2.0.0] - 2026-11-28
+
+Kuchie 2.0 has one library, on your iPhone, and syncs it with a Suwayomi server when you have one. See [Sync with Suwayomi](docs/sync.md).
+
+### One library
+- The Local library is Kuchie's only collection on iPhone. The choice between Local and Server, and the switch in Library and More, are gone.
+- The first screen offers **Start here** or **Add a server**, which opens the Sync connect flow once your library is up.
+
+### Sync with Suwayomi
+- **More → Sync** connects a Suwayomi server. Kuchie compares both libraries before changing anything and asks how to combine them only when both hold different series: merge, use the server's, or use the iPhone's.
+- Two-way sync of library, categories, read and unread, last page, history, bookmarks and reader settings per series. Rating, tags and notes start off, and turn on by themselves when the server already has them from Kuchie's Server mode.
+- Conflicts resolve on their own: a change on one side wins, and when both changed, reading wins over removing, read wins over unread when the times are unclear, and the furthest page is kept.
+- Series the server doesn't have are added to it. Imports, Kuchie repository sources and the built-in Shinigami source stay on the iPhone and are listed under **Needs attention** with the reason.
+- Syncs when Kuchie opens, when the network comes back, shortly after reading, on pull-to-refresh in the Library, and in the background when iOS allows. The cloud next to the Library title shows the state; away from home, changes wait quietly.
+- **Sync log** lists the last 200 syncs. **Advanced** turns each kind of data on or off and sets a backup address.
+- Extensions that differ between the iPhone and the server are suggested; installing one on the iPhone installs it on the server too.
+- **Tracking** for a synced series opens the server's trackers, so progress is never sent twice.
+- **Disconnect** keeps everything on the iPhone and can save the server's chapters first.
+
+### Downloads and reading
+- While sync is on, **Download** saves chapters on the server. **Save for offline** keeps a copy on the iPhone, taken from the server when it has one. Chapters show whether they're on the iPhone, the server, or both.
+- Chapters open from the iPhone's copy, then the server, then the source, so a chapter on the server still opens away from home.
+- **Move to server** sends chapters saved on the iPhone to the server, deleting the iPhone's copy only once the server has every page.
+- Downloads shows the server's queue with retry for failed chapters.
+
+### Known limits
+- Background sync relies on iOS scheduling it; opening Kuchie always syncs.
+- Server tools (server extensions, backups and settings) are in Suwayomi's WebUI.
+
 ## [1.2.1] - 2026-11-26
 
 ### Downloads
