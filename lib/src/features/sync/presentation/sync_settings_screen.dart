@@ -16,6 +16,7 @@ import '../domain/diagram/sync_methods.dart';
 import '../domain/diagram/sync_scene.dart';
 import '../domain/sync_method.dart';
 import 'diagram/sync_explainer.dart';
+import 'disconnect_dialog.dart';
 import 'extension_suggestions.dart';
 import 'move_to_server_sheet.dart';
 import 'suwayomi_connect_flow.dart';
@@ -149,7 +150,14 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                   unawaited(
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => const SuwayomiDetailScreen(),
+                        builder: (detail) => SuwayomiDetailScreen(
+                          onDisconnect: () async {
+                            if (await showDisconnectDialog(detail) &&
+                                detail.mounted) {
+                              Navigator.of(detail).pop();
+                            }
+                          },
+                        ),
                       ),
                     ),
                   );

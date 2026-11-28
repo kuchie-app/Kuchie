@@ -43,6 +43,7 @@ import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/sync_controller.dart';
+import '../../sync/controller/sync_disconnect.dart';
 import '../../sync/controller/sync_scheduler.dart';
 import '../../sync/domain/sync_status.dart';
 import '../../sync/presentation/server_downloads_section.dart';
@@ -108,6 +109,12 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     // Sync runs on its own from here: on opening, when the network comes
     // back and after reading. A finished cycle shows what it pulled.
     ref.read(syncSchedulerProvider).start();
+    unawaited(
+      ref
+          .read(syncDisconnectProvider)
+          .finishPendingDisconnect()
+          .catchError((Object _) {}),
+    );
     ref.listenManual(
       syncControllerProvider.select((overview) => overview.status),
       (previous, next) {

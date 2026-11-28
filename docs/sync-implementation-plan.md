@@ -650,6 +650,8 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 - `clearBackend('suwayomi')`: menghapus link, base, transfer yang belum selesai, dan antrean server. Data library tidak disentuh.
 - `sync.method = none`, lalu status berubah menjadi Off.
 
+**Status (28 November 2026):** selesai. *Putuskan koneksi* ada di detail Suwayomi. Dialognya menghitung chapter yang diunduh di server untuk series di iPhone yang belum tersimpan di iPhone. Kalau server tidak terjangkau, dialog menjelaskan bahwa unduhan tetap di server. Ruang kosong iPhone tidak ditampilkan, karena Flutter tidak menyediakannya tanpa plugin baru. *Simpan semuanya* mengantre chapter itu di antrean Local, yang mengambil halaman dari server, lalu memutus koneksi setelah antrean selesai; app yang dibuka ulang meneruskan tunggu itu (`sync.disconnectAfterSaving`). Memutus koneksi menghapus link, base, outbox, transfer, kunci server di SharedPreferences, dan background refresh. Library, progres, dan extension di iPhone tidak disentuh.
+
 ### PR 18: Onboarding baru
 
 - Langkah pilihan collection dihapus, diganti langkah opsional "Sudah punya server Suwayomi? **Hubungkan**" yang membuka alur PR 7.

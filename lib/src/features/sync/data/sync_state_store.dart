@@ -55,6 +55,7 @@ class SyncStateStore {
   static const logKey = 'sync.log';
   static const seriesErrorsKey = 'sync.seriesErrors';
   static const moveSuggestedKey = 'sync.moveSuggested';
+  static const disconnectAfterSavingKey = 'sync.disconnectAfterSaving';
 
   /// Cycles the sync log keeps (design 3.2, Advanced → Sync log).
   static const logLength = 200;
@@ -71,6 +72,7 @@ class SyncStateStore {
     logKey,
     seriesErrorsKey,
     moveSuggestedKey,
+    disconnectAfterSavingKey,
   ];
 
   SyncMethod get method => SyncMethod.fromName(_prefs.getString(methodKey));
@@ -189,6 +191,13 @@ class SyncStateStore {
   bool get moveSuggested => _prefs.getBool(moveSuggestedKey) ?? false;
 
   Future<void> setMoveSuggested() => _prefs.setBool(moveSuggestedKey, true);
+
+  /// Disconnect waits for Save everything to this iPhone to finish.
+  bool get disconnectAfterSaving =>
+      _prefs.getBool(disconnectAfterSavingKey) ?? false;
+
+  Future<void> setDisconnectAfterSaving() =>
+      _prefs.setBool(disconnectAfterSavingKey, true);
 
   /// Whether the Sync page has played its three-step explainer once.
   bool get explainerSeen => _prefs.getBool(explainerSeenKey) ?? false;
