@@ -310,6 +310,53 @@ class SuwayomiBackend implements SyncBackend {
   }
 
   @override
+  Future<void> setMetas(Map<String, Map<String, String>> metas) async {
+    final items = [
+      for (final MapEntry(key: id, value: values) in metas.entries)
+        if (values.isNotEmpty)
+          Input$SetMangaMetasItemInput(
+            mangaIds: [_id(id)],
+            metas: [
+              for (final MapEntry(:key, :value) in values.entries)
+                Input$MetaInput(key: key, value: value),
+            ],
+          ),
+    ];
+    if (items.isEmpty) return;
+    await _client
+        .mutate$SyncSetMangaMetas(
+          Options$Mutation$SyncSetMangaMetas(
+            variables: Variables$Mutation$SyncSetMangaMetas(
+              input: Input$SetMangaMetasInput(items: items),
+            ),
+          ),
+        )
+        .getData((data) => data.setMangaMetas);
+  }
+
+  @override
+  Future<void> deleteMetas(Map<String, Set<String>> keys) async {
+    final items = [
+      for (final MapEntry(key: id, value: names) in keys.entries)
+        if (names.isNotEmpty)
+          Input$DeleteMangaMetasItemInput(
+            mangaIds: [_id(id)],
+            keys: names.toList(),
+          ),
+    ];
+    if (items.isEmpty) return;
+    await _client
+        .mutate$SyncDeleteMangaMetas(
+          Options$Mutation$SyncDeleteMangaMetas(
+            variables: Variables$Mutation$SyncDeleteMangaMetas(
+              input: Input$DeleteMangaMetasInput(items: items),
+            ),
+          ),
+        )
+        .getData((data) => data.deleteMangaMetas);
+  }
+
+  @override
   Future<List<RemoteChapter>> updateChapters(
     List<String> chapterIds,
     ChapterPatch patch,
@@ -399,6 +446,7 @@ RemoteSeries _series(Fragment$SyncMangaDto manga) => RemoteSeries(
     for (final category in manga.categories.nodes)
       if (category.id != 0) '${category.id}',
   },
+  meta: {for (final entry in manga.meta) entry.key: entry.value},
 );
 
 RemoteChapter _chapter(Fragment$SyncChapterDto chapter) => RemoteChapter(

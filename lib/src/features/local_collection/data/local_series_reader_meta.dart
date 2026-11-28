@@ -46,4 +46,11 @@ class LocalSeriesReaderMeta {
     await onChanged?.call(seriesId);
     return values;
   }
+
+  /// Replaces the overrides of [seriesId] with what sync pulled; nothing is
+  /// recorded for sync, since these are the server's values.
+  Future<void> replaceSynced(String seriesId, Map<String, String> values) =>
+      values.isEmpty
+      ? _preferences.remove('$namespace$seriesId')
+      : _preferences.setString('$namespace$seriesId', jsonEncode(values));
 }

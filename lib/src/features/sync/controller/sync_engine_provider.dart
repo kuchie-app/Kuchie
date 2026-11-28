@@ -34,6 +34,7 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     },
     ensureServerIdentity: (baseUrl) =>
         OfflineServerIdentityRepository(client.at(baseUrl)).resolve(),
+    readerMeta: ref.watch(localSeriesReaderMetaProvider),
   );
   ref.onDispose(engine.cancel);
   return engine;

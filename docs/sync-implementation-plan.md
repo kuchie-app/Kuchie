@@ -555,6 +555,8 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 
 **Tes:** merge per kunci, dan kunci yang tidak dikenal tetap utuh.
 
+**Status (28 November 2026):** selesai. Rating (`flutter_rating`, teks angka), tag (`flutter_tags`, array JSON), dan catatan (`kuchie_notes`) di-merge per field; setelan reader per kunci dari daftar `readerMetaKeys` (semua `MangaMetaKeys` kecuali rating, tag, dan cover server; tes menjaganya tetap sama). Kunci lain, misalnya milik WebUI, tidak pernah diubah atau dihapus. Nilai kosong menghapus kunci di server lewat `deleteMangaMetas`. Rating/tag/catatan ditulis lewat `applySync`; setelan reader lewat `LocalSeriesReaderMeta.replaceSynced`, jadi keduanya tidak masuk outbox. *Rating, tag & catatan* dan *Setelan reader* menyala secara default, jadi tidak perlu auto-enable. Harness QA lolos di Stable dan preview: rating dari server masuk ke iPhone, catatan dan mode reader dari iPhone masuk ke server, lalu sync berikutnya tenang.
+
 ### PR 11: Extension
 
 - `extension_suggestions.dart` (controller):

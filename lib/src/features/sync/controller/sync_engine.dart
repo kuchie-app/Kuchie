@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import '../../local_collection/data/local_catalog.dart';
 import '../../local_collection/data/local_collection_services.dart';
+import '../../local_collection/data/local_series_reader_meta.dart';
 import '../data/suwayomi/suwayomi_identity.dart';
 import '../data/suwayomi/suwayomi_reachability.dart';
 import '../data/sync_backend.dart';
@@ -10,6 +11,7 @@ import '../data/sync_journal.dart';
 import '../data/sync_state_store.dart';
 import '../domain/merge_rules.dart';
 import '../domain/sync_change.dart';
+import '../domain/sync_meta_keys.dart';
 import '../domain/sync_method.dart';
 import '../domain/sync_records.dart';
 import '../domain/sync_status.dart';
@@ -97,6 +99,7 @@ class SyncEngine {
     required SyncBackend Function(String baseUrl) backendAt,
     required Future<Map<String, SyncLocalSource>> Function() localSources,
     required Future<String> Function(String baseUrl) ensureServerIdentity,
+    this.readerMeta,
     DateTime Function()? clock,
     this.onStatus,
     this.batchSize = 50,
@@ -114,6 +117,9 @@ class SyncEngine {
   final SyncBackend Function(String baseUrl) _backendAt;
   final Future<Map<String, SyncLocalSource>> Function() _localSources;
   final Future<String> Function(String baseUrl) _ensureServerIdentity;
+
+  /// Per-series reader settings; without it they don't sync.
+  final LocalSeriesReaderMeta? readerMeta;
   final DateTime Function() _clock;
 
   /// Told each status a cycle passes through; the Sync controller listens.
@@ -614,6 +620,27 @@ class _Cycle {
     final syncsLibrary = store.includes(SyncDataKind.library);
     final syncsProgress = store.includes(SyncDataKind.progress);
     final syncsBookmarks = store.includes(SyncDataKind.bookmarks);
+    final syncsSeriesMeta = store.includes(SyncDataKind.seriesMeta);
+    final readerMeta = store.includes(SyncDataKind.readerMeta)
+        ? engine.readerMeta
+        : null;
+    final seriesMetaBases = await journal.bases(
+      _key,
+      SyncRecordKind.seriesMeta,
+    );
+    final readerMetaBases = await journal.bases(
+      _key,
+      SyncRecordKind.readerMeta,
+    );
+    final metaChangedAt = <(SyncRecordKind, String), DateTime>{
+      for (final change in changes) (change.kind, change.key): change.changedAt,
+    };
+    final seriesMetaWrites = <String, SeriesMeta>{};
+    final readerMetaWrites = <String, Map<String, String>>{};
+    final metaSets = <_Pair, Map<String, String>>{};
+    final metaDeletes = <_Pair, Set<String>>{};
+    final seriesMetaBase = <String, SeriesMeta>{};
+    final readerMetaBase = <String, ReaderMeta>{};
 
     for (final series in dropLocal) {
       seriesWrites.add(
@@ -716,6 +743,93 @@ class _Cycle {
         }
       }
 
+      // Rating, tags, notes and reader settings, per key (design 4.2).
+      if (pair.remote case final remote?) {
+        void push(Map<String, String?> merged, Map<String, String> server) {
+          for (final MapEntry(:key, :value) in merged.entries) {
+            if (value == null) {
+              if (server.containsKey(key)) {
+                metaDeletes.putIfAbsent(pair, () => {}).add(key);
+              }
+            } else if (server[key] != value) {
+              metaSets.putIfAbsent(pair, () => {})[key] = value;
+            }
+          }
+        }
+
+        if (syncsSeriesMeta) {
+          final stored = await catalog.seriesMeta(pair.localId);
+          final local = SeriesMeta(
+            rating: stored.rating == 0 ? null : stored.rating,
+            tags: stored.tags,
+            notes: stored.notes.isEmpty ? null : stored.notes,
+          );
+          final server = seriesMetaFromServer(remote.meta);
+          final base = switch (seriesMetaBases[pair.localId]) {
+            final json? => SeriesMeta.fromJson(json),
+            null => null,
+          };
+          final merged = switch (choice) {
+            ConnectChoice.useServer => server,
+            ConnectChoice.useLocal => local,
+            ConnectChoice.merge => mergeSeriesMeta(
+              base: base,
+              local: local,
+              remote: server,
+              localChangedAt:
+                  metaChangedAt[(SyncRecordKind.seriesMeta, pair.localId)],
+            ).value,
+          };
+          if (merged != local) seriesMetaWrites[pair.localId] = merged;
+          if (merged != server) {
+            push(seriesMetaToServer(merged), remote.meta);
+          }
+          if (merged != base) seriesMetaBase[pair.localId] = merged;
+        }
+        if (readerMeta != null) {
+          final stored = readerMeta.read(pair.localId);
+          final local = ReaderMeta({
+            for (final MapEntry(:key, :value) in stored.entries)
+              if (value != null) key: '$value',
+          });
+          final server = ReaderMeta(remote.meta);
+          final base = switch (readerMetaBases[pair.localId]) {
+            final json? => ReaderMeta.fromJson(json),
+            null => null,
+          };
+          ReaderMeta owned(ReaderMeta meta) => ReaderMeta({
+            for (final MapEntry(:key, :value) in meta.values.entries)
+              if (ownsReaderMetaKey(key)) key: value,
+          });
+          final merged = switch (choice) {
+            ConnectChoice.useServer => owned(server),
+            ConnectChoice.useLocal => owned(local),
+            ConnectChoice.merge => mergeReaderMeta(
+              base: base,
+              local: local,
+              remote: server,
+              owns: ownsReaderMetaKey,
+              localChangedAt:
+                  metaChangedAt[(SyncRecordKind.readerMeta, pair.localId)],
+            ).value,
+          };
+          if (merged != owned(local)) {
+            readerMetaWrites[pair.localId] = {
+              for (final MapEntry(:key, :value) in local.values.entries)
+                if (!ownsReaderMetaKey(key)) key: value,
+              ...merged.values,
+            };
+          }
+          if (merged != owned(server)) {
+            push({
+              for (final key in owned(server).values.keys) key: null,
+              ...merged.values,
+            }, remote.meta);
+          }
+          if (merged != base) readerMetaBase[pair.localId] = merged;
+        }
+      }
+
       if (!syncsLibrary) continue;
       final base = switch (seriesBases[pair.localId]) {
         final json? => SeriesState.fromJson(json),
@@ -811,9 +925,18 @@ class _Cycle {
       categories: newCategories,
       memberships: memberships,
       chapters: chapterWrites,
+      seriesMeta: seriesMetaWrites,
     );
     await catalog.applySync(write);
-    _pulled = seriesWrites.length + memberships.length + chapterWrites.length;
+    for (final MapEntry(key: id, value: values) in readerMetaWrites.entries) {
+      await readerMeta?.replaceSynced(id, values);
+    }
+    _pulled =
+        seriesWrites.length +
+        memberships.length +
+        chapterWrites.length +
+        seriesMetaWrites.length +
+        readerMetaWrites.length;
     await journal.putBases(_key, SyncRecordKind.chapterState, {
       for (final MapEntry(:key, :value) in chapterBase.entries)
         key: value.toJson(),
@@ -911,6 +1034,27 @@ class _Cycle {
     await journal.putBases(_key, SyncRecordKind.series, {
       for (final MapEntry(key: id, value: state) in seriesBase.entries)
         if (!seriesFailed.contains(id)) id: state.toJson(),
+    });
+
+    final metaPairs = {...metaSets.keys, ...metaDeletes.keys}.toList();
+    for (final batch in _batches(metaPairs, engine.batchSize)) {
+      await attempt(batch.map((pair) => pair.localId), () async {
+        await backend.setMetas({
+          for (final pair in batch) pair.remoteId: ?metaSets[pair],
+        });
+        await backend.deleteMetas({
+          for (final pair in batch) pair.remoteId: ?metaDeletes[pair],
+        });
+        _pushed += batch.length;
+      });
+    }
+    await journal.putBases(_key, SyncRecordKind.seriesMeta, {
+      for (final MapEntry(key: id, value: meta) in seriesMetaBase.entries)
+        if (!seriesFailed.contains(id)) id: meta.toJson(),
+    });
+    await journal.putBases(_key, SyncRecordKind.readerMeta, {
+      for (final MapEntry(key: id, value: meta) in readerMetaBase.entries)
+        if (!seriesFailed.contains(id)) id: meta.toJson(),
     });
 
     for (final MapEntry(key: patch, value: pushes) in chapterPushes.entries) {

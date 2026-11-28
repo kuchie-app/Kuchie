@@ -14,6 +14,7 @@ class RemoteSeries {
     this.thumbnailUrl,
     this.inLibraryAt,
     this.categoryIds = const {},
+    this.meta = const {},
   });
 
   final String id;
@@ -30,6 +31,9 @@ class RemoteSeries {
   /// When it was last added to the library, if the backend knows.
   final DateTime? inLibraryAt;
   final Set<String> categoryIds;
+
+  /// Manga meta: rating, tags, notes and reader settings among others.
+  final Map<String, String> meta;
 }
 
 class RemoteCategory {
@@ -138,6 +142,12 @@ abstract interface class SyncBackend {
     Set<String> add = const {},
     Set<String> remove = const {},
   });
+
+  /// Sets manga meta: series id → key → value.
+  Future<void> setMetas(Map<String, Map<String, String>> metas);
+
+  /// Deletes manga meta: series id → keys.
+  Future<void> deleteMetas(Map<String, Set<String>> keys);
 
   /// Applies [patch] to [chapterIds] and returns them as the backend now
   /// holds them, which may differ from the patch (spike S2).

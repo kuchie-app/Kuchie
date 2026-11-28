@@ -14,7 +14,8 @@ import 'package:pointycastle/digests/sha256.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../sync/domain/sync_change.dart';
-import '../../sync/domain/sync_records.dart' show ChapterState, categoryKey;
+import '../../sync/domain/sync_records.dart'
+    show ChapterState, SeriesMeta, categoryKey;
 
 const _maxPages = 4000;
 const _maxPageBytes = 64 * 1024 * 1024;
@@ -1510,6 +1511,34 @@ class LocalCatalog {
           ],
         );
       }
+      for (final MapEntry(key: id, value: meta) in write.seriesMeta.entries) {
+        final seen = <String>{};
+        final tags = [
+          for (final tag in meta.tags.map((tag) => tag.trim()))
+            if (tag.isNotEmpty &&
+                tag.length <= 64 &&
+                seen.add(tag.toLowerCase()))
+              tag,
+        ].take(64).toList();
+        final notes = meta.notes ?? '';
+        await db.customStatement(
+          '''
+          INSERT INTO series_meta (series_id, rating, notes, tags)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(series_id) DO UPDATE SET
+            rating = excluded.rating, notes = excluded.notes,
+            tags = excluded.tags
+          ''',
+          [
+            id,
+            (meta.rating ?? 0).clamp(0, 5),
+            notes.length > _maxNotesLength
+                ? notes.substring(0, _maxNotesLength)
+                : notes,
+            jsonEncode(tags),
+          ],
+        );
+      }
       await _removeEmptySeries(db);
     });
   });
@@ -1792,9 +1821,13 @@ class LocalSyncWrite {
     this.categories = const {},
     this.memberships = const {},
     this.chapters = const [],
+    this.seriesMeta = const {},
   });
 
   final List<LocalSyncSeriesWrite> series;
+
+  /// Series id → its rating, tags and notes, replacing the old ones.
+  final Map<String, SeriesMeta> seriesMeta;
 
   /// Category names to create when missing.
   final Set<String> categories;
@@ -1807,7 +1840,8 @@ class LocalSyncWrite {
       series.isEmpty &&
       categories.isEmpty &&
       memberships.isEmpty &&
-      chapters.isEmpty;
+      chapters.isEmpty &&
+      seriesMeta.isEmpty;
 }
 
 typedef _ChapterMetadata = ({

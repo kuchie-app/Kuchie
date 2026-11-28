@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
 import 'package:kuchie/src/features/local_collection/data/local_collection_services.dart';
+import 'package:kuchie/src/features/local_collection/data/local_series_reader_meta.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_reachability.dart';
@@ -31,6 +32,7 @@ class _Manga {
   DateTime? inLibraryAt;
   final Set<String> categories;
   final chapters = <_Chapter>[];
+  final meta = <String, String>{};
   String get title => 'Title $url';
 }
 
@@ -84,6 +86,7 @@ class _FakeServer implements SyncBackend {
     inLibrary: manga.inLibrary,
     inLibraryAt: manga.inLibraryAt,
     categoryIds: {...manga.categories},
+    meta: {...manga.meta},
   );
 
   RemoteChapter _remote(_Chapter chapter) => RemoteChapter(
@@ -182,6 +185,22 @@ class _FakeServer implements SyncBackend {
   }
 
   @override
+  Future<void> setMetas(Map<String, Map<String, String>> metas) async {
+    writes.add('setMetas');
+    for (final MapEntry(:key, :value) in metas.entries) {
+      mangas[key]!.meta.addAll(value);
+    }
+  }
+
+  @override
+  Future<void> deleteMetas(Map<String, Set<String>> keys) async {
+    writes.add('deleteMetas');
+    for (final MapEntry(:key, :value) in keys.entries) {
+      mangas[key]!.meta.removeWhere((name, _) => value.contains(name));
+    }
+  }
+
+  @override
   Future<List<RemoteChapter>> updateChapters(
     List<String> chapterIds,
     ChapterPatch patch,
@@ -223,6 +242,7 @@ void main() {
   late SuwayomiReachability reachability;
   late List<SyncStatus> statuses;
   late DateTime clock;
+  late LocalSeriesReaderMeta readerMeta;
 
   SyncEngine engine() => SyncEngine(
     catalog: () async => catalog,
@@ -235,6 +255,7 @@ void main() {
     ensureServerIdentity: (_) async => 'server-a',
     clock: () => clock,
     onStatus: statuses.add,
+    readerMeta: readerMeta,
   );
 
   setUp(() async {
@@ -243,6 +264,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     store = SyncStateStore(prefs);
+    readerMeta = LocalSeriesReaderMeta(
+      prefs,
+      onChanged: catalog.recordReaderMetaChange,
+    );
     await store.setConnectChoice(ConnectChoice.merge);
     server = _FakeServer();
     reachability = const SuwayomiReachable('http://server', 'server-a');
@@ -490,6 +515,52 @@ void main() {
         'Action',
         'Drama',
       });
+    });
+
+    test('rating and tags from Server mode come here (scenario 8)', () async {
+      a.meta
+        ..['flutter_rating'] = '4'
+        ..['flutter_tags'] = '["Reread","Favourite"]';
+      await engine().sync(manual: true);
+      final meta = await catalog.seriesMeta(_seriesId('/a'));
+      expect(meta.rating, 4);
+      expect(meta.tags, ['Reread', 'Favourite']);
+      expect(server.writes, isEmpty);
+    });
+
+    test(
+      'notes here reach the server; clearing them deletes the key',
+      () async {
+        await catalog.setNotes(_seriesId('/a'), 'Read the side story first');
+        await engine().sync();
+        expect(a.meta['kuchie_notes'], 'Read the side story first');
+        await catalog.setNotes(_seriesId('/a'), '');
+        await engine().sync();
+        expect(a.meta, isNot(contains('kuchie_notes')));
+        final quiet = await engine().sync(manual: true);
+        expect(quiet.pushed + quiet.pulled, 0);
+      },
+    );
+
+    test('reader settings merge per key; other clients keep theirs '
+        '(scenario 7)', () async {
+      a.meta['webUI_readerLayout'] = 'double';
+      a.meta['flutter_readerPadding'] = '0.1';
+      await readerMeta.patch(_seriesId('/a'), 'flutter_readerMode', 'webtoon');
+      await engine().sync();
+      expect(a.meta, {
+        'webUI_readerLayout': 'double',
+        'flutter_readerPadding': '0.1',
+        'flutter_readerMode': 'webtoon',
+      });
+      expect(readerMeta.read(_seriesId('/a')), {
+        'flutter_readerMode': 'webtoon',
+        'flutter_readerPadding': '0.1',
+      });
+      await readerMeta.patch(_seriesId('/a'), 'flutter_readerMode', null);
+      await engine().sync();
+      expect(a.meta, isNot(contains('flutter_readerMode')));
+      expect(a.meta['webUI_readerLayout'], 'double');
     });
 
     test('a turned-off kind stays out of the merge', () async {

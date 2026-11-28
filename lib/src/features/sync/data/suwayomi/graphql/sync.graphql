@@ -284,3 +284,9 @@ query SyncRestoreStatus($id: String!) {
     state
   }
 }
+
+mutation SyncDeleteMangaMetas($input: DeleteMangaMetasInput!) {
+  deleteMangaMetas(input: $input) {
+    clientMutationId
+  }
+}

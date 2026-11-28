@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
 import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
 import 'package:kuchie/src/features/local_collection/data/local_collection_services.dart';
+import 'package:kuchie/src/features/local_collection/data/local_series_reader_meta.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_backend.dart';
@@ -170,7 +171,12 @@ void main() {
 
       // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
-      final store = SyncStateStore(await SharedPreferences.getInstance());
+      final preferences = await SharedPreferences.getInstance();
+      final store = SyncStateStore(preferences);
+      final readerMeta = LocalSeriesReaderMeta(
+        preferences,
+        onChanged: catalog.recordReaderMetaChange,
+      );
       await store.setConnectChoice(ConnectChoice.merge);
       final identity = OfflineServerIdentityRepository(client);
       final engine = SyncEngine(
@@ -190,6 +196,7 @@ void main() {
           ),
         },
         ensureServerIdentity: (_) => identity.resolve(),
+        readerMeta: readerMeta,
       );
       Future<SyncReport> sync({bool manual = false}) async {
         final report = await engine.sync(manual: manual);
@@ -303,7 +310,40 @@ void main() {
         ['QA Action'],
       );
 
-      // 7. Removed on the server, not read here since: it leaves here too.
+      // 7. Rating from Server mode comes here; notes and a reader setting
+      // here reach the server.
+      await request(
+        'mutation(\$id: Int!) { setMangaMeta(input: {meta: {mangaId: \$id, '
+        'key: "flutter_rating", value: "4"}}) { meta { value } } }',
+        {'id': int.parse(lantern)},
+      );
+      await catalog.setNotes(seriesId('QA - Lantern Station'), 'QA note');
+      await readerMeta.patch(
+        seriesId('QA - Lantern Station'),
+        'flutter_readerMode',
+        'webtoon',
+      );
+      await sync(manual: true);
+      expect(
+        (await catalog.seriesMeta(seriesId('QA - Lantern Station'))).rating,
+        4,
+      );
+      final meta = {
+        for (final entry
+            in (await request(
+                  'query(\$id: Int!) { manga(id: \$id) { meta { key value } } }',
+                  {'id': int.parse(lantern)},
+                ))['manga']['meta']
+                as List<dynamic>)
+          entry['key']: entry['value'],
+      };
+      expect(meta['kuchie_notes'], 'QA note');
+      expect(meta['flutter_readerMode'], 'webtoon');
+      expect(meta['flutter_rating'], '4');
+      final metaQuiet = await sync(manual: true);
+      expect(metaQuiet.pushed + metaQuiet.pulled, 0);
+
+      // 8. Removed on the server, not read here since: it leaves here too.
       await request(
         'mutation(\$ids: [Int!]!) { updateMangas(input: {ids: \$ids, '
         'patch: {inLibrary: false}}) { clientMutationId } }',
