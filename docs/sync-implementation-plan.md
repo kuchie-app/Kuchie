@@ -495,6 +495,8 @@ lib/src/features/sync/controller/sync_engine.dart
 
 **Selesai kalau:** sync berjalan dua arah terhadap server QA nyata. Cek manual dengan WebUI Suwayomi.
 
+**Dari spike S4b (28 November 2026, preview v2.4.2512):** library dan progres per pengguna. `restoreBackup` hanya berefek untuk token dengan role ADMIN (atau server Stable tanpa pengguna). Untuk pengguna biasa, engine membuat manga lewat `fetchSourceManga` + `updateMangas(inLibrary: true)`, dan mengirim `lastPageRead` setelah `fetchChapterPages`. `sync.suwayomi.userId` diisi dari klaim `sub` di JWT. Lihat [sync-spike-results.md](sync-spike-results.md#s4b-multi-pengguna-preview-v242512).
+
 **Status (28 November 2026):** engine, backend Suwayomi, dan tes fake backend selesai. Sudah dicoba ke server QA nyata, Stable v2.4.2366 dan preview v2.4.2512, lewat `tool/qa/sync_spike/sync_engine_qa_test.dart` (source lokal server, tanpa extension). Keduanya lolos semua langkah:
 
 1. Sync pertama (merge): series di server masuk ke iPhone beserta progres chapter-nya, dan series di iPhone yang ada di server tapi di luar library masuk ke library server.
