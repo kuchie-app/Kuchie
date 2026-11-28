@@ -18,6 +18,7 @@ import '../domain/sync_method.dart';
 import 'diagram/sync_explainer.dart';
 import 'extension_suggestions.dart';
 import 'suwayomi_connect_flow.dart';
+import 'suwayomi_detail_screen.dart';
 import 'sync_faq.dart';
 import 'sync_hero_card.dart';
 import 'sync_method_list.dart';
@@ -137,12 +138,18 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                   SyncPreview(kind, syncMethods[kind]!.defaultStatus),
                 )
               : (kind) {
-                  // Turning sync off and the Suwayomi details come with
-                  // the engine and Disconnect (PR 8, PR 17).
-                  if (kind == SyncMethodKind.suwayomi &&
-                      overview.methodSpec.kind == SyncMethodKind.local) {
+                  if (kind != SyncMethodKind.suwayomi) return;
+                  if (overview.methodSpec.kind == SyncMethodKind.local) {
                     openSuwayomiConnect(context);
+                    return;
                   }
+                  unawaited(
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const SuwayomiDetailScreen(),
+                      ),
+                    ),
+                  );
                 },
         ),
         if (!previewing && overview.method == SyncMethod.suwayomi)

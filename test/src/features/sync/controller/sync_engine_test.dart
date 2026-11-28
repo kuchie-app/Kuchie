@@ -517,7 +517,9 @@ void main() {
       });
     });
 
-    test('rating and tags from Server mode come here (scenario 8)', () async {
+    test('rating and tags from Server mode come here and turn the kind on '
+        '(scenario 8)', () async {
+      expect(store.includes(SyncDataKind.seriesMeta), isFalse);
       a.meta
         ..['flutter_rating'] = '4'
         ..['flutter_tags'] = '["Reread","Favourite"]';
@@ -526,11 +528,13 @@ void main() {
       expect(meta.rating, 4);
       expect(meta.tags, ['Reread', 'Favourite']);
       expect(server.writes, isEmpty);
+      expect(store.includes(SyncDataKind.seriesMeta), isTrue);
     });
 
     test(
       'notes here reach the server; clearing them deletes the key',
       () async {
+        await store.setIncludes(SyncDataKind.seriesMeta, true);
         await catalog.setNotes(_seriesId('/a'), 'Read the side story first');
         await engine().sync();
         expect(a.meta['kuchie_notes'], 'Read the side story first');
@@ -641,6 +645,18 @@ void main() {
     expect(identical(await first, await second), isTrue);
     // The first cycle and the rerun it was asked for.
     expect(statuses.whereType<SyncInProgress>(), hasLength(2));
+  });
+
+  test('each cycle lands in the log; series errors are kept', () async {
+    reachability = const SuwayomiUnreachable();
+    await engine().sync();
+    reachability = const SuwayomiReachable('http://server', 'server-a');
+    server.canCreate = false;
+    await addLocal('/new');
+    await engine().sync(manual: true);
+    expect(store.log.map((entry) => entry.outcome), ['synced', 'unreachable']);
+    expect(store.log.first.seriesErrors, 1);
+    expect(store.seriesErrors, {_seriesId('/new'): 'notOnServer'});
   });
 
   test('pushed changes leave the outbox; failed ones stay', () async {

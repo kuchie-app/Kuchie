@@ -198,6 +198,16 @@ class SyncEngine {
       return const SyncReport(SyncOutcome.skipped);
     }
     onStatus?.call(const SyncInProgress());
+    final report = await _attempt(manual);
+    try {
+      await _record(report);
+    } catch (_) {
+      // The log is for reading later; a full disk must not fail the sync.
+    }
+    return report;
+  }
+
+  Future<SyncReport> _attempt(bool manual) async {
     try {
       final report = await _cycle(manual);
       if (report.outcome == SyncOutcome.synced) {
@@ -218,6 +228,27 @@ class SyncEngine {
       onStatus?.call(await _waitingStatus());
       return SyncReport(SyncOutcome.failed, error: error);
     }
+  }
+
+  /// Adds [report] to the sync log, and keeps why series did not sync for
+  /// Needs attention.
+  Future<void> _record(SyncReport report) async {
+    if (report.outcome == SyncOutcome.synced) {
+      await _store.setSeriesErrors({
+        for (final MapEntry(:key, :value) in report.seriesErrors.entries)
+          key: value.name,
+      });
+    }
+    await _store.appendLog(
+      SyncLogEntry(
+        at: _clock(),
+        outcome: report.outcome.name,
+        pulled: report.pulled,
+        pushed: report.pushed,
+        seriesErrors: report.seriesErrors.length,
+        message: report.error == null ? null : '${report.error}',
+      ),
+    );
   }
 
   void _scheduleRetry() {
@@ -620,6 +651,16 @@ class _Cycle {
     final syncsLibrary = store.includes(SyncDataKind.library);
     final syncsProgress = store.includes(SyncDataKind.progress);
     final syncsBookmarks = store.includes(SyncDataKind.bookmarks);
+    // Rating, tags and notes start off, unless the server holds them
+    // already, as after Server mode (design 3.4).
+    if (!store.choseIncludes(SyncDataKind.seriesMeta) &&
+        remoteLibrary.any(
+          (series) =>
+              series.meta.containsKey(ratingMetaKey) ||
+              series.meta.containsKey(tagsMetaKey),
+        )) {
+      await store.setIncludes(SyncDataKind.seriesMeta, true);
+    }
     final syncsSeriesMeta = store.includes(SyncDataKind.seriesMeta);
     final readerMeta = store.includes(SyncDataKind.readerMeta)
         ? engine.readerMeta
@@ -772,8 +813,10 @@ class _Cycle {
           final merged = switch (choice) {
             ConnectChoice.useServer => server,
             ConnectChoice.useLocal => local,
+            // Without a base, a field only one side set is an addition,
+            // not a conflict: start from empty.
             ConnectChoice.merge => mergeSeriesMeta(
-              base: base,
+              base: base ?? const SeriesMeta(),
               local: local,
               remote: server,
               localChangedAt:
@@ -805,7 +848,7 @@ class _Cycle {
             ConnectChoice.useServer => owned(server),
             ConnectChoice.useLocal => owned(local),
             ConnectChoice.merge => mergeReaderMeta(
-              base: base,
+              base: base ?? const ReaderMeta(),
               local: local,
               remote: server,
               owns: ownsReaderMetaKey,

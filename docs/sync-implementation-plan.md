@@ -568,16 +568,22 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
   - Build tanpa runtime (`local_mihon_runtime` tidak tersedia): pasang di server saja.
 - Badge lokasi di baris extension.
 
+**Status (28 November 2026):** selesai, kecuali badge lokasi per baris extension, yang dipindah ke *Perlu perhatian*: halaman Sinkronisasi dan detail Suwayomi menampilkan extension yang hanya ada di iPhone (sekali ketuk dipasang di server, lalu satu siklus berjalan), yang hanya ada di server, dan yang tidak ada di store server. Pasang ganda: memasang extension baru di iPhone juga memasangnya di server saat sync aktif; kegagalan di server tidak menggagalkan pemasangan di iPhone. Jumlah series terdampak tidak ditampilkan, karena `SyncExtensions` tidak memetakan paket ke source id. Belum diuji ke server nyata: server QA tidak punya extension store.
+
 ### PR 12: Tracking lewat server
 
 - `local_extension_browser.dart` sekitar baris 3428: kalau series punya link Suwayomi, buka sheet tracking dari `features/tracking` dengan `mangaId` server. Kalau tidak punya link, tampilkan dialog dengan alasan spesifik ("Series ini dari file import…").
 - Tidak ada tracker lokal yang perlu dimatikan, karena Local memang belum punya tracker.
+
+**Status (28 November 2026):** selesai. `serverSeriesProvider` mencari link series di `sync_links`. Dengan link, tombol Tracking membuka `showTrackSheet` dengan ID manga server; tanpa link, dialog menyebut alasannya: sync mati, series dari impor atau repo Kuchie, atau belum tersinkron. Sheet tracking memakai klien GraphQL aplikasi, yang membaca alamat dan kredensial yang sama dengan Sync.
 
 ### PR 13: Perlu perhatian dan log
 
 - `unsynced_series_screen.dart`: daftar per alasan, dengan aksi *Pasang extension* dan *Coba lagi*.
 - `sync_log_screen.dart`: 200 kejadian terakhir di ring buffer (SharedPreferences atau tabel kecil), berisi waktu, jenis, jumlah perubahan, dan error.
 - Halaman detail Suwayomi sesuai desain 3.4, dengan toggle di *Lanjutan* dan *Alamat cadangan*.
+
+**Status (28 November 2026):** selesai. Log disimpan di SharedPreferences (`sync.log`, 200 siklus terbaru, ikut terhapus saat putuskan koneksi); setiap siklus, termasuk yang gagal atau tidak terjangkau, mencatat hasil, jumlah masuk/keluar, error per series, dan pesannya. Error per series siklus terakhir disimpan di `sync.seriesErrors`. *Perlu perhatian* mengelompokkan series per alasan (impor, repo Kuchie, Shinigami bawaan, tidak bisa ditambahkan server, permintaan gagal, menunggu sync) dengan *Coba lagi*. Detail Suwayomi: alamat, status, Perlu perhatian, extension, Lanjutan (toggle *Yang disinkronkan* dan alamat cadangan lewat layar Koneksi yang sudah ada), dan log. Sesuai desain 3.4, *Rating, tag & catatan* sekarang mati secara default dan menyala sendiri kalau server sudah punya `flutter_rating` atau `flutter_tags`. Merge meta tanpa base sekarang mulai dari kosong, jadi nilai yang hanya ada di satu sisi tidak kalah oleh sisi yang kosong.
 
 ### PR 14: `ChapterPageResolver` dan baca lewat server
 

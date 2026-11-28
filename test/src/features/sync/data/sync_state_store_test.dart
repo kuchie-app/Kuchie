@@ -13,14 +13,39 @@ void main() {
     store = SyncStateStore(prefs);
   });
 
-  test('starts off, with everything included', () {
+  test('starts off, with everything but rating, tags and notes included', () {
     expect(store.method, SyncMethod.none);
     expect(store.serverIdentity, isNull);
     expect(store.userId, isNull);
     expect(store.lastSuccessAt, isNull);
     expect(store.lastError, isNull);
     expect(store.chapterCursor, isNull);
-    expect(SyncDataKind.values.every(store.includes), isTrue);
+    expect(
+      [
+        for (final kind in SyncDataKind.values)
+          if (!store.includes(kind)) kind,
+      ],
+      [SyncDataKind.seriesMeta],
+    );
+    expect(store.choseIncludes(SyncDataKind.seriesMeta), isFalse);
+  });
+
+  test('the log keeps the newest 200 cycles', () async {
+    for (var i = 0; i < SyncStateStore.logLength + 5; i++) {
+      await store.appendLog(
+        SyncLogEntry(
+          at: DateTime.utc(2026, 11, 28, 0, i),
+          outcome: 'synced',
+          pushed: i,
+        ),
+      );
+    }
+    final log = store.log;
+    expect(log, hasLength(SyncStateStore.logLength));
+    expect(log.first.pushed, SyncStateStore.logLength + 4);
+    expect(log.first.at, DateTime.utc(2026, 11, 28, 0, 204));
+    await store.forgetServer();
+    expect(store.log, isEmpty);
   });
 
   test('keeps the method under sync.method; none removes it', () async {

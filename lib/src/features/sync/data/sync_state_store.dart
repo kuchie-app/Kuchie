@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +52,11 @@ class SyncStateStore {
   static const explainerSeenKey = 'sync.explainerSeen';
   static const connectChoiceKey = 'sync.suwayomi.connectChoice';
   static const lastFullSyncAtKey = 'sync.lastFullSyncAt';
+  static const logKey = 'sync.log';
+  static const seriesErrorsKey = 'sync.seriesErrors';
+
+  /// Cycles the sync log keeps (design 3.2, Advanced → Sync log).
+  static const logLength = 200;
 
   /// Keys that belong to the connected server; cleared on disconnect.
   static const _serverKeys = [
@@ -60,6 +67,8 @@ class SyncStateStore {
     lastErrorKey,
     chapterCursorKey,
     lastFullSyncAtKey,
+    logKey,
+    seriesErrorsKey,
   ];
 
   SyncMethod get method => SyncMethod.fromName(_prefs.getString(methodKey));
@@ -121,12 +130,50 @@ class SyncStateStore {
   Future<void> setLastFullSyncAt(DateTime at) =>
       _prefs.setInt(lastFullSyncAtKey, at.millisecondsSinceEpoch);
 
-  /// Every kind is synced until the reader turns it off.
+  /// Every kind is synced until the reader turns it off, except rating,
+  /// tags and notes, which start off (design 3.4) until the reader turns
+  /// them on or the server turns out to hold them already.
   bool includes(SyncDataKind kind) =>
-      _prefs.getBool(kind.preferenceKey) ?? true;
+      _prefs.getBool(kind.preferenceKey) ?? kind != SyncDataKind.seriesMeta;
+
+  /// Whether [kind] was set, by the reader or by sync, rather than default.
+  bool choseIncludes(SyncDataKind kind) =>
+      _prefs.containsKey(kind.preferenceKey);
 
   Future<void> setIncludes(SyncDataKind kind, bool include) =>
       _prefs.setBool(kind.preferenceKey, include);
+
+  /// The last cycles, newest first.
+  List<SyncLogEntry> get log {
+    final stored = _prefs.getStringList(logKey) ?? const [];
+    return [for (final line in stored) ?SyncLogEntry.decode(line)];
+  }
+
+  Future<void> appendLog(SyncLogEntry entry) => _prefs.setStringList(logKey, [
+    entry.encode(),
+    ...(_prefs.getStringList(logKey) ?? const []).take(logLength - 1),
+  ]);
+
+  /// Local series id → why the last cycle could not sync it.
+  Map<String, String> get seriesErrors {
+    final stored = _prefs.getString(seriesErrorsKey);
+    if (stored == null) return const {};
+    try {
+      return switch (jsonDecode(stored)) {
+        final Map<String, Object?> map => {
+          for (final MapEntry(:key, :value) in map.entries)
+            if (value is String) key: value,
+        },
+        _ => const {},
+      };
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  Future<void> setSeriesErrors(Map<String, String> errors) => errors.isEmpty
+      ? _prefs.remove(seriesErrorsKey)
+      : _prefs.setString(seriesErrorsKey, jsonEncode(errors));
 
   /// What the first sync will do, chosen when connecting; the engine reads
   /// it.
@@ -147,6 +194,57 @@ class SyncStateStore {
     await setMethod(SyncMethod.none);
     for (final key in _serverKeys) {
       await _prefs.remove(key);
+    }
+  }
+}
+
+/// One cycle in the sync log.
+class SyncLogEntry {
+  const SyncLogEntry({
+    required this.at,
+    required this.outcome,
+    this.pulled = 0,
+    this.pushed = 0,
+    this.seriesErrors = 0,
+    this.message,
+  });
+
+  final DateTime at;
+
+  /// A `SyncOutcome` name: synced, unreachable, actionNeeded, failed,
+  /// cancelled.
+  final String outcome;
+  final int pulled;
+  final int pushed;
+  final int seriesErrors;
+  final String? message;
+
+  String encode() => jsonEncode({
+    'at': at.millisecondsSinceEpoch,
+    'outcome': outcome,
+    'pulled': pulled,
+    'pushed': pushed,
+    'errors': seriesErrors,
+    'message': ?message,
+  });
+
+  static SyncLogEntry? decode(String line) {
+    try {
+      return switch (jsonDecode(line)) {
+        {'at': final int at, 'outcome': final String outcome} &&
+            final Map map =>
+          SyncLogEntry(
+            at: DateTime.fromMillisecondsSinceEpoch(at, isUtc: true),
+            outcome: outcome,
+            pulled: map['pulled'] as int? ?? 0,
+            pushed: map['pushed'] as int? ?? 0,
+            seriesErrors: map['errors'] as int? ?? 0,
+            message: map['message'] as String?,
+          ),
+        _ => null,
+      };
+    } on FormatException {
+      return null;
     }
   }
 }
