@@ -356,6 +356,37 @@ class SuwayomiBackend implements SyncBackend {
         .getData((data) => data.deleteMangaMetas);
   }
 
+  /// Extensions the server lists from its stores, installed or not.
+  Future<List<ServerExtension>> extensions() async {
+    final nodes = await _client.query$SyncExtensions().getData(
+      (data) => data.extensions.nodes,
+    );
+    if (nodes == null) throw StateError('The server sent no extensions.');
+    return [
+      for (final extension in nodes)
+        ServerExtension(
+          package: extension.pkgName,
+          name: extension.name,
+          language: extension.lang,
+          installed: extension.isInstalled,
+        ),
+    ];
+  }
+
+  /// Installs [package] from the server's own stores.
+  Future<void> installExtension(String package) => _client
+      .mutate$SyncUpdateExtension(
+        Options$Mutation$SyncUpdateExtension(
+          variables: Variables$Mutation$SyncUpdateExtension(
+            input: Input$UpdateExtensionInput(
+              id: package,
+              patch: Input$UpdateExtensionPatchInput(install: true),
+            ),
+          ),
+        ),
+      )
+      .getData((data) => data.updateExtension);
+
   @override
   Future<List<RemoteChapter>> updateChapters(
     List<String> chapterIds,
@@ -461,3 +492,18 @@ RemoteChapter _chapter(Fragment$SyncChapterDto chapter) => RemoteChapter(
     readAt: suwayomiTime(chapter.user.lastReadAt),
   ),
 );
+
+/// An extension a Suwayomi server lists.
+class ServerExtension {
+  const ServerExtension({
+    required this.package,
+    required this.name,
+    required this.language,
+    required this.installed,
+  });
+
+  final String package;
+  final String name;
+  final String language;
+  final bool installed;
+}

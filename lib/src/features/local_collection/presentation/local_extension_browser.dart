@@ -63,6 +63,7 @@ import '../../manga_book/presentation/manga_details/widgets/manga_description.da
 import '../../manga_book/presentation/manga_details/widgets/manga_details_app_bar.dart';
 import '../../manga_book/presentation/reader/controller/auto_webtoon.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../../sync/controller/extension_sync.dart';
 import '../data/local_browse_preferences.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_services.dart';
@@ -336,6 +337,15 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
       }
     });
     if (installed case final extension? when mounted) {
+      // One Install button: the server gets it too while sync is on.
+      if (!update) {
+        unawaited(
+          ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(extensionSyncProvider).installedHere(extension.packageId),
+        );
+      }
       await _announceInstalled(extension, update: update);
     }
   }

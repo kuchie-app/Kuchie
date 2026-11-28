@@ -14,7 +14,9 @@ import '../controller/sync_controller.dart';
 import '../data/sync_state_store.dart';
 import '../domain/diagram/sync_methods.dart';
 import '../domain/diagram/sync_scene.dart';
+import '../domain/sync_method.dart';
 import 'diagram/sync_explainer.dart';
+import 'extension_suggestions.dart';
 import 'suwayomi_connect_flow.dart';
 import 'sync_faq.dart';
 import 'sync_hero_card.dart';
@@ -143,6 +145,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                   }
                 },
         ),
+        if (!previewing && overview.method == SyncMethod.suwayomi)
+          const ExtensionSuggestionsSection(),
         SettingsGroupHeading(
           label: localText(context, 'Common questions', 'Pertanyaan umum'),
         ),
