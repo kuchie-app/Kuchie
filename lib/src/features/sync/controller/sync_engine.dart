@@ -100,6 +100,7 @@ class SyncEngine {
     required Future<Map<String, SyncLocalSource>> Function() localSources,
     required Future<String> Function(String baseUrl) ensureServerIdentity,
     this.readerMeta,
+    this.onNewSeries,
     DateTime Function()? clock,
     this.onStatus,
     this.batchSize = 50,
@@ -120,6 +121,14 @@ class SyncEngine {
 
   /// Per-series reader settings; without it they don't sync.
   final LocalSeriesReaderMeta? readerMeta;
+
+  /// Told the series a cycle added to this iPhone from [baseUrl], with the
+  /// server's thumbnail path, so their covers can be fetched.
+  final void Function(
+    String baseUrl,
+    List<({String seriesId, String thumbnailUrl})> series,
+  )?
+  onNewSeries;
   final DateTime Function() _clock;
 
   /// Told each status a cycle passes through; the Sync controller listens.
@@ -317,6 +326,7 @@ class SyncEngine {
       journal: journal,
       backend: backend,
       manual: manual,
+      baseUrl: baseUrl,
     );
     final report = await run.run();
     final now = _clock();
@@ -372,8 +382,10 @@ class _Cycle {
     required this.journal,
     required this.backend,
     required this.manual,
+    required this.baseUrl,
   });
 
+  final String baseUrl;
   final SyncEngine engine;
   final LocalCatalog catalog;
   final SyncJournal journal;
@@ -443,8 +455,18 @@ class _Cycle {
     };
     final pairs = <String, _Pair>{};
     final linkedRemote = <String>{};
+    final retired = <String>[];
     for (final link in links) {
       if (link.kind != SyncLinkKind.series) continue;
+      // A "Needs server" series whose extension is here now becomes the
+      // real Mihon series below; the server keeps its reading state.
+      final linkedRemoteSeries = remoteById[link.remoteId];
+      if (isServerOnlySeriesId(link.localKey) &&
+          linkedRemoteSeries != null &&
+          sources.containsKey(linkedRemoteSeries.sourceId)) {
+        retired.add(link.localKey);
+        continue;
+      }
       pairs[link.localKey] = _Pair(
         localId: link.localKey,
         remoteId: link.remoteId,
@@ -487,9 +509,25 @@ class _Cycle {
       if (source == null) {
         if (firstSync && choice == ConnectChoice.useLocal) {
           dropRemote.add(series.id);
-        } else {
-          notReadableHere++;
+          continue;
         }
+        // No extension here: the series still joins the library, read
+        // through the server ("Needs server", design 3.5).
+        notReadableHere++;
+        linkedRemote.add(series.id);
+        newLinks.add(
+          _Pair(
+            localId: serverOnlySeriesId(series.id),
+            remoteId: series.id,
+            local: localById[serverOnlySeriesId(series.id)],
+            remote: series,
+            newSource: LocalSeriesSource(
+              sourceId: serverOnlySourceId,
+              mangaId: series.id,
+              locator: series.url,
+            ),
+          ),
+        );
         continue;
       }
       final mangaId = kuchieLocatorId(series.url);
@@ -558,6 +596,10 @@ class _Cycle {
       for (final (series, sourceId, url) in create) {
         linkFound(series, created[(sourceId, url)]);
       }
+    }
+    for (final id in retired) {
+      await journal.removeLink(_key, SyncLinkKind.series, id);
+      await catalog.forgetSyncPlaceholder(id);
     }
     for (final pair in newLinks) {
       await journal.putLink(
@@ -971,6 +1013,19 @@ class _Cycle {
       seriesMeta: seriesMetaWrites,
     );
     await catalog.applySync(write);
+    // New series, and on a full pass every one still without a cover.
+    final added = [
+      for (final pair in active)
+        if (pair.remote?.thumbnailUrl case final thumbnail?)
+          if (full
+              ? pair.remote!.inLibrary
+              : pair.local == null &&
+                    seriesWrites.any(
+                      (series) => series.id == pair.localId && series.inLibrary,
+                    ))
+            (seriesId: pair.localId, thumbnailUrl: thumbnail),
+    ];
+    if (added.isNotEmpty) engine.onNewSeries?.call(baseUrl, added);
     for (final MapEntry(key: id, value: values) in readerMetaWrites.entries) {
       await readerMeta?.replaceSynced(id, values);
     }

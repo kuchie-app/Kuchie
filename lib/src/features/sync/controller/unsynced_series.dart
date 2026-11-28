@@ -59,6 +59,8 @@ UnsyncedReason? _reason(
   Set<String> linked,
   Map<String, String> errors,
 ) {
+  // Read through the server, so it is synced.
+  if (isServerOnlySeriesId(series.id)) return null;
   final source = series.source;
   if (source == null) return UnsyncedReason.importedFile;
   if (parseLocalSource(source.sourceId) == null) {

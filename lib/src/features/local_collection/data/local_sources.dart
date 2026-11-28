@@ -1354,7 +1354,7 @@ class LocalSources {
   LocalSourceRepository _parseRepository(Uri url, Map<String, Object?> data) {
     if (url == _keiyoushiIndex && data['format'] == 'kuchie.keiyoushi.v2') {
       // Saved before stores carried their key; Keiyoushi publishes this one.
-      const key = _keiyoushiSigningKey;
+      const key = keiyoushiSigningKey;
       return LocalSourceRepository._(
         url,
         'Keiyoushi',

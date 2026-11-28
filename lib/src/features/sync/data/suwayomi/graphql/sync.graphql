@@ -290,3 +290,16 @@ mutation SyncDeleteMangaMetas($input: DeleteMangaMetasInput!) {
     clientMutationId
   }
 }
+
+# Which extension each source belongs to, to count a server extension's
+# series.
+query SyncSourcePackages {
+  sources {
+    nodes {
+      id
+      extension {
+        pkgName
+      }
+    }
+  }
+}

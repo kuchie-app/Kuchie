@@ -421,8 +421,34 @@ class SuwayomiBackend implements SyncBackend {
           name: extension.name,
           language: extension.lang,
           installed: extension.isInstalled,
+          storeIndexUrl: extension.storeIndexUrl,
         ),
     ];
+  }
+
+  /// The extension stores the server reads, with their signing keys.
+  Future<List<ServerStore>> extensionStores() async {
+    final nodes = await _client.query$SyncExtensionStores().getData(
+      (data) => data.extensionStores.nodes,
+    );
+    if (nodes == null) throw StateError('The server sent no stores.');
+    return [
+      for (final store in nodes)
+        ServerStore(
+          indexUrl: store.indexUrl,
+          signingKey: store.signingKey.toLowerCase(),
+          name: store.name,
+        ),
+    ];
+  }
+
+  /// Source id → the package of the extension it comes from.
+  Future<Map<String, String>> sourcePackages() async {
+    final nodes = await _client.query$SyncSourcePackages().getData(
+      (data) => data.sources.nodes,
+    );
+    if (nodes == null) throw StateError('The server sent no sources.');
+    return {for (final source in nodes) source.id: source.$extension.pkgName};
   }
 
   /// Installs [package] from the server's own stores.
@@ -554,10 +580,30 @@ class ServerExtension {
     required this.name,
     required this.language,
     required this.installed,
+    this.storeIndexUrl,
   });
 
   final String package;
   final String name;
   final String language;
   final bool installed;
+
+  /// The store it comes from, as the server saved its URL.
+  final String? storeIndexUrl;
+}
+
+/// An extension store a Suwayomi server reads.
+class ServerStore {
+  const ServerStore({
+    required this.indexUrl,
+    required this.signingKey,
+    required this.name,
+  });
+
+  final String indexUrl;
+
+  /// Lower-case hex SHA-256; the same store on this iPhone has the same key
+  /// even at another URL (spike S7).
+  final String signingKey;
+  final String name;
 }

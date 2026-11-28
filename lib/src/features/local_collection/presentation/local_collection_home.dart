@@ -47,6 +47,7 @@ import '../../sync/controller/sync_controller.dart';
 import '../../sync/controller/sync_disconnect.dart';
 import '../../sync/controller/sync_scheduler.dart';
 import '../../sync/domain/sync_status.dart';
+import '../../sync/presentation/extension_suggestions.dart';
 import '../../sync/presentation/server_downloads_section.dart';
 import '../../sync/presentation/suwayomi_connect_flow.dart';
 import '../../sync/presentation/sync_settings_screen.dart';
@@ -639,47 +640,58 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
               icon: Icons.search_off,
               title: context.l10n.noResultFound,
             )
-          : _LocalEmpty(
-              icon: Icons.auto_stories_outlined,
-              illustration: const KuchieMotionReveal(
-                child: KuchieCharacterMotion(
-                  phase: KuchieCharacterPhase.empty,
-                  width: 124,
-                  play: false,
-                ),
-              ),
-              title: localText(
-                context,
-                'Your local library is empty',
-                'Perpustakaan lokal masih kosong',
-              ),
-              message: localText(
-                context,
-                'Import manga from Files or add a source to save chapters to this iPhone.',
-                'Impor manga dari File atau tambah sumber untuk menyimpan chapter ke iPhone ini.',
-              ),
-              actions: [
-                FilledButton.icon(
-                  onPressed: _importing
-                      ? null
-                      : () => _import(services.catalog),
-                  icon: _importing
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.folder_open_outlined),
-                  label: Text(
-                    localText(context, 'Import manga', 'Impor manga'),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => setState(() {
-                    _tab = 2;
-                    _showExtensions = true;
-                  }),
-                  child: Text(
-                    localText(context, 'Add a source', 'Tambah sumber'),
+          : Column(
+              children: [
+                // Connected but nothing readable here yet: the server's
+                // series wait for their extensions.
+                const ServerLibraryWaitingCard(),
+                Expanded(
+                  child: _LocalEmpty(
+                    icon: Icons.auto_stories_outlined,
+                    illustration: const KuchieMotionReveal(
+                      child: KuchieCharacterMotion(
+                        phase: KuchieCharacterPhase.empty,
+                        width: 124,
+                        play: false,
+                      ),
+                    ),
+                    title: localText(
+                      context,
+                      'Your local library is empty',
+                      'Perpustakaan lokal masih kosong',
+                    ),
+                    message: localText(
+                      context,
+                      'Import manga from Files or add a source to save chapters to this iPhone.',
+                      'Impor manga dari File atau tambah sumber untuk menyimpan chapter ke iPhone ini.',
+                    ),
+                    actions: [
+                      FilledButton.icon(
+                        onPressed: _importing
+                            ? null
+                            : () => _import(services.catalog),
+                        icon: _importing
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.folder_open_outlined),
+                        label: Text(
+                          localText(context, 'Import manga', 'Impor manga'),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _tab = 2;
+                          _showExtensions = true;
+                        }),
+                        child: Text(
+                          localText(context, 'Add a source', 'Tambah sumber'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

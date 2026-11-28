@@ -42,7 +42,7 @@ bool _isKeiyoushiUrl(Uri url) {
 
 /// The certificate Keiyoushi signs its APKs with, for stores saved before
 /// Kuchie recorded each store's key.
-const _keiyoushiSigningKey =
+const keiyoushiSigningKey =
     '9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2';
 
 Uri? _secureArtifactUri(String raw) {

@@ -188,3 +188,21 @@ SeriesMatch matchSeries({
     ],
   );
 }
+
+/// The source of a series only the sync server can read: its extension
+/// isn't on this iPhone (design 3.5, "Needs server"). No colon, so it never
+/// parses as a Mihon source.
+const serverOnlySourceId = 'suwayomi';
+
+const _serverOnlyPrefix = 'suwayomi-manga-';
+
+/// The Local id of server manga [remoteId] while only the server reads it.
+String serverOnlySeriesId(String remoteId) => '$_serverOnlyPrefix$remoteId';
+
+bool isServerOnlySeriesId(String seriesId) =>
+    seriesId.startsWith(_serverOnlyPrefix);
+
+/// The server manga id of a [serverOnlySeriesId], or null.
+String? serverOnlyRemoteId(String seriesId) => isServerOnlySeriesId(seriesId)
+    ? seriesId.substring(_serverOnlyPrefix.length)
+    : null;

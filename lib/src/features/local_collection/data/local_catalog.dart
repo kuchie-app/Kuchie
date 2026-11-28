@@ -1543,6 +1543,35 @@ class LocalCatalog {
     });
   });
 
+  /// Removes a series sync stood in for while only its server read it: its
+  /// row, History, marks, meta and categories. The real series replaces it
+  /// and pulls the same state. Chapters saved here keep the row.
+  Future<void> forgetSyncPlaceholder(String seriesId) =>
+      _metadata.run(() async {
+        final db = await _database;
+        await db.transaction(() async {
+          for (final table in const [
+            'remote_history',
+            'chapter_marks',
+            'series_meta',
+            'series_categories',
+          ]) {
+            await db.customStatement('DELETE FROM $table WHERE series_id = ?', [
+              seriesId,
+            ]);
+          }
+          await db.customStatement(
+            'UPDATE series SET in_library = 0 WHERE id = ?',
+            [seriesId],
+          );
+          await db.customStatement(
+            'DELETE FROM series WHERE id = ? AND NOT EXISTS '
+            '(SELECT 1 FROM chapters WHERE chapters.series_id = series.id)',
+            [seriesId],
+          );
+        });
+      });
+
   /// Exports library, category and reading metadata. Page files stay on the device.
   Future<void> exportMetadata(File destination) async {
     final contents = await _metadata.run(() async {
