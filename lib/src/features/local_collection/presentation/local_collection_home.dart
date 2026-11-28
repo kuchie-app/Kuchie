@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../constants/app_sizes.dart';
 import '../../../constants/navigation_bar_data.dart';
 import '../../../constants/urls.dart';
+import '../../../global_providers/global_providers.dart';
 import '../../../routes/router_config.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
@@ -35,8 +36,8 @@ import '../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../../widgets/shell/nav_tabs_preference.dart';
 import '../../history/presentation/widgets/history_item_tile.dart';
 import '../../manga_book/presentation/manga_details/widgets/chapter_list_tile.dart';
-import '../../onboarding/data/collection_mode.dart';
-import '../../onboarding/presentation/collection_mode_picker.dart';
+import '../../onboarding/presentation/onboarding_screen.dart'
+    show connectSyncAfterOnboardingKey;
 import '../../security/security_settings_screen.dart';
 import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
@@ -47,6 +48,7 @@ import '../../sync/controller/sync_disconnect.dart';
 import '../../sync/controller/sync_scheduler.dart';
 import '../../sync/domain/sync_status.dart';
 import '../../sync/presentation/server_downloads_section.dart';
+import '../../sync/presentation/suwayomi_connect_flow.dart';
 import '../../sync/presentation/sync_settings_screen.dart';
 import '../../sync/presentation/sync_status_icon.dart';
 import '../data/local_backups.dart';
@@ -68,13 +70,8 @@ import 'local_ui.dart';
 const _sections = ['library', 'updates', 'browse', 'history', 'more'];
 
 class LocalCollectionHome extends ConsumerStatefulWidget {
-  const LocalCollectionHome({
-    super.key,
-    required this.onOpenServer,
-    this.initialSection,
-  });
+  const LocalCollectionHome({super.key, this.initialSection});
 
-  final void Function(String section) onOpenServer;
   final String? initialSection;
 
   @override
@@ -109,6 +106,14 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     // Sync runs on its own from here: on opening, when the network comes
     // back and after reading. A finished cycle shows what it pulled.
     ref.read(syncSchedulerProvider).start();
+    // "Have a Suwayomi server?" in onboarding opens the connect flow once.
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (preferences.getBool(connectSyncAfterOnboardingKey) ?? false) {
+      unawaited(preferences.remove(connectSyncAfterOnboardingKey));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openSuwayomiConnect(context);
+      });
+    }
     unawaited(
       ref
           .read(syncDisconnectProvider)
@@ -271,16 +276,6 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     }
   }
 
-  Future<void> _chooseMode() async {
-    final selected = await showCollectionModePicker(
-      context,
-      CollectionMode.local,
-    );
-    if (selected == CollectionMode.server && mounted) {
-      widget.onOpenServer(_downloads ? 'downloads' : _sections[_tab]);
-    }
-  }
-
   Future<void> _import(LocalCatalog catalog) async {
     if (_importing) return;
     setState(() => _importing = true);
@@ -380,10 +375,10 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Flexible(
-                          child: CollectionModePageTitle(
+                          child: Text(
                             title,
-                            mode: CollectionMode.local,
-                            onPressed: _chooseMode,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         SyncStatusIcon(
@@ -909,14 +904,6 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   Widget _more(LocalCollectionServices services) => ListView(
     padding: EdgeInsets.fromLTRB(0, 8, 0, scrollBottomInset(context)),
     children: [
-      SettingsGroupRow(
-        icon: Icons.swap_horiz_rounded,
-        title: collectionModeTitle(context),
-        subtitle: collectionModeLabel(context, CollectionMode.local),
-        trailing: const Icon(FluentIcons.chevron_right_24_regular),
-        onTap: _chooseMode,
-      ),
-      const Divider(height: 16),
       Consumer(
         builder: (context, ref, _) {
           final incognito = ref.watch(incognitoModeProvider);

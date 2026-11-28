@@ -660,6 +660,8 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 
 **Tes:** onboarding dari instalasi baru, dengan dan tanpa menghubungkan server.
 
+**Status (28 November 2026):** selesai. Langkah pertama di iOS sekarang berisi dua pilihan, *Mulai di sini* dan *Sudah punya server Suwayomi?*; keduanya berakhir di *All set*, lalu Library Local. Pilihan kedua menyimpan `onboarding.connectSync`, dan Library membuka alur hubungkan sekali setelah onboarding. Langkah alamat server di onboarding hanya tersisa untuk platform non-iOS. `seedCollectionMode` dihapus. Tes: `test/onboarding/onboarding_start_test.dart`.
+
 ### PR 19: Hapus mode Server
 
 - Hapus `CollectionMode`, `collection_mode.dart`, `collection_mode_picker.dart`, dan `serverCollectionRuntimeEnabledProvider`, beserta percabangannya di `main.dart`, `router_config.dart`, `library_screen.dart`, dan `more_screen.dart`.
@@ -674,6 +676,10 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 - `layer_boundaries_test.dart` dan semua tes hijau.
 - Tidak ada referensi ke `CollectionMode`.
 - Ukuran bundle tercatat sebelum dan sesudah.
+
+**Status (28 November 2026):** selesai untuk iOS, dengan satu penyimpangan dari rencana. `CollectionMode`, `collection_mode.dart`, dan `collection_mode_picker.dart` dihapus, dan tidak ada lagi referensi ke `CollectionMode`. Di iOS, router selalu menuju Library Local setelah onboarding, pemilih mode di judul Library dan di More hilang, tautan Live Activity selalu membuka Unduhan Local, dan kunci `collectionMode` dihapus saat app mulai. `serverCollectionRuntimeEnabledProvider` (sekarang di `local_collection/data/local_collection_platform.dart`) bernilai `false` di iOS, sehingga `AccountSessionStartup` tidak pernah berjalan di iOS. Sync, baca lewat server, dan tracking memakai klien ringan yang tidak butuh runtime itu.
+
+**Penyimpangan:** layar mode Server (Library, Updates, History, Browse, More, detail series) **tidak dihapus**. Local hanya ada di iOS, karena runtime Mihon tertanam di iOS, jadi layar itu masih satu-satunya collection untuk build Android, desktop, dan web. Di iOS layar itu tidak terjangkau. Alat server (extension di server, backup server, pengaturan Suwayomi, akun) tidak dipindah ke *Lanjutan → Server*, karena layar itu bernavigasi lewat rute mode Server; untuk sekarang alat itu lewat WebUI Suwayomi, dan *Lanjutan* hanya membuka layar Koneksi. Ukuran bundle tidak diukur, karena tidak ada layar yang dihapus.
 
 ### PR 20: QA penuh dan dokumentasi
 

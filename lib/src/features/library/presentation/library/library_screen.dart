@@ -37,8 +37,6 @@ import '../../../offline/data/server_reachability.dart';
 import '../../../offline/presentation/offline_server_mismatch_banner.dart';
 import '../../../offline/presentation/offline_view_loading.dart';
 import '../../../offline/presentation/server_unreachable_banner.dart';
-import '../../../onboarding/data/collection_mode.dart';
-import '../../../onboarding/presentation/collection_mode_picker.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../quick_open/presentation/unified_search/search_tips.dart';
 import '../../../settings/presentation/library/widgets/persistent_search_bar/persistent_search_bar.dart';
@@ -1512,22 +1510,8 @@ class _LibraryTitle extends ConsumerWidget {
         : null;
 
     final connected = !ref.watch(serverUnreachableProvider);
-    final pageTitle = ApplePageTitle(
-      context.l10n.library,
-      cloud: connected && !supportsLocalCollection,
-    );
-    final title = supportsLocalCollection
-        ? CollectionModePageTitle(
-            context.l10n.library,
-            mode: CollectionMode.server,
-            connected: connected,
-            onPressed: () => showServerCollectionPicker(
-              context,
-              ref,
-              section: 'library',
-            ),
-          )
-        : pageTitle;
+    // The Server collection runs only where Local isn't supported.
+    final title = ApplePageTitle(context.l10n.library, cloud: connected);
     if (visibleName == null) return title;
 
     return Column(

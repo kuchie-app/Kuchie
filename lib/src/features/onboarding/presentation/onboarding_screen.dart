@@ -42,12 +42,12 @@ import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/custom_headers_store.dart';
 import '../../auth/data/ui_login_token_rejected.dart';
 import '../../auth/presentation/sign_in_action.dart';
+import '../../local_collection/data/local_collection_platform.dart';
 import '../../settings/data/server_connection/server_port.dart';
 import '../../settings/data/server_connection/server_url.dart';
 import '../../settings/presentation/appearance/widgets/app_theme_selector/app_theme_selector.dart';
 import '../../settings/presentation/connection/custom_headers_section.dart';
 import '../../settings/widgets/app_theme_mode_tile/app_theme_mode_tile.dart';
-import '../data/collection_mode.dart';
 import '../data/onboarding_complete.dart';
 import '../data/server_discovery.dart';
 import '../data/server_resolver.dart';
@@ -84,6 +84,10 @@ class ServerStepHost {
 bool _onboardingSignedIn(SharedPreferences preferences) =>
     preferences.getInt('onboarding.step') == 2;
 
+/// Set when onboarding ends with "Have a Suwayomi server?": the Local
+/// library opens the Sync connect flow once.
+const connectSyncAfterOnboardingKey = 'onboarding.connectSync';
+
 class OnboardingScreen extends HookConsumerWidget {
   const OnboardingScreen({super.key});
 
@@ -92,17 +96,19 @@ class OnboardingScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preferences = ref.watch(sharedPreferencesProvider);
+    // iOS keeps the library here and starts with one choice: read here,
+    // or also connect a Suwayomi server for Sync. Other platforms still
+    // set up the Server collection.
     final isDualMode = supportsLocalCollection;
-    final savedMode = ref.watch(collectionModeProvider);
     final resume =
-        (!isDualMode || savedMode == CollectionMode.server) &&
+        !isDualMode &&
         ref.watch(onboardingCompleteProvider) != true &&
         preferences.getInt('onboarding.step') == 2;
     final targetSection = preferences.getString('onboarding.returnSection');
-    final choice = useState<CollectionMode?>(isDualMode ? savedMode : null);
+    final choice = useState<StartChoice?>(null);
     final savedStep = preferences.getInt('onboarding.step') ?? 0;
     final step = useState(
-      isDualMode && savedMode == null
+      isDualMode
           ? 0
           : resume
           ? 2
@@ -151,23 +157,16 @@ class OnboardingScreen extends HookConsumerWidget {
     }
 
     Future<void> confirmChoice() async {
-      if (choice.value == CollectionMode.local) {
-        localFinish.value = true;
-        step.value = 2;
-        return;
+      final picked = choice.value;
+      if (picked == null) return;
+      if (picked == StartChoice.connectServer) {
+        await preferences.setBool(connectSyncAfterOnboardingKey, true);
+      } else {
+        await preferences.remove(connectSyncAfterOnboardingKey);
       }
-      if (choice.value != CollectionMode.server || changingMode.value) return;
-      changingMode.value = true;
-      try {
-        await preferences.setInt('onboarding.step', 1);
-        if (!context.mounted) return;
-        await ref
-            .read(collectionModeProvider.notifier)
-            .select(CollectionMode.server);
-        if (context.mounted) step.value = 1;
-      } finally {
-        changingMode.value = false;
-      }
+      if (!context.mounted) return;
+      localFinish.value = true;
+      step.value = 2;
     }
 
     return Scaffold(
@@ -369,7 +368,7 @@ class _OnboardingBody extends StatelessWidget {
   final VoidCallback finish;
   final bool localFinish;
   final VoidCallback skip;
-  final ValueNotifier<CollectionMode?>? choice;
+  final ValueNotifier<StartChoice?>? choice;
   final VoidCallback confirmChoice;
 
   Widget _dotsRow(BuildContext context, int step, bool desktop) {
@@ -391,7 +390,7 @@ class _OnboardingBody extends StatelessWidget {
               child: Text(
                 choice == null
                     ? context.l10n.onboardingSkip
-                    : collectionText(context, 'Use Local', 'Pakai Lokal'),
+                    : collectionText(context, 'Start here', 'Mulai di sini'),
               ),
             ),
           ),
@@ -436,8 +435,7 @@ class _OnboardingBody extends StatelessWidget {
       isLast: isLast,
       onBack: () => move(stepState.value - 1),
       nextLabel:
-          (choosingMode && choice?.value == CollectionMode.local) ||
-              (isLast && localFinish)
+          (choosingMode && choice?.value != null) || (isLast && localFinish)
           ? collectionText(context, 'Start reading', 'Mulai membaca')
           : null,
       onNext: choosingMode && choice?.value == null

@@ -26,6 +26,7 @@ import '../features/hotkeys/presentation/hotkeys_settings_screen.dart';
 import '../features/library/presentation/category/edit_category_screen.dart';
 import '../features/library/presentation/duplicates/library_duplicates_screen.dart';
 import '../features/library/presentation/library/library_screen.dart';
+import '../features/local_collection/data/local_collection_platform.dart';
 import '../features/local_collection/presentation/local_cloudflare_prompt.dart';
 import '../features/local_collection/presentation/local_collection_home.dart';
 import '../features/manga_book/presentation/downloads/downloads_screen.dart';
@@ -42,7 +43,6 @@ import '../features/migration/presentation/screens/migration_bulk_run_screen.dar
 import '../features/migration/presentation/screens/migration_global_search_screen.dart';
 import '../features/migration/presentation/screens/migration_source_picker_screen.dart';
 import '../features/offline/presentation/offline_settings_screen.dart';
-import '../features/onboarding/data/collection_mode.dart';
 import '../features/onboarding/data/onboarding_complete.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/quick_open/presentation/search_stack/search_stack_screen.dart';
@@ -73,8 +73,6 @@ import '../features/settings/presentation/settings/settings_screen.dart';
 import '../features/settings/presentation/settings/settings_window.dart';
 import '../features/settings/presentation/sync/sync_screen.dart';
 import '../features/tracking/presentation/settings/tracking_settings_screen.dart';
-import '../global_providers/global_providers.dart'
-    show sharedPreferencesProvider;
 import '../utils/extensions/custom_extensions.dart';
 import '../utils/motion/reduce_motion.dart';
 import '../widgets/desktop/desktop_page_frame.dart';
@@ -82,8 +80,8 @@ import '../widgets/shell/detail_navigation_shell_screen.dart';
 import '../widgets/shell/navigation_shell_screen.dart';
 import 'reader_swipe_back_route.dart';
 
-part 'router_config.g.dart';
 part 'detail_navigation_page.dart';
+part 'router_config.g.dart';
 part 'sub_routes/browser_routes.dart';
 part 'sub_routes/common_routes.dart';
 part 'sub_routes/downloads_routes.dart';
@@ -193,7 +191,7 @@ Future<void> openLocalCollection(
   WidgetRef ref, [
   String? section,
 ]) async {
-  await ref.read(collectionModeProvider.notifier).select(CollectionMode.local);
+  ref.read(onboardingCompleteProvider.notifier).update(true);
   if (context.mounted) context.go(localCollectionLocation(section));
 }
 
@@ -214,29 +212,7 @@ class _LocalCollectionRoute extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
       LocalCloudflarePromptHost(
-        child: LocalCollectionHome(
-          initialSection: initialSection,
-          onOpenServer: (section) async {
-            final complete = ref.read(onboardingCompleteProvider) == true;
-            if (!complete) {
-              final prefs = ref.read(sharedPreferencesProvider);
-              await prefs.setString('onboarding.returnSection', section);
-              if ((prefs.getInt('onboarding.step') ?? 0) == 0) {
-                await prefs.setInt('onboarding.step', 1);
-              }
-            }
-            if (!context.mounted) return;
-            await ref
-                .read(collectionModeProvider.notifier)
-                .select(CollectionMode.server);
-            if (!context.mounted) return;
-            context.go(
-              complete
-                  ? serverCollectionLocation(section)
-                  : const OnboardingRoute().location,
-            );
-          },
-        ),
+        child: LocalCollectionHome(initialSection: initialSection),
       );
 }
 
@@ -286,19 +262,16 @@ GoRouter routerConfig(Ref ref) {
       final atOnboarding =
           state.matchedLocation == const OnboardingRoute().location;
       if (supportsLocalCollection) {
-        final mode = ref.read(collectionModeProvider);
+        // One collection (Kuchie 2.0): onboarding, then Local.
         final atLocal = const {
           Routes.local,
           localAppearanceLocation,
           localReaderSettingsLocation,
         }.contains(state.matchedLocation);
-        if (mode == CollectionMode.local) {
-          return atLocal ? null : localCollectionLocation();
-        }
-        if (mode == null) {
+        if (!complete) {
           return atOnboarding ? null : const OnboardingRoute().location;
         }
-        if (atLocal && complete) return serverCollectionLocation(null);
+        return atLocal ? null : localCollectionLocation();
       }
       if (!complete && !atOnboarding) return const OnboardingRoute().location;
       if (complete && atOnboarding) {
