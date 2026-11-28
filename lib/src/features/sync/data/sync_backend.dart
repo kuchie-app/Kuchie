@@ -57,6 +57,21 @@ class RemoteChapter {
   final ChapterState state;
 }
 
+/// A series to create on the backend, from this iPhone's library.
+class NewRemoteSeries {
+  const NewRemoteSeries({
+    required this.sourceId,
+    required this.url,
+    required this.title,
+    this.sourceName = '',
+  });
+
+  final String sourceId;
+  final String url;
+  final String title;
+  final String sourceName;
+}
+
 /// The fields of a chapter to change; null leaves one as it is.
 class ChapterPatch {
   const ChapterPatch({this.read, this.page, this.bookmarked});
@@ -105,6 +120,10 @@ abstract interface class SyncBackend {
 
   /// A series the backend knows by source and URL, in its library or not.
   Future<RemoteSeries?> findSeries(String sourceId, String url);
+
+  /// Creates [series] the backend doesn't know yet and returns those it now
+  /// has, in its library or not. Missing ones could not be created.
+  Future<List<RemoteSeries>> createSeries(List<NewRemoteSeries> series);
 
   /// Loads a series' chapters from its source, for a series just added that
   /// the backend never opened. Returns them.

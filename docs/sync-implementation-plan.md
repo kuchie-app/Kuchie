@@ -517,7 +517,9 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 - Jenis data yang dimatikan (progres, bookmark, library) tidak ikut merge. Base untuk field itu tetap nilai server, supaya saat dinyalakan lagi perubahan di iPhone ikut terkirim.
 - Outbox hanya dipangkas kalau siklus tanpa error per series. Base tetap sumber kebenaran.
 - Status engine masuk ke `SyncController`. Tombol *Sinkronkan sekarang* dan *Coba lagi* menjalankan siklus manual, dan alur hubungkan memulai sync pertama setelah pilihan disimpan.
-- **Belum:** membuat manga baru di server. Series yang belum ada di server (`MangaBySourceUrl` kosong) dilaporkan sebagai `notOnServer` dan dicoba lagi. Butuh encoder backup Mihon untuk `restoreBackup` (admin/Stable) atau `fetchSourceManga` + `updateMangas` (pengguna biasa, S4b). Juga belum: `sync.suwayomi.userId` dari klaim `sub`, penghapusan kategori, dan error per series yang disimpan (PR 13).
+- **Membuat manga baru di server (PR 8b):** series yang belum ada di server (`MangaBySourceUrl` kosong) dikirim dalam satu `restoreBackup` berisi backup Mihon minimal (`mihon_backup.dart`, mengikuti `backup.py`), lalu dicek ulang. Yang masih belum ada dicari lewat `fetchSourceManga(SEARCH, judul)`, lalu dimasukkan ke library lewat `updateMangas`. Kalau keduanya gagal, series dilaporkan `notOnServer` dan dicoba lagi. Harness QA membuat "QA - Night Ferry" lewat restore di Stable dan preview.
+- Gagal memuat chapter satu series (source di server mati) menjadi error per series, bukan kegagalan siklus.
+- Belum: `sync.suwayomi.userId` dari klaim `sub` dan penghapusan kategori.
 
 ### PR 9: Pemicu dan background
 

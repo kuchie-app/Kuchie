@@ -77,8 +77,8 @@ enum SyncOutcome {
 }
 
 enum SyncSeriesError {
-  /// The server has no manga for it yet. Adding one comes with the backup
-  /// encoder (`restoreBackup`, spike S3).
+  /// The server has no manga for it and could not make one: a regular
+  /// user's restore does nothing (spike S4b) and the source search missed.
   notOnServer,
 
   /// A request for it failed; it goes again next cycle.
@@ -481,13 +481,12 @@ class _Cycle {
         ),
       );
     }
-    for (final (series, sourceId, url) in lookups) {
-      engine._checkCancelled();
-      final found = await backend.findSeries(sourceId, url);
+    void linkFound(LocalSyncSeries series, RemoteSeries? found) {
       if (found == null || !linkedRemote.add(found.id)) {
         _errors[series.id] = SyncSeriesError.notOnServer;
-        continue;
+        return;
       }
+      _errors.remove(series.id);
       newLinks.add(
         _Pair(
           localId: series.id,
@@ -496,6 +495,32 @@ class _Cycle {
           remote: found,
         ),
       );
+    }
+
+    final create = <(LocalSyncSeries, String sourceId, String url)>[];
+    for (final lookup in lookups) {
+      engine._checkCancelled();
+      final (series, sourceId, url) = lookup;
+      final found = await backend.findSeries(sourceId, url);
+      found == null ? create.add(lookup) : linkFound(series, found);
+    }
+    if (create.isNotEmpty) {
+      engine._checkCancelled();
+      final created = {
+        for (final series in await backend.createSeries([
+          for (final (series, sourceId, url) in create)
+            NewRemoteSeries(
+              sourceId: sourceId,
+              url: url,
+              title: series.title,
+              sourceName: series.source?.sourceName ?? '',
+            ),
+        ]))
+          (series.sourceId, series.url): series,
+      };
+      for (final (series, sourceId, url) in create) {
+        linkFound(series, created[(sourceId, url)]);
+      }
     }
     for (final pair in newLinks) {
       await journal.putLink(
@@ -543,10 +568,18 @@ class _Cycle {
         continue;
       }
       engine._checkCancelled();
-      var chapters = await backend.chaptersOf(pair.remoteId);
-      // A manga the server never opened has no chapters yet (spike S3).
-      if (chapters.isEmpty && fresh.contains(pair.localId)) {
-        chapters = await backend.refreshChapters(pair.remoteId);
+      List<RemoteChapter> chapters;
+      try {
+        chapters = await backend.chaptersOf(pair.remoteId);
+        // A manga the server never opened has no chapters yet (spike S3).
+        if (chapters.isEmpty && fresh.contains(pair.localId)) {
+          chapters = await backend.refreshChapters(pair.remoteId);
+        }
+      } catch (error) {
+        if (isSyncAuthFailure(error)) rethrow;
+        // Its source is down on the server; the library still syncs.
+        _errors[pair.localId] = SyncSeriesError.requestFailed;
+        continue;
       }
       pair
         ..chapters = chapters

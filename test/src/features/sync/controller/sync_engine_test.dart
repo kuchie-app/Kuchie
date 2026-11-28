@@ -131,6 +131,19 @@ class _FakeServer implements SyncBackend {
     return null;
   }
 
+  /// Whether [createSeries] can make manga, as an admin's restore can.
+  bool canCreate = true;
+
+  @override
+  Future<List<RemoteSeries>> createSeries(List<NewRemoteSeries> series) async {
+    if (!canCreate) return const [];
+    writes.add('createSeries');
+    return [
+      for (final entry in series)
+        _series(addManga(entry.url)..inLibraryAt = now),
+    ];
+  }
+
   @override
   Future<List<RemoteChapter>> refreshChapters(String seriesId) =>
       chaptersOf(seriesId);
@@ -316,17 +329,24 @@ void main() {
       expect(server.writes, ['setInLibrary']);
     });
 
-    test(
-      'a series the server never saw waits for the backup encoder',
-      () async {
-        await addLocal('/new');
-        final report = await engine().sync();
-        expect(report.seriesErrors, {
-          _seriesId('/new'): SyncSeriesError.notOnServer,
-        });
-        expect(await libraryHere(), {_seriesId('/new')});
-      },
-    );
+    test('a series the server never saw is created there', () async {
+      await addLocal('/new');
+      final report = await engine().sync();
+      expect(report.seriesErrors, isEmpty);
+      expect(server.writes, ['createSeries']);
+      final created = server.mangas.values.single;
+      expect((created.url, created.inLibrary), ('/new', true));
+    });
+
+    test('one the server cannot create reports why and stays here', () async {
+      server.canCreate = false;
+      await addLocal('/new');
+      final report = await engine().sync();
+      expect(report.seriesErrors, {
+        _seriesId('/new'): SyncSeriesError.notOnServer,
+      });
+      expect(await libraryHere(), {_seriesId('/new')});
+    });
 
     test('merge keeps both libraries', () async {
       await addLocal('/a');
@@ -562,6 +582,7 @@ void main() {
     await engine().sync();
     expect(await journal.pending(), isEmpty);
 
+    server.canCreate = false;
     await addLocal('/new');
     await engine().sync();
     expect(await journal.pending(), isNotEmpty);

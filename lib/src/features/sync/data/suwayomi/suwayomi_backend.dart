@@ -2,9 +2,12 @@ import 'package:graphql/client.dart';
 
 import '../../../../graphql/__generated__/schema.graphql.dart';
 import '../../../../utils/extensions/custom_extensions.dart';
+import '../../../../utils/misc/scalars.dart' show MultipartFile;
 import '../../domain/sync_records.dart';
 import '../sync_backend.dart';
 import 'graphql/__generated__/sync.graphql.dart';
+import 'mihon_backup.dart';
+import 'suwayomi_reachability.dart' show isSyncAuthFailure;
 
 /// Sync against one Suwayomi server address, through the operations in
 /// `graphql/sync.graphql`.
@@ -17,6 +20,9 @@ class SuwayomiBackend implements SyncBackend {
   /// Chapters per cycle that may be opened on the server so a dropped page
   /// can be sent again; opening one asks the source for its pages.
   static const maxPageRetries = 10;
+
+  /// How long a restore may take before its result is checked anyway.
+  static const restoreTimeout = Duration(seconds: 60);
 
   @override
   String get key => 'suwayomi';
@@ -122,17 +128,100 @@ class SuwayomiBackend implements SyncBackend {
           ),
         )
         .getData((data) => data.mangas.nodes);
-    final id = nodes?.firstOrNull?.id;
-    if (id == null) return null;
-    // Only the id is asked for; a series found this way is not in the
-    // library, or the library pull would have had it.
-    return RemoteSeries(
-      id: '$id',
-      sourceId: sourceId,
-      url: url,
-      title: url,
-      inLibrary: false,
-    );
+    final manga = nodes?.firstOrNull;
+    return manga == null ? null : _series(manga);
+  }
+
+  @override
+  Future<List<RemoteSeries>> createSeries(List<NewRemoteSeries> series) async {
+    if (series.isEmpty) return const [];
+    // 1. A minimal backup: every manga in one restore, no source access
+    //    (spike S3). A regular user's restore changes nothing (S4b).
+    try {
+      await _restore(series);
+    } catch (error) {
+      if (isSyncAuthFailure(error)) rethrow;
+      // Not allowed or not supported: the search below still tries.
+    }
+    final found = <RemoteSeries>[];
+    final missing = <NewRemoteSeries>[];
+    for (final entry in series) {
+      final manga = await findSeries(entry.sourceId, entry.url);
+      manga == null ? missing.add(entry) : found.add(manga);
+    }
+    // 2. Searching the source by title creates the row when the source
+    //    lists it (94% in S3); the engine then adds it to the library.
+    for (final entry in missing) {
+      try {
+        await _client
+            .mutate$SyncFetchSourceManga(
+              Options$Mutation$SyncFetchSourceManga(
+                variables: Variables$Mutation$SyncFetchSourceManga(
+                  input: Input$FetchSourceMangaInput(
+                    source: entry.sourceId,
+                    type: Enum$FetchSourceMangaType.SEARCH,
+                    page: 1,
+                    query: entry.title,
+                  ),
+                ),
+              ),
+            )
+            .getData((data) => data.fetchSourceManga);
+      } catch (error) {
+        if (isSyncAuthFailure(error)) rethrow;
+        continue;
+      }
+      if (await findSeries(entry.sourceId, entry.url) case final manga?) {
+        found.add(manga);
+      }
+    }
+    return found;
+  }
+
+  /// Restores a backup of [series] and waits for the server to finish.
+  Future<void> _restore(List<NewRemoteSeries> series) async {
+    final backup = encodeMihonBackup([
+      for (final entry in series)
+        BackupSeries(
+          sourceId: entry.sourceId,
+          url: entry.url,
+          title: entry.title,
+          sourceName: entry.sourceName,
+          addedAt: DateTime.now(),
+        ),
+    ]);
+    final started = await _client
+        .mutate$SyncRestoreBackup(
+          Options$Mutation$SyncRestoreBackup(
+            variables: Variables$Mutation$SyncRestoreBackup(
+              backup: MultipartFile.fromBytes(
+                'backup',
+                backup,
+                filename: 'kuchie-sync.tachibk',
+              ),
+            ),
+          ),
+        )
+        .getData((data) => data.restoreBackup);
+    if (started == null) return;
+    final deadline = DateTime.now().add(restoreTimeout);
+    var state = started.status?.state;
+    while (state != Enum$BackupRestoreState.SUCCESS &&
+        state != Enum$BackupRestoreState.FAILURE &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      state =
+          (await _client
+                  .query$SyncRestoreStatus(
+                    Options$Query$SyncRestoreStatus(
+                      variables: Variables$Query$SyncRestoreStatus(
+                        id: started.id,
+                      ),
+                    ),
+                  )
+                  .getData((data) => data.restoreStatus))
+              ?.state;
+    }
   }
 
   @override

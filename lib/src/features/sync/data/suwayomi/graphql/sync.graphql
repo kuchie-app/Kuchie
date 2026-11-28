@@ -113,7 +113,7 @@ query SyncChaptersOfManga($mangaId: Int!) {
 query SyncMangaBySourceUrl($sourceId: LongString!, $url: String!) {
   mangas(condition: { sourceId: $sourceId, url: $url }, first: 1) {
     nodes {
-      id
+      ...SyncMangaDto
     }
   }
 }
@@ -264,5 +264,23 @@ mutation SyncUpdateExtension($input: UpdateExtensionInput!) {
       pkgName
       isInstalled
     }
+  }
+}
+
+# Creates manga from a minimal Mihon backup (spike S3). Applies only for an
+# admin token or on a server without users (spike S4b); the engine checks
+# the result with SyncMangaBySourceUrl.
+mutation SyncRestoreBackup($backup: Upload!) {
+  restoreBackup(input: { backup: $backup }) {
+    id
+    status {
+      state
+    }
+  }
+}
+
+query SyncRestoreStatus($id: String!) {
+  restoreStatus(id: $id) {
+    state
   }
 }

@@ -7,7 +7,8 @@
 //     flutter test tool/qa/sync_spike/sync_engine_qa_test.dart
 //
 // It uses the server's local source (id 0) and the three series
-// `server.py` seeds, so it needs no extension or network. It writes to the
+// `server.py` seeds, so it needs no extension or network. One of them is
+// created on the server by sync, through `restoreBackup`. It writes to the
 // server, so run it once per fresh server.
 
 import 'dart:io';
@@ -63,15 +64,21 @@ void main() {
       }
 
       // The server side, as WebUI would see it.
-      final seeded = await request('''
-        mutation { fetchSourceManga(input: {source: "0", type: POPULAR, page: 1}) {
-          mangas { id url } } }
-      ''');
-      final ids = {
+      // Only two of the three seeded series get a server row; Night Ferry
+      // stays unknown until sync creates it.
+      final ids = <String, String>{};
+      for (final query in ['Lantern', 'Paper']) {
+        final found = await request(
+          'mutation(\$q: String!) { fetchSourceManga(input: {source: "0", '
+          'type: SEARCH, page: 1, query: \$q}) { mangas { id url } } }',
+          {'q': query},
+        );
         for (final manga
-            in seeded['fetchSourceManga']['mangas'] as List<dynamic>)
-          manga['url'] as String: '${manga['id']}',
-      };
+            in found['fetchSourceManga']['mangas'] as List<dynamic>) {
+          ids[manga['url'] as String] = '${manga['id']}';
+        }
+      }
+      expect(ids.keys, isNot(contains('QA - Night Ferry')));
       final lantern = ids['QA - Lantern Station']!;
       final paper = ids['QA - Paper Signal']!;
       Future<List<Map<String, dynamic>>> chapters(String mangaId) async {
@@ -150,6 +157,17 @@ void main() {
         ),
       );
 
+      await catalog.setInLibrary(
+        seriesId: seriesId('QA - Night Ferry'),
+        title: 'QA - Night Ferry',
+        inLibrary: true,
+        source: LocalSeriesSource(
+          sourceId: _source,
+          mangaId: kuchieLocatorId('QA - Night Ferry'),
+          locator: 'QA - Night Ferry',
+        ),
+      );
+
       // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
       final store = SyncStateStore(await SharedPreferences.getInstance());
@@ -191,6 +209,16 @@ void main() {
       await sync();
       expect(store.serverIdentity, isNotNull);
       expect(await inServerLibrary(paper), isTrue);
+      // Created on the server from a minimal backup, with its chapters.
+      final ferry =
+          (await request(
+                '{ mangas(condition: {sourceId: "0", url: "QA - Night Ferry"}) '
+                '{ nodes { id user { inLibrary } } } }',
+              ))['mangas']['nodes']
+              as List<dynamic>;
+      expect(ferry, hasLength(1));
+      expect(ferry.single['user']['inLibrary'], isTrue);
+      expect(await chapters('${ferry.single['id']}'), hasLength(3));
       final here = {
         for (final series in await catalog.syncSeries())
           if (series.inLibrary) series.id,
@@ -198,6 +226,7 @@ void main() {
       expect(here, {
         seriesId('QA - Lantern Station'),
         seriesId('QA - Paper Signal'),
+        seriesId('QA - Night Ferry'),
       });
       final pulled = await stateHere(
         'QA - Lantern Station',
