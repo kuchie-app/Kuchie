@@ -100,7 +100,7 @@ void main() {
     tester,
   ) async {
     final prefs = await pumpWelcome(tester);
-    await tap(tester, 'Have a Suwayomi server?');
+    await tap(tester, 'Add a server');
     await tap(tester, 'Start reading');
     await tap(tester, 'Start reading');
     expect(find.text('Local destination'), findsOneWidget);

@@ -106,7 +106,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     // Sync runs on its own from here: on opening, when the network comes
     // back and after reading. A finished cycle shows what it pulled.
     ref.read(syncSchedulerProvider).start();
-    // "Have a Suwayomi server?" in onboarding opens the connect flow once.
+    // "Add a server" in onboarding opens the connect flow once.
     final preferences = ref.read(sharedPreferencesProvider);
     if (preferences.getBool(connectSyncAfterOnboardingKey) ?? false) {
       unawaited(preferences.remove(connectSyncAfterOnboardingKey));

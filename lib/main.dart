@@ -354,6 +354,10 @@ Future<void> _startApp() async {
     restart: restartSession,
     onRetained: retainSession,
     sessionKey: (session) {
+      // iOS has one collection, on this iPhone: a new server address or
+      // login only changes what Sync talks to, which its own client
+      // follows, so the app keeps its screens (Kuchie 2.0).
+      if (supportsLocalCollection) return const ();
       final credentials = session.read(authCredentialsStoreProvider).value;
       return (
         session.read(authTypeKeyProvider),

@@ -84,7 +84,7 @@ class ServerStepHost {
 bool _onboardingSignedIn(SharedPreferences preferences) =>
     preferences.getInt('onboarding.step') == 2;
 
-/// Set when onboarding ends with "Have a Suwayomi server?": the Local
+/// Set when onboarding ends with "Add a server": the Local
 /// library opens the Sync connect flow once.
 const connectSyncAfterOnboardingKey = 'onboarding.connectSync';
 

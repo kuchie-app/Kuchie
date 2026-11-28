@@ -76,15 +76,11 @@ class CollectionChoiceStep extends StatelessWidget {
             art: 'assets/kuchie/splash/kiri-ready.png',
           ),
           second: MangaChoice(
-            label: collectionText(
-              context,
-              'Have a Suwayomi server?',
-              'Sudah punya server Suwayomi?',
-            ),
+            label: collectionText(context, 'Add a server', 'Tambah server'),
             caption: collectionText(
               context,
-              'Connect it to sync your library, progress and downloads.',
-              'Hubungkan untuk menyinkronkan library, progres, dan unduhan.',
+              'Have Suwayomi? Sync your library, progress and downloads with it.',
+              'Punya Suwayomi? Sinkronkan library, progres, dan unduhan.',
             ),
             icon: Icons.cloud_sync_outlined,
             art: 'assets/kuchie/character/loading.png',

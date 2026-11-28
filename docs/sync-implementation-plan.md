@@ -660,7 +660,7 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 
 **Tes:** onboarding dari instalasi baru, dengan dan tanpa menghubungkan server.
 
-**Status (28 November 2026):** selesai. Langkah pertama di iOS sekarang berisi dua pilihan, *Mulai di sini* dan *Sudah punya server Suwayomi?*; keduanya berakhir di *All set*, lalu Library Local. Pilihan kedua menyimpan `onboarding.connectSync`, dan Library membuka alur hubungkan sekali setelah onboarding. Langkah alamat server di onboarding hanya tersisa untuk platform non-iOS. `seedCollectionMode` dihapus. Tes: `test/onboarding/onboarding_start_test.dart`.
+**Status (28 November 2026):** selesai. Langkah pertama di iOS sekarang berisi dua pilihan, *Mulai di sini* dan *Tambah server*; keduanya berakhir di *All set*, lalu Library Local. Pilihan kedua menyimpan `onboarding.connectSync`, dan Library membuka alur hubungkan sekali setelah onboarding. Langkah alamat server di onboarding hanya tersisa untuk platform non-iOS. `seedCollectionMode` dihapus. Tes: `test/onboarding/onboarding_start_test.dart`.
 
 ### PR 19: Hapus mode Server
 
