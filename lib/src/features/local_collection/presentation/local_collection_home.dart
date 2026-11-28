@@ -41,9 +41,11 @@ import '../../security/security_settings_screen.dart';
 import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/sync_controller.dart';
 import '../../sync/controller/sync_scheduler.dart';
 import '../../sync/domain/sync_status.dart';
+import '../../sync/presentation/server_downloads_section.dart';
 import '../../sync/presentation/sync_settings_screen.dart';
 import '../../sync/presentation/sync_status_icon.dart';
 import '../data/local_backups.dart';
@@ -182,6 +184,8 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     _bound?.downloads.completed.removeListener(_refresh);
     _bound?.downloads.removeListener(_onQueue);
     _bound = services;
+    // Save for offline takes a chapter the sync server has from there.
+    services.downloads.serverPages = ref.read(serverChapterPagesProvider);
     services.downloads.addListener(_onQueue);
     // Lists read kept covers from memory; repaint once they are known.
     unawaited(
@@ -1102,6 +1106,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         RecentlyDownloadedRow(onTap: () => _openRecentlyDownloaded(services)),
+        const ServerDownloadsSection(),
         ListenableBuilder(
           listenable: Listenable.merge([
             queue,

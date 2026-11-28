@@ -5,7 +5,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'chapter_page_resolver.dart';
 import 'local_catalog.dart';
+import 'local_sources.dart' show LocalSourcePage;
 
 enum LocalDownloadState { queued, downloading, paused, failed }
 
@@ -91,6 +93,10 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
   final File _file;
   final http.Client Function() _clientFactory;
   final ResolveLocalDownload? _resolveRuntimeChapter;
+
+  /// The sync server, asked first for pages: Save for offline takes a
+  /// chapter the server has from there (design 3.6). Set while sync is on.
+  ServerChapterPages? serverPages;
   final ValueNotifier<int> completed = ValueNotifier(0);
   Future<void>? _loaded;
   Future<void> _writes = Future.value();
@@ -322,7 +328,17 @@ class LocalDownloadQueue extends ValueNotifier<List<LocalDownload>> {
 
       try {
         final chapter = request.runtimeChapter;
-        final runtimePages = chapter == null
+        List<LocalSourcePage>? fromServer;
+        try {
+          fromServer = await serverPages
+              ?.pages(request.seriesId, request.chapterId)
+              .timeout(const Duration(seconds: 10));
+        } catch (_) {
+          // Unreachable or refusing: the source still has it.
+        }
+        final runtimePages = fromServer != null && fromServer.isNotEmpty
+            ? fromServer
+            : chapter == null
             ? null
             : await (_resolveRuntimeChapter ??
                   (String _, String _) => throw StateError(

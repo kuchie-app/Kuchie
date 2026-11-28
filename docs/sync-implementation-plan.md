@@ -608,6 +608,15 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 - Menu chapter: *Hapus dari server* (`deleteDownloadedChapters`) dan *Hapus salinan offline*.
 - Live Activity: `ContentState.source = server` untuk antrean server.
 
+**Status (28 November 2026):** selesai, kecuali Live Activity untuk antrean server. Keputusan yang diambil:
+
+- Unduhan ke server dan *Pindahkan ke server* (PR 16) memakai satu job, `ServerTransfers`, dengan tabel `sync_transfers` sebagai antrean. Unduhan ke server adalah transfer dengan `keep_local = 1`. Server yang tidak terjangkau membuat antrean menunggu, dan app yang ditutup melanjutkan dari state di DB.
+- Tombol Unduh di daftar chapter mengunduh ke server kalau sync aktif dan series terhubung; selain itu tetap ke iPhone. Menu chapter: *Simpan untuk offline* (salinan iPhone, mengambil halaman dari server lebih dulu lewat `LocalDownloadQueue.serverPages`), *Unduh ke server*, dan *Hapus dari server* (`deleteDownloadedChapters`).
+- Penanda lokasi: ikon awan-centang untuk chapter di server, dan label `Server` atau `iPhone + Server`. Status server dibaca hanya untuk series yang sedang dibuka.
+- Halaman Unduhan: kartu *Di server* dengan jumlah yang sedang diunduh, selesai, dan gagal, plus "terakhir dilihat", *Coba lagi*, dan *Bersihkan*.
+- Scheduler menjalankan job setelah setiap siklus sync. Job memeriksa server setiap 10 detik selama ada unduhan yang berjalan, dan berhenti saat app ke background.
+- QA: server Stable menerima permintaan unduh (`requested`), tapi Suwayomi tidak menyelesaikan unduhan chapter dari source lokal (sama dengan catatan spike S4b). **Penyelesaian unduhan di server nyata perlu dicek dengan source sungguhan (S8).** Di tes, unduhan baru dianggap selesai setelah server melaporkan `isDownloaded` dengan jumlah halaman yang benar.
+
 ### PR 16: Pindahkan ke server
 
 - Baru: `sync/controller/server_transfer_job.dart`, yang memakai tabel `sync_transfers`. State per chapter:

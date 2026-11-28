@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'server_transfers.dart';
 import 'sync_background.dart';
 import 'sync_engine.dart';
 import 'sync_engine_provider.dart';
@@ -20,6 +21,7 @@ class SyncScheduler {
     this.foregroundGap = const Duration(minutes: 5),
     this.readDelay = const Duration(seconds: 10),
     Future<void> Function(bool enabled)? background,
+    this.transfers,
   }) : _connectivity = connectivity,
        _clock = clock ?? DateTime.now,
        _background = background;
@@ -30,6 +32,9 @@ class SyncScheduler {
   final Future<void> Function(bool enabled)? _background;
   final Duration foregroundGap;
   final Duration readDelay;
+
+  /// Server downloads and moves, checked with every cycle.
+  final ServerTransfers? transfers;
 
   StreamSubscription<List<ConnectivityResult>>? _network;
   bool? _online;
@@ -67,6 +72,7 @@ class SyncScheduler {
     _afterRead?.cancel();
     _afterRead = null;
     engine.cancel();
+    transfers?.stopWatching();
   }
 
   /// The reader stopped or finished a chapter; its progress goes out soon.
@@ -94,7 +100,12 @@ class SyncScheduler {
 
   void _run() {
     if (!engine.enabled) return;
-    unawaited(engine.sync().then((_) => syncSettingsChanged()));
+    unawaited(
+      engine.sync().then((_) async {
+        await syncSettingsChanged();
+        await transfers?.run().catchError((Object _) {});
+      }),
+    );
   }
 
   void dispose() {
@@ -108,6 +119,7 @@ final syncSchedulerProvider = Provider<SyncScheduler>((ref) {
     engine: ref.watch(syncEngineProvider),
     connectivity: Connectivity().onConnectivityChanged,
     background: scheduleBackgroundSync,
+    transfers: ref.watch(serverTransfersProvider),
   );
   final lifecycle = AppLifecycleListener(
     onShow: scheduler.appShown,

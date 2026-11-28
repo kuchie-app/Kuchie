@@ -356,6 +356,58 @@ class SuwayomiBackend implements SyncBackend {
         .getData((data) => data.deleteMangaMetas);
   }
 
+  /// Downloads [chapterIds] on the server, from their sources.
+  Future<void> enqueueDownloads(List<int> chapterIds) async {
+    if (chapterIds.isEmpty) return;
+    await _client
+        .mutate$SyncEnqueueChapterDownloads(
+          Options$Mutation$SyncEnqueueChapterDownloads(
+            variables: Variables$Mutation$SyncEnqueueChapterDownloads(
+              input: Input$EnqueueChapterDownloadsInput(ids: chapterIds),
+            ),
+          ),
+        )
+        .getData((data) => data.enqueueChapterDownloads);
+  }
+
+  /// Deletes the server's downloads of [chapterIds].
+  Future<void> deleteDownloads(List<int> chapterIds) async {
+    if (chapterIds.isEmpty) return;
+    await _client
+        .mutate$SyncDeleteDownloadedChapters(
+          Options$Mutation$SyncDeleteDownloadedChapters(
+            variables: Variables$Mutation$SyncDeleteDownloadedChapters(
+              input: Input$DeleteDownloadedChaptersInput(ids: chapterIds),
+            ),
+          ),
+        )
+        .getData((data) => data.deleteDownloadedChapters);
+  }
+
+  /// Server chapter id → (downloaded, page count) for [chapterIds].
+  Future<Map<int, ({bool downloaded, int pageCount})>> downloadStates(
+    List<int> chapterIds,
+  ) async {
+    if (chapterIds.isEmpty) return const {};
+    final nodes = await _client
+        .query$SyncChapterDownloadState(
+          Options$Query$SyncChapterDownloadState(
+            variables: Variables$Query$SyncChapterDownloadState(
+              ids: chapterIds,
+            ),
+          ),
+        )
+        .getData((data) => data.chapters.nodes);
+    if (nodes == null) throw StateError('The server sent no chapters.');
+    return {
+      for (final chapter in nodes)
+        chapter.id: (
+          downloaded: chapter.user.isDownloaded,
+          pageCount: chapter.pageCount,
+        ),
+    };
+  }
+
   /// Extensions the server lists from its stores, installed or not.
   Future<List<ServerExtension>> extensions() async {
     final nodes = await _client.query$SyncExtensions().getData(
@@ -485,6 +537,8 @@ RemoteChapter _chapter(Fragment$SyncChapterDto chapter) => RemoteChapter(
   seriesId: '${chapter.mangaId}',
   url: chapter.url,
   name: chapter.name,
+  downloaded: chapter.user.isDownloaded,
+  pageCount: chapter.pageCount,
   state: ChapterState(
     read: chapter.user.isRead,
     page: chapter.user.lastPageRead < 0 ? 0 : chapter.user.lastPageRead,

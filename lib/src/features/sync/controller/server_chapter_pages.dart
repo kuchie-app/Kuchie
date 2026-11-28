@@ -34,7 +34,8 @@ class SuwayomiChapterPages implements ServerChapterPages {
   final _chapterIds = <String, Map<String, int>>{};
   ({String baseUrl, DateTime at})? _reachable;
 
-  Future<String?> _baseUrl() async {
+  /// The answering address, probed at most once a minute.
+  Future<String?> baseUrl() async {
     final known = _reachable;
     if (known != null &&
         DateTime.now().difference(known.at) < const Duration(minutes: 1)) {
@@ -65,6 +66,25 @@ class SuwayomiChapterPages implements ServerChapterPages {
     return ids[chapterId];
   }
 
+  /// Kuchie ids of the chapters of server manga [mangaId] the server has
+  /// downloaded. Always asks the server.
+  Future<Set<String>> downloadedChapters(String baseUrl, String mangaId) async {
+    final chapters = await SuwayomiBackend(
+      client.at(baseUrl),
+    ).chaptersOf(mangaId);
+    _chapterIds[mangaId] = {
+      for (final chapter in chapters)
+        kuchieLocatorId(chapter.url): int.parse(chapter.id),
+    };
+    return {
+      for (final chapter in chapters)
+        if (chapter.downloaded) kuchieLocatorId(chapter.url),
+    };
+  }
+
+  /// Drops the chapter ids kept for [mangaId].
+  void forget(String mangaId) => _chapterIds.remove(mangaId);
+
   /// The server manga id of Local series [seriesId], if linked.
   Future<String?> mangaId(String seriesId) async =>
       (await journal()).remoteIdFor('suwayomi', SyncLinkKind.series, seriesId);
@@ -77,7 +97,7 @@ class SuwayomiChapterPages implements ServerChapterPages {
     if (!engine.enabled) return null;
     final manga = await mangaId(seriesId);
     if (manga == null) return null;
-    final baseUrl = await _baseUrl();
+    final baseUrl = await this.baseUrl();
     if (baseUrl == null) return null;
     final id = await this.chapterId(baseUrl, manga, chapterId);
     if (id == null) return null;

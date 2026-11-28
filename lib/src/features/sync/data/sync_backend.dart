@@ -50,10 +50,18 @@ class RemoteChapter {
     required this.url,
     required this.name,
     required this.state,
+    this.downloaded = false,
+    this.pageCount = 0,
   });
 
   final String id;
   final String seriesId;
+
+  /// Downloaded on the backend, by its own report.
+  final bool downloaded;
+
+  /// Pages the backend knows; zero or less before it opened the chapter.
+  final int pageCount;
 
   /// The chapter URL; Kuchie's chapter id is its SHA-256.
   final String url;

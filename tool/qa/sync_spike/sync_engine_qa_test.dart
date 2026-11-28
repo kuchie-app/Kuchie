@@ -21,6 +21,7 @@ import 'package:kuchie/src/features/local_collection/data/local_collection_servi
 import 'package:kuchie/src/features/local_collection/data/local_series_reader_meta.dart';
 import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
 import 'package:kuchie/src/features/sync/controller/server_chapter_pages.dart';
+import 'package:kuchie/src/features/sync/controller/server_transfers.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_backend.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
@@ -249,20 +250,16 @@ void main() {
 
       // Reading through the server (PR 14): its pages, with the headers the
       // sync client sends, load as images.
-      final pages =
-          await SuwayomiChapterPages(
-            engine: engine,
-            client: SuwayomiSyncClient(
-              addresses: [_server!],
-              build: (_) => client,
-            ),
-            probe: () async =>
-                SuwayomiReachable(_server!, store.serverIdentity),
-            journal: () async => SyncJournal(catalog),
-          ).pages(
-            seriesId('QA - Lantern Station'),
-            kuchieLocatorId(lantern1['url'] as String),
-          );
+      final serverPages = SuwayomiChapterPages(
+        engine: engine,
+        client: SuwayomiSyncClient(addresses: [_server!], build: (_) => client),
+        probe: () async => SuwayomiReachable(_server!, store.serverIdentity),
+        journal: () async => SyncJournal(catalog),
+      );
+      final pages = await serverPages.pages(
+        seriesId('QA - Lantern Station'),
+        kuchieLocatorId(lantern1['url'] as String),
+      );
       expect(pages, hasLength(18));
       final image = await http.get(
         pages!.first.url,
@@ -270,6 +267,30 @@ void main() {
       );
       expect(image.statusCode, 200);
       expect(image.headers['content-type'], startsWith('image/'));
+
+      // Download to the server (PR 15): requested, then proven by the
+      // server's own report.
+      final transfers = ServerTransfers(
+        engine: engine,
+        catalog: () async => catalog,
+        pages: serverPages,
+        backendAt: (_) => SuwayomiBackend(client),
+      );
+      final lantern3Id = kuchieLocatorId(lanternChapters[2]['url'] as String);
+      Future<SyncTransferState> transferState() async =>
+          (await SyncJournal(catalog).transfers())
+              .firstWhere((transfer) => transfer.chapterId == lantern3Id)
+              .state;
+      await transfers.download(seriesId('QA - Lantern Station'), lantern3Id);
+      expect(await transferState(), SyncTransferState.requested);
+      for (var i = 0; i < 40; i++) {
+        await transfers.run();
+        if (await transferState() == SyncTransferState.done) break;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      // ignore: avoid_print
+      print('server download: ${await transferState()}');
+      transfers.dispose();
 
       // 2. Read here; it reaches the server, even on a chapter the server
       // never opened (spike S2).

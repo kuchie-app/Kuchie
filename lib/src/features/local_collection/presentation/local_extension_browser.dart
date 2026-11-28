@@ -66,6 +66,8 @@ import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../../sync/controller/extension_sync.dart';
 import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/server_series.dart';
+import '../../sync/controller/server_transfers.dart';
+import '../../sync/data/sync_journal.dart' show SyncTransferState;
 import '../../tracking/presentation/hub/track_sheet.dart';
 import '../data/chapter_page_resolver.dart';
 import '../data/local_browse_preferences.dart';
@@ -2465,6 +2467,16 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
   final _busy = <String>{};
   final _scrollOffset = ValueNotifier(0.0);
   bool _savingLibrary = false;
+
+  /// While sync is on and this series is on the server: what the server
+  /// has, so Download goes there and badges show where a chapter is.
+  var _server = const <String, ServerChapterState>{};
+  bool _onServer = false;
+  int _serverRequest = 0;
+  late final ServerTransfers _transfers = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(serverTransfersProvider);
   String get _seriesId =>
       localSourceSeriesId(widget.extension, widget.manga.id);
   LocalDownloadQueue get _queue => widget.services.downloads;
@@ -2515,6 +2527,57 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
     _queue.completed.addListener(_reload);
     unawaited(_loadMangaDetails());
     unawaited(_loadPersonal());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _transfers.onChanged = _loadServer;
+      unawaited(_loadServer());
+    });
+  }
+
+  Future<void> _loadServer() async {
+    final request = ++_serverRequest;
+    try {
+      final linked =
+          _transfers.engine.enabled &&
+          await _transfers.pages.mangaId(_seriesId) != null;
+      final states = linked
+          ? await _transfers.states(_seriesId)
+          : const <String, ServerChapterState>{};
+      if (!mounted || request != _serverRequest) return;
+      setState(() {
+        _onServer = linked;
+        _server = states;
+      });
+    } catch (_) {
+      // Badges only; the chapter list works without them.
+    }
+  }
+
+  /// Download while sync is on: to the server (design 3.6).
+  Future<void> _downloadToServer(LocalSourceChapter chapter) async {
+    try {
+      await _transfers.download(_seriesId, chapter.id);
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    }
+    await _loadServer();
+  }
+
+  Future<void> _deleteFromServer(LocalSourceChapter chapter) async {
+    if (!await localConfirm(
+          context,
+          localText(context, 'Delete from the server', 'Hapus dari server'),
+          chapter.title,
+        ) ||
+        !mounted) {
+      return;
+    }
+    try {
+      await _transfers.deleteFromServer(_seriesId, [chapter.id]);
+    } catch (error) {
+      if (mounted) localFailure(context, error);
+    }
+    await _loadServer();
   }
 
   Future<void> _loadPersonal() async {
@@ -2555,6 +2618,7 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
 
   @override
   void dispose() {
+    if (_transfers.onChanged == _loadServer) _transfers.onChanged = null;
     _covered?.removeStatusListener(_onUncovered);
     _queue.completed.removeListener(_reload);
     _scrollOffset.dispose();
@@ -2747,6 +2811,13 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
   }
 
   Future<void> _download(LocalSourceChapter chapter) async {
+    if (_onServer) return _downloadToServer(chapter);
+    return _saveOffline(chapter);
+  }
+
+  /// A copy on this iPhone: Save to device, or Save for offline while sync
+  /// is on, which takes the server's copy when there is one.
+  Future<void> _saveOffline(LocalSourceChapter chapter) async {
     if (!_busy.add(chapter.id)) return;
     setState(() {});
     try {
@@ -2905,13 +2976,39 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
           )
         else
           PopupMenuItem(
-            onTap: () => _download(chapter),
+            onTap: () => _saveOffline(chapter),
             child: ChapterMenuRow(
               icon: FluentIcons.arrow_download_24_regular,
+              label: _onServer
+                  ? localText(
+                      context,
+                      'Save for offline',
+                      'Simpan untuk offline',
+                    )
+                  : localText(context, 'Save to device', 'Simpan ke perangkat'),
+            ),
+          ),
+        if (_onServer && !(_server[chapter.id]?.downloaded ?? false))
+          PopupMenuItem(
+            onTap: () => _downloadToServer(chapter),
+            child: ChapterMenuRow(
+              icon: FluentIcons.cloud_arrow_down_24_regular,
               label: localText(
                 context,
-                'Save to device',
-                'Simpan ke perangkat',
+                'Download to server',
+                'Unduh ke server',
+              ),
+            ),
+          ),
+        if (_server[chapter.id]?.downloaded ?? false)
+          PopupMenuItem(
+            onTap: () => _deleteFromServer(chapter),
+            child: ChapterMenuRow(
+              icon: FluentIcons.cloud_dismiss_24_regular,
+              label: localText(
+                context,
+                'Delete from the server',
+                'Hapus dari server',
               ),
             ),
           ),
@@ -2929,10 +3026,20 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
   }) {
     final selecting = _selection.isNotEmpty;
     final selected = _selection.contains(chapter.id);
+    final server = _server[chapter.id];
+    final onServer = server?.downloaded ?? false;
     final working =
         _busy.contains(chapter.id) ||
         job?.state == LocalDownloadState.queued ||
-        job?.state == LocalDownloadState.downloading;
+        job?.state == LocalDownloadState.downloading ||
+        (!onServer &&
+            (server?.transfer == SyncTransferState.queued ||
+                server?.transfer == SyncTransferState.requested));
+    final location = switch ((saved != null, onServer)) {
+      (true, true) => ChapterLocation.both,
+      (false, true) => ChapterLocation.server,
+      _ => null,
+    };
     final date = chapter.uploadDate;
     Future<void> runSwipe(ChapterSwipeAction action) async {
       switch (action) {
@@ -2975,9 +3082,13 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
           key: ValueKey('local-chapter-${chapter.id}'),
           title: chapter.title,
           date: date?.toLocal().millisecondsSinceEpoch.toDaysAgo(context),
-          extra: job == null || job.pageCount == 0 || saved != null
-              ? null
-              : '${job.done} / ${job.pageCount}',
+          extra: job != null && job.pageCount > 0 && saved == null
+              ? '${job.done} / ${job.pageCount}'
+              : switch (location) {
+                  ChapterLocation.both => 'iPhone + Server',
+                  ChapterLocation.server => 'Server',
+                  _ => null,
+                },
           isRead: marks.read,
           isBookmarked: marks.bookmarked,
           // Online reads keep their page too, for the last one read.
@@ -3036,13 +3147,36 @@ class _LocalSourceMangaPageState extends State<_LocalSourceMangaPage> {
                     ),
                   ),
                 )
-              : IconButton(
-                  tooltip: localText(
-                    context,
-                    'Save to device',
-                    'Simpan ke perangkat',
+              : onServer
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    FluentIcons.cloud_checkmark_24_regular,
+                    semanticLabel: localText(
+                      context,
+                      'On the server',
+                      'Tersimpan di server',
+                    ),
+                    color: context.colorScheme.primary,
                   ),
-                  icon: const Icon(FluentIcons.arrow_circle_down_24_regular),
+                )
+              : IconButton(
+                  tooltip: _onServer
+                      ? localText(
+                          context,
+                          'Download to server',
+                          'Unduh ke server',
+                        )
+                      : localText(
+                          context,
+                          'Save to device',
+                          'Simpan ke perangkat',
+                        ),
+                  icon: Icon(
+                    _onServer
+                        ? FluentIcons.cloud_arrow_down_24_regular
+                        : FluentIcons.arrow_circle_down_24_regular,
+                  ),
                   onPressed: job == null
                       ? () => _download(chapter)
                       : () => _changeDownload(
