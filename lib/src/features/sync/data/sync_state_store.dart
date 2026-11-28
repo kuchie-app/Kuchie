@@ -15,6 +15,21 @@ enum SyncDataKind {
   String get preferenceKey => 'sync.prefs.$name';
 }
 
+/// What the first sync does with two different libraries (design 3.3).
+enum ConnectChoice {
+  /// Keep everything from both.
+  merge,
+
+  /// The server's library replaces this iPhone's. Downloads stay.
+  useServer,
+
+  /// This iPhone's library replaces the server's.
+  useLocal;
+
+  static ConnectChoice? fromName(String? name) =>
+      values.where((choice) => choice.name == name).firstOrNull;
+}
+
 /// Sync's own small state, kept in SharedPreferences under `sync.`.
 ///
 /// The server's address and credentials are not here: Sync uses the same
@@ -33,9 +48,11 @@ class SyncStateStore {
   static const lastErrorKey = 'sync.lastError';
   static const chapterCursorKey = 'sync.cursor.chapters';
   static const explainerSeenKey = 'sync.explainerSeen';
+  static const connectChoiceKey = 'sync.suwayomi.connectChoice';
 
   /// Keys that belong to the connected server; cleared on disconnect.
   static const _serverKeys = [
+    connectChoiceKey,
     serverIdentityKey,
     userIdKey,
     lastSuccessAtKey,
@@ -96,6 +113,14 @@ class SyncStateStore {
 
   Future<void> setIncludes(SyncDataKind kind, bool include) =>
       _prefs.setBool(kind.preferenceKey, include);
+
+  /// What the first sync will do, chosen when connecting; the engine reads
+  /// it.
+  ConnectChoice? get connectChoice =>
+      ConnectChoice.fromName(_prefs.getString(connectChoiceKey));
+
+  Future<void> setConnectChoice(ConnectChoice choice) =>
+      _prefs.setString(connectChoiceKey, choice.name);
 
   /// Whether the Sync page has played its three-step explainer once.
   bool get explainerSeen => _prefs.getBool(explainerSeenKey) ?? false;

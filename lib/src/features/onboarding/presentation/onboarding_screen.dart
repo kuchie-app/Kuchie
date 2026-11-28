@@ -13,6 +13,7 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../constants/db_keys.dart';
@@ -53,6 +54,35 @@ import '../data/server_resolver.dart';
 import 'collection_choice_step.dart';
 import 'onboarding_motion.dart';
 import 'onboarding_sign_in.dart';
+
+/// How [ServerStep] keeps its drafts and finishes signing in, so Sync can
+/// reuse the step without touching onboarding's state.
+class ServerStepHost {
+  const ServerStepHost({
+    required this.prefix,
+    required this.finishSignIn,
+    required this.signedIn,
+  });
+
+  static const onboarding = ServerStepHost(
+    prefix: 'onboarding',
+    finishSignIn: finishOnboardingSignIn,
+    signedIn: _onboardingSignedIn,
+  );
+
+  /// SharedPreferences prefix for the address draft and a pending probe.
+  final String prefix;
+
+  /// Runs `signIn`, then records that the step is done.
+  final Future<void> Function(WidgetRef ref, Future<void> Function() signIn)
+  finishSignIn;
+
+  /// Whether `finishSignIn` has completed.
+  final bool Function(SharedPreferences preferences) signedIn;
+}
+
+bool _onboardingSignedIn(SharedPreferences preferences) =>
+    preferences.getInt('onboarding.step') == 2;
 
 class OnboardingScreen extends HookConsumerWidget {
   const OnboardingScreen({super.key});
@@ -377,7 +407,7 @@ class _OnboardingBody extends StatelessWidget {
         appearance: const _ThemeStep(showWelcome: false),
       ),
       0 => const _ThemeStep(),
-      1 => _ServerStep(
+      1 => ServerStep(
         nextRequest: requestState.value,
         onActivityChanged: (value) {
           if (context.mounted && stepState.value == 1) {
@@ -664,12 +694,17 @@ class _ServerPickerSheet extends StatelessWidget {
   }
 }
 
-class _ServerStep extends HookConsumerWidget {
-  const _ServerStep({
+class ServerStep extends HookConsumerWidget {
+  const ServerStep({
+    super.key,
     required this.nextRequest,
     required this.onActivityChanged,
     required this.onSignedIn,
+    this.host = ServerStepHost.onboarding,
   });
+
+  /// Where the step keeps its drafts and how it finishes signing in.
+  final ServerStepHost host;
   final ValueChanged<String?> onActivityChanged;
   final int nextRequest;
   final VoidCallback onSignedIn;
@@ -681,7 +716,7 @@ class _ServerStep extends HookConsumerWidget {
     final preferences = ref.watch(sharedPreferencesProvider);
     final urlController = useTextEditingController(
       text:
-          preferences.getString('onboarding.urlDraft') ??
+          preferences.getString('${host.prefix}.urlDraft') ??
           () {
             final stored = ref.read(serverExternalUrlProvider);
             return (stored == null || stored == DBKeys.serverUrl.initial)
@@ -690,7 +725,7 @@ class _ServerStep extends HookConsumerWidget {
           }(),
     );
     final pendingProbe = useMemoized(
-      () => preferences.getString('onboarding.pendingProbe'),
+      () => preferences.getString('${host.prefix}.pendingProbe'),
     );
     final state = useState(_TestState.idle);
     final version = useState<String?>(null);
@@ -761,7 +796,7 @@ class _ServerStep extends HookConsumerWidget {
         builder: (_) => AccountCodeDialog(
           mode: mode,
           onSubmit: ({required code, username, required password}) async {
-            await finishOnboardingSignIn(ref, () async {
+            await host.finishSignIn(ref, () async {
               await adopt(base);
               await ref
                   .read(accountActionsProvider)
@@ -775,7 +810,7 @@ class _ServerStep extends HookConsumerWidget {
         ),
         animationStyle: context.motionStyle,
       );
-      if (context.mounted && preferences.getInt('onboarding.step') == 2) {
+      if (context.mounted && host.signedIn(preferences)) {
         onSignedIn();
       }
     }
@@ -830,7 +865,7 @@ class _ServerStep extends HookConsumerWidget {
             password: pass,
           );
         }
-        await finishOnboardingSignIn(ref, () async {
+        await host.finishSignIn(ref, () async {
           await adopt(base);
           await performSignIn(
             ref,
@@ -851,14 +886,14 @@ class _ServerStep extends HookConsumerWidget {
     Future<void> completeConnection() async {
       final base = resolvedUrl.value;
       if (base == null) return;
-      await finishOnboardingSignIn(ref, () => adopt(base));
+      await host.finishSignIn(ref, () => adopt(base));
       if (context.mounted) onSignedIn();
     }
 
     Future<void> markConnected() async {
       state.value = _TestState.connected;
 
-      if (preferences.getBool('onboarding.advanceAfterProbe') == true) {
+      if (preferences.getBool('${host.prefix}.advanceAfterProbe') == true) {
         await completeConnection();
       }
     }
@@ -975,8 +1010,8 @@ class _ServerStep extends HookConsumerWidget {
         state.value = _TestState.failed;
 
         if (context.mounted) {
-          await preferences.setString('onboarding.pendingProbe', '');
-          await preferences.setBool('onboarding.advanceAfterProbe', false);
+          await preferences.setString('${host.prefix}.pendingProbe', '');
+          await preferences.setBool('${host.prefix}.advanceAfterProbe', false);
         }
         return;
       }
@@ -992,15 +1027,18 @@ class _ServerStep extends HookConsumerWidget {
       final sessionIsCurrent = ref
           .read(authCredentialsStoreProvider.notifier)
           .captureSession();
-      await preferences.setString('onboarding.pendingProbe', input);
+      await preferences.setString('${host.prefix}.pendingProbe', input);
       if (!context.mounted) return;
       if (isWeb) {
         try {
           await testWeb();
         } finally {
           if (context.mounted && sessionIsCurrent()) {
-            await preferences.setString('onboarding.pendingProbe', '');
-            await preferences.setBool('onboarding.advanceAfterProbe', false);
+            await preferences.setString('${host.prefix}.pendingProbe', '');
+            await preferences.setBool(
+              '${host.prefix}.advanceAfterProbe',
+              false,
+            );
           }
         }
         return;
@@ -1060,8 +1098,8 @@ class _ServerStep extends HookConsumerWidget {
       } finally {
         client.close();
         if (context.mounted && sessionIsCurrent()) {
-          await preferences.setString('onboarding.pendingProbe', '');
-          await preferences.setBool('onboarding.advanceAfterProbe', false);
+          await preferences.setString('${host.prefix}.pendingProbe', '');
+          await preferences.setBool('${host.prefix}.advanceAfterProbe', false);
         }
       }
     }
@@ -1159,7 +1197,7 @@ class _ServerStep extends HookConsumerWidget {
           await signIn();
         } else {
           if (urlController.text.trim().isNotEmpty) {
-            await preferences.setBool('onboarding.advanceAfterProbe', true);
+            await preferences.setBool('${host.prefix}.advanceAfterProbe', true);
           }
           if (context.mounted) await testConnection();
         }
@@ -1263,7 +1301,7 @@ class _ServerStep extends HookConsumerWidget {
             prefixIcon: const Icon(FluentIcons.server_24_regular),
           ),
           onChanged: (value) {
-            preferences.setString('onboarding.urlDraft', value);
+            preferences.setString('${host.prefix}.urlDraft', value);
             capabilityGeneration.value++;
             serverAccountCapability.value = AccountCapability.unknown;
             resetToIdle();
