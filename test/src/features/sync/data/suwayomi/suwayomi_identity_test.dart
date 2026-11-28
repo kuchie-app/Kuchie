@@ -149,7 +149,7 @@ void main() {
       {
         'cbz': const ImportedFile(),
         'repo': const KuchieRepo(),
-        'shinigami': const BuiltIn(),
+        'shinigami': const ExtensionMissing(builtInShinigamiPackage),
         'new': const Sendable(),
         'missing': const ExtensionMissing('pkg.b'),
       },
@@ -159,6 +159,34 @@ void main() {
       {for (final (manga, here) in match.onlyRemote) manga.id: here},
       {2: true, 3: false},
     );
+  });
+
+  test('built-in Shinigami series match the server extension by API id', () {
+    const uuid = 'bd6e8536-6af4-4bf1-b159-8b79284799d0';
+    final match = matchSeries(
+      local: const [
+        LocalSeriesRef(
+          id: 'shinigami',
+          title: 'S',
+          sourceId: builtInShinigamiPackage,
+          mangaId: uuid,
+          locator: 'https://api.shngm.io/v1/chapter/$uuid/list?page_size=3000',
+        ),
+      ],
+      remote: const [
+        RemoteSeriesRef(
+          id: 315,
+          title: 'S',
+          sourceId: shinigamiSuwayomiSourceId,
+          url: uuid,
+        ),
+      ],
+      serverPackages: {builtInShinigamiPackage},
+      localSourceIds: {shinigamiSuwayomiSourceId},
+    );
+    expect(match.links, {'shinigami': 315});
+    expect(localMangaIdFor(shinigamiSuwayomiSourceId, uuid), uuid);
+    expect(localMangaIdFor('7', '/m/a'), kuchieLocatorId('/m/a'));
   });
 
   test('a server manga links to one Local series only', () {

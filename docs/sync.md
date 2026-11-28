@@ -13,7 +13,7 @@ Your iPhone stays the source of truth. Kuchie works fully without the server; wh
    - **The server is empty**: the first sync sends the iPhone's library.
    - **Both match**: they just sync.
    - **They differ**: choose **Merge** (keep everything from both), **Use the server library**, or **Use the iPhone library**.
-4. Tap **Start sync**. The cloud next to the Library title shows how it's going.
+4. Tap **Start sync**. If the server has extensions this iPhone lacks, they are installed here first (the report lists them), so the first sync brings in the whole library. The cloud next to the Library title shows how it's going.
 
 ## What syncs
 
@@ -24,12 +24,18 @@ Your iPhone stays the source of truth. Kuchie works fully without the server; wh
 | Chapter bookmarks | Yes |
 | Reader settings per series | Yes |
 | Rating, tags and notes | Off at first; on by itself if the server already has ratings or tags |
-| Extensions | Suggested, never installed for you |
+| Extensions | The server's are installed here when you connect; later differences are suggested on the Sync page |
 | Downloads on the server | Shown on the iPhone; see below |
 
 Turn any of these off in **Sync → Suwayomi server → Advanced**.
 
-Some series stay on the iPhone only, because the server has no source for them: file imports, Kuchie repository sources and the built-in Shinigami source. **Sync → Suwayomi server → Needs attention** lists them with the reason.
+Some series stay on the iPhone only, because the server has no source for them: file imports and Kuchie repository sources. **Sync → Suwayomi server → Needs attention** lists them with the reason. Kuchie's built-in Shinigami source syncs with the server's Shinigami extension.
+
+### Needs server
+
+A server series whose extension isn't on this iPhone still joins the Library, dimmed and labelled **Needs server**. Its page lists the server's chapters and reads them through the server; marks and reading sync as usual. Once its extension is installed here, it turns into a regular series with the same progress.
+
+If the server lost the extension too (it was uninstalled there), the Sync page offers to install it on both when a store lists its source, or says that no store does.
 
 ### When both sides changed
 

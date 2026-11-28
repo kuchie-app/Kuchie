@@ -47,12 +47,14 @@ class SuwayomiChapterPages implements ServerChapterPages {
     return reachability.baseUrl;
   }
 
-  /// The server's chapter id for [chapterId] of server manga [mangaId].
+  /// The server's chapter id for [chapterId] of server manga [mangaId],
+  /// Local series [seriesId].
   Future<int?> chapterId(
     String baseUrl,
     String mangaId,
-    String chapterId,
-  ) async {
+    String chapterId, {
+    required String seriesId,
+  }) async {
     var ids = _chapterIds[mangaId];
     if (ids == null || !ids.containsKey(chapterId)) {
       final chapters = await SuwayomiBackend(
@@ -60,7 +62,7 @@ class SuwayomiChapterPages implements ServerChapterPages {
       ).chaptersOf(mangaId);
       ids = _chapterIds[mangaId] = {
         for (final chapter in chapters)
-          kuchieLocatorId(chapter.url): int.parse(chapter.id),
+          localChapterIdFor(seriesId, chapter.url): int.parse(chapter.id),
       };
     }
     return ids[chapterId];
@@ -68,17 +70,21 @@ class SuwayomiChapterPages implements ServerChapterPages {
 
   /// Kuchie ids of the chapters of server manga [mangaId] the server has
   /// downloaded. Always asks the server.
-  Future<Set<String>> downloadedChapters(String baseUrl, String mangaId) async {
+  Future<Set<String>> downloadedChapters(
+    String baseUrl,
+    String mangaId, {
+    required String seriesId,
+  }) async {
     final chapters = await SuwayomiBackend(
       client.at(baseUrl),
     ).chaptersOf(mangaId);
     _chapterIds[mangaId] = {
       for (final chapter in chapters)
-        kuchieLocatorId(chapter.url): int.parse(chapter.id),
+        localChapterIdFor(seriesId, chapter.url): int.parse(chapter.id),
     };
     return {
       for (final chapter in chapters)
-        if (chapter.downloaded) kuchieLocatorId(chapter.url),
+        if (chapter.downloaded) localChapterIdFor(seriesId, chapter.url),
     };
   }
 
@@ -99,7 +105,12 @@ class SuwayomiChapterPages implements ServerChapterPages {
     if (manga == null) return null;
     final baseUrl = await this.baseUrl();
     if (baseUrl == null) return null;
-    final id = await this.chapterId(baseUrl, manga, chapterId);
+    final id = await this.chapterId(
+      baseUrl,
+      manga,
+      chapterId,
+      seriesId: seriesId,
+    );
     if (id == null) return null;
     final result = await client
         .at(baseUrl)

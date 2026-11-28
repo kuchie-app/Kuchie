@@ -216,11 +216,6 @@ class UnsyncedSeriesScreen extends ConsumerWidget {
           'Kuchie repo sources: Suwayomi cannot read them',
           'Source repo Kuchie: Suwayomi tidak bisa membacanya',
         ),
-        UnsyncedReason.builtIn => localText(
-          context,
-          'Built-in Shinigami: install its Mihon extension instead',
-          'Shinigami bawaan: pasang extension Mihon-nya',
-        ),
         UnsyncedReason.notOnServer => localText(
           context,
           "The server couldn't add them: install their extension there",
@@ -333,6 +328,12 @@ class SyncLogScreen extends ConsumerWidget {
                           context,
                           '${entry.pulled} in, ${entry.pushed} out',
                           '${entry.pulled} masuk, ${entry.pushed} keluar',
+                        ),
+                      if (entry.serverOnly > 0)
+                        localText(
+                          context,
+                          '${entry.serverOnly} read through the server',
+                          '${entry.serverOnly} dibaca lewat server',
                         ),
                       if (entry.seriesErrors > 0)
                         localText(

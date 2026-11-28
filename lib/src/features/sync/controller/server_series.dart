@@ -12,8 +12,7 @@ enum ServerSeriesGap {
   /// Sync with a Suwayomi server is off.
   syncOff,
 
-  /// From a file import, a Kuchie repo or the built-in Shinigami source:
-  /// the server has no source for it.
+  /// From a file import or a Kuchie repo: the server has no source for it.
   noServerSource,
 
   /// Syncable, but no cycle has linked it yet.
@@ -29,7 +28,7 @@ final serverSeriesProvider = FutureProvider.autoDispose
         return (mangaId: null, gap: ServerSeriesGap.syncOff);
       }
       final source = series.source;
-      if (source == null || parseLocalSource(source.sourceId) == null) {
+      if (source == null || suwayomiSourceIdOf(source.sourceId) == null) {
         return (mangaId: null, gap: ServerSeriesGap.noServerSource);
       }
       final services = await ref.watch(localCollectionServicesProvider.future);

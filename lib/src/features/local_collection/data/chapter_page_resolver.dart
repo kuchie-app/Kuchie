@@ -16,6 +16,18 @@ class ChapterNeedsServer implements Exception {
   const ChapterNeedsServer();
 }
 
+/// The server answered but couldn't open the chapter, and no extension on
+/// this iPhone reads it: its source is missing on the server too, or the
+/// site refused.
+class ChapterServerFailed implements Exception {
+  const ChapterServerFailed(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => '$cause';
+}
+
 /// Neither the server nor the source answered: no internet.
 class ChapterOffline implements Exception {
   const ChapterOffline(this.cause);
@@ -45,29 +57,31 @@ class ChapterPageResolver {
     String? extensionId,
     LocalSourceChapter? chapter,
   }) async {
-    final fromServer = await _server(seriesId, chapterId);
+    Object? serverError;
+    List<LocalSourcePage>? fromServer;
+    final server = this.server;
+    if (server != null) {
+      try {
+        fromServer = await server
+            .pages(seriesId, chapterId)
+            .timeout(serverTimeout);
+      } on TimeoutException {
+        // Slow: the source still reads it.
+      } catch (error) {
+        // Refusing: the source still reads it.
+        serverError = error;
+      }
+    }
     if (fromServer != null && fromServer.isNotEmpty) return fromServer;
     if (extensionId == null || chapter == null) {
-      throw const ChapterNeedsServer();
+      throw serverError == null
+          ? const ChapterNeedsServer()
+          : ChapterServerFailed(serverError);
     }
     try {
       return await sources.chapterPages(extensionId, chapter);
     } on SocketException catch (error) {
       throw ChapterOffline(error);
-    }
-  }
-
-  Future<List<LocalSourcePage>?> _server(
-    String seriesId,
-    String chapterId,
-  ) async {
-    final server = this.server;
-    if (server == null) return null;
-    try {
-      return await server.pages(seriesId, chapterId).timeout(serverTimeout);
-    } catch (_) {
-      // Unreachable, slow or refusing: the source still reads it.
-      return null;
     }
   }
 }

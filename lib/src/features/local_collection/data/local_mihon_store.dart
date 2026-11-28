@@ -211,8 +211,20 @@ Map<String, Object?>? _mihonV2Package(
     'apk': isShinigami ? null : apk,
     'icon': icon is String ? _secureArtifactUri(icon)?.toString() : null,
     'nsfw': value['contentWarning'] == 'CONTENT_WARNING_NSFW',
+    'sources': _mihonSourceIds(sources),
   };
 }
+
+/// The Mihon source ids an extension serves, as the sync server names
+/// sources (sync matches series by them).
+List<String> _mihonSourceIds(Object? sources) => [
+  if (sources is List<Object?>)
+    for (final source in sources.take(256))
+      if (source is Map)
+        if ('${source['id']}' case final id
+            when LocalSources._mihonId.hasMatch(id))
+          id,
+];
 
 /// Normalises a legacy `index.min.json` array, whose files live beside it.
 List<Map<String, Object?>> _mihonLegacyPackages(
@@ -260,6 +272,7 @@ Map<String, Object?>? _mihonLegacyPackage(
     'apk': base.resolve('apk/$apk').toString(),
     'icon': base.resolve('icon/$id.png').toString(),
     'nsfw': value['nsfw'] == 1,
+    'sources': _mihonSourceIds(value['sources']),
   };
 }
 

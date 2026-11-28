@@ -3988,6 +3988,34 @@ Future<void> openRemoteLocalChapter(
   );
 }
 
+/// A chapter only the sync server lists, for a "Needs server" series.
+typedef ServerOnlyChapter = ({String id, String title});
+
+/// Opens a chapter of a "Needs server" series (design 3.5): no extension
+/// here reads it, so its pages come from the sync server. Progress goes to
+/// History and syncs like any chapter read online.
+Future<void> openServerOnlyChapter(
+  BuildContext context,
+  LocalCollectionServices services, {
+  required LocalSeries series,
+  required List<ServerOnlyChapter> chapters,
+  required String initialId,
+}) {
+  final initial = chapters.firstWhere((chapter) => chapter.id == initialId);
+  return Navigator.of(context).push<void>(
+    ReaderSwipeBackRoute(
+      builder: (_) => _LocalChapterSession(
+        services: services,
+        chapters: const [],
+        serverChapters: chapters,
+        initialId: initial.id,
+        initialTitle: initial.title,
+        series: series,
+      ),
+    ),
+  );
+}
+
 Future<void> openSavedLocalChapter(
   BuildContext context,
   LocalCollectionServices services,
@@ -4011,6 +4039,7 @@ class _LocalChapterSession extends StatefulWidget {
     this.extension,
     this.readerFormat,
     required this.chapters,
+    this.serverChapters = const [],
     required this.initialId,
     required this.initialTitle,
     required this.series,
@@ -4020,6 +4049,9 @@ class _LocalChapterSession extends StatefulWidget {
   final LocalExtension? extension;
   final ReaderFormatMetadata? readerFormat;
   final List<LocalSourceChapter> chapters;
+
+  /// Chapters only the sync server reads, in reading order.
+  final List<ServerOnlyChapter> serverChapters;
   final String initialId;
   final String initialTitle;
   final LocalSeries series;
@@ -4036,6 +4068,9 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
   late final _saved = {
     for (final chapter in widget.series.chapters) chapter.id: chapter,
   };
+  late final _serverTitles = {
+    for (final chapter in widget.serverChapters) chapter.id: chapter.title,
+  };
   List<LocalReaderChapterEntry> get _entries => [
     for (final chapter in _chapters.values)
       LocalReaderChapterEntry(
@@ -4043,8 +4078,16 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
         title: chapter.title,
         saved: _saved[chapter.id],
       ),
-    for (final chapter in _saved.values)
+    for (final chapter in widget.serverChapters)
       if (!_chapters.containsKey(chapter.id))
+        LocalReaderChapterEntry(
+          id: chapter.id,
+          title: chapter.title,
+          saved: _saved[chapter.id],
+        ),
+    for (final chapter in _saved.values)
+      if (!_chapters.containsKey(chapter.id) &&
+          !_serverTitles.containsKey(chapter.id))
         LocalReaderChapterEntry(
           id: chapter.id,
           title: chapter.title,
@@ -4104,16 +4147,22 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
     }
     return _requests.putIfAbsent(id, () async {
       try {
-        final chapter = _chapters[id]!;
+        final chapter = _chapters[id];
+        final title = chapter?.title ?? _serverTitles[id];
+        if (title == null) throw StateError('The chapter is no longer listed.');
         // This iPhone's copy was handled above; then the sync server, then
         // the extension here (design 3.6).
         final pages =
             await ChapterPageResolver(
               sources: widget.services.sources,
               server: _serverPages,
+              // A "Needs server" chapter has nowhere else to go.
+              serverTimeout: chapter == null
+                  ? const Duration(seconds: 30)
+                  : const Duration(seconds: 3),
             ).pages(
               seriesId: widget.series.id,
-              chapterId: chapter.id,
+              chapterId: id,
               extensionId: _extension?.id,
               chapter: chapter,
             );
@@ -4124,13 +4173,13 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
         if (_closed) throw const LocalTransferCancelled();
         final progress = await widget.services.catalog.remoteProgress(
           widget.series.id,
-          chapter.id,
+          id,
         );
         if (_closed) throw const LocalTransferCancelled();
         final session = LocalPreviewPages(
           directory: Directory('${directory.path}/${_previews.length}'),
-          chapterId: chapter.id,
-          title: chapter.title,
+          chapterId: id,
+          title: title,
           urls: [for (final page in pages) page.url],
           headers: [for (final page in pages) page.headers],
           client: _client,
@@ -4215,6 +4264,11 @@ class _LocalChapterSessionState extends State<_LocalChapterSession> {
                               context,
                               'No internet. Saved chapters still open.',
                               'Tidak ada internet. Chapter yang disimpan tetap bisa dibuka.',
+                            ),
+                            ChapterServerFailed(:final cause) => localText(
+                              context,
+                              "Your server couldn't open this chapter, and no extension on this iPhone reads it. Installing its extension usually fixes this.\n\n$cause",
+                              'Server Anda tidak bisa membuka chapter ini, dan belum ada extension di iPhone ini yang bisa membacanya. Biasanya ini beres setelah extension-nya dipasang.\n\n$cause',
                             ),
                             _ => null,
                           }

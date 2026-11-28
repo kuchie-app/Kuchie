@@ -1,11 +1,13 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../local_collection/data/local_collection_providers.dart';
+import '../data/suwayomi/suwayomi_backend.dart';
 import '../data/suwayomi/suwayomi_identity.dart';
 import '../data/suwayomi/suwayomi_library_reader.dart';
 import '../data/suwayomi/suwayomi_reachability.dart';
 import '../data/suwayomi/suwayomi_sync_client.dart';
 import '../data/sync_state_store.dart';
+import 'extension_sync.dart';
 
 /// Which way the first sync goes (design 3.3).
 enum ConnectBranch {
@@ -29,12 +31,21 @@ class ConnectAnalysis {
     required this.localCount,
     required this.remoteCount,
     required this.match,
+    this.extensions,
   });
 
   final String serverAddress;
   final int localCount;
   final int remoteCount;
   final SeriesMatch match;
+
+  /// How the extensions differ; null when the server's couldn't be read.
+  /// Starting sync installs the server's on this iPhone, so both read the
+  /// same series (design 3.5).
+  final ExtensionSuggestions? extensions;
+
+  /// Extensions the first sync installs here first.
+  List<ServerExtension> get toInstall => extensions?.toInstall ?? const [];
 
   int get matched => match.links.length;
   int get onlyLocal => match.onlyLocal.length;
@@ -73,8 +84,10 @@ ConnectAnalysis analyzeConnection({
   required List<LocalSeriesRef> local,
   required ServerLibrary server,
   required Set<String> localSourceIds,
+  ExtensionSuggestions? extensions,
 }) => ConnectAnalysis(
   serverAddress: serverAddress,
+  extensions: extensions,
   localCount: local.length,
   remoteCount: server.series.length,
   match: matchSeries(
@@ -107,6 +120,14 @@ final connectAnalysisProvider = FutureProvider.autoDispose<ConnectAnalysis>((
     services.catalog.list(),
     services.sources.sources(),
   ).wait;
+  ExtensionSuggestions? extensions;
+  try {
+    extensions = await ref
+        .read(extensionSyncProvider)
+        .suggestionsFrom(SuwayomiBackend(client));
+  } catch (_) {
+    // The report still shows; extensions can be installed from the Sync page.
+  }
   return analyzeConnection(
     serverAddress: reachability.baseUrl,
     local: [
@@ -116,14 +137,14 @@ final connectAnalysisProvider = FutureProvider.autoDispose<ConnectAnalysis>((
             id: series.id,
             title: series.title,
             sourceId: series.source?.sourceId,
+            mangaId: series.source?.mangaId,
             locator: series.source?.locator,
           ),
     ],
     server: server,
     localSourceIds: {
-      for (final source in sources)
-        if (parseLocalSource(source.id) case (:final sourceId, package: _))
-          sourceId,
+      for (final source in sources) ?suwayomiSourceIdOf(source.id),
     },
+    extensions: extensions,
   );
 });

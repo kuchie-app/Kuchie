@@ -25,16 +25,21 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     probe: () => ref.read(suwayomiReachabilityProvider).probe(),
     backendAt: (baseUrl) => SuwayomiBackend(client.at(baseUrl)),
     localSources: () async {
-      final sources = await (await services()).sources.sources();
+      final local = (await services()).sources;
       return {
-        for (final source in sources)
+        for (final source in await local.sources())
           if (source.enabled)
-            if (parseLocalSource(source.id) case (:final sourceId, package: _))
-              sourceId: SyncLocalSource(
-                id: source.id,
-                catalogOrigin: source.catalogOrigin,
-                name: source.name,
-              ),
+            ?suwayomiSourceIdOf(source.id): SyncLocalSource(
+              id: source.id,
+              catalogOrigin: source.catalogOrigin,
+              name: source.name,
+              // Built-in Shinigami keeps its API feed as the locator.
+              locatorFor: source.id == builtInShinigamiPackage
+                  ? (url) =>
+                        local.legacySeriesReference(source.id, url)?.locator ??
+                        url
+                  : null,
+            ),
       };
     },
     ensureServerIdentity: (baseUrl) =>

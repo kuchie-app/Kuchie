@@ -11,6 +11,7 @@ import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_reachability.dar
 import 'package:kuchie/src/features/sync/data/sync_backend.dart';
 import 'package:kuchie/src/features/sync/data/sync_journal.dart';
 import 'package:kuchie/src/features/sync/data/sync_state_store.dart';
+import 'package:kuchie/src/features/sync/domain/sync_change.dart';
 import 'package:kuchie/src/features/sync/domain/sync_method.dart';
 import 'package:kuchie/src/features/sync/domain/sync_records.dart';
 import 'package:kuchie/src/features/sync/domain/sync_status.dart';
@@ -23,11 +24,17 @@ final _origin = Uri.parse('https://repo.example');
 const _source = 'p:1';
 
 class _Manga {
-  _Manga(this.id, this.url, {this.inLibrary = true, Set<String>? categories})
-    : categories = categories ?? {};
+  _Manga(
+    this.id,
+    this.url, {
+    this.inLibrary = true,
+    this.sourceId = '1',
+    Set<String>? categories,
+  }) : categories = categories ?? {};
 
   final String id;
   final String url;
+  final String sourceId;
   bool inLibrary;
   DateTime? inLibraryAt;
   final Set<String> categories;
@@ -56,8 +63,13 @@ class _FakeServer implements SyncBackend {
   /// The server time it stamps on a page update, in whole seconds.
   DateTime now = DateTime.utc(2026, 11, 1, 12);
 
-  _Manga addManga(String url, {bool inLibrary = true}) {
-    final manga = _Manga('${_nextId++}', url, inLibrary: inLibrary);
+  _Manga addManga(String url, {bool inLibrary = true, String sourceId = '1'}) {
+    final manga = _Manga(
+      '${_nextId++}',
+      url,
+      inLibrary: inLibrary,
+      sourceId: sourceId,
+    );
     mangas[manga.id] = manga;
     return manga;
   }
@@ -80,7 +92,7 @@ class _FakeServer implements SyncBackend {
 
   RemoteSeries _series(_Manga manga) => RemoteSeries(
     id: manga.id,
-    sourceId: '1',
+    sourceId: manga.sourceId,
     url: manga.url,
     title: manga.title,
     inLibrary: manga.inLibrary,
@@ -129,7 +141,9 @@ class _FakeServer implements SyncBackend {
   @override
   Future<RemoteSeries?> findSeries(String sourceId, String url) async {
     for (final manga in mangas.values) {
-      if (manga.url == url) return _series(manga);
+      if (manga.sourceId == sourceId && manga.url == url) {
+        return _series(manga);
+      }
     }
     return null;
   }
@@ -143,7 +157,9 @@ class _FakeServer implements SyncBackend {
     writes.add('createSeries');
     return [
       for (final entry in series)
-        _series(addManga(entry.url)..inLibraryAt = now),
+        _series(
+          addManga(entry.url, sourceId: entry.sourceId)..inLibraryAt = now,
+        ),
     ];
   }
 
@@ -243,15 +259,14 @@ void main() {
   late List<SyncStatus> statuses;
   late DateTime clock;
   late LocalSeriesReaderMeta readerMeta;
+  late Map<String, SyncLocalSource> sources;
 
   SyncEngine engine() => SyncEngine(
     catalog: () async => catalog,
     store: store,
     probe: () async => reachability,
     backendAt: (_) => server,
-    localSources: () async => {
-      '1': SyncLocalSource(id: _source, catalogOrigin: _origin, name: 'P'),
-    },
+    localSources: () async => sources,
     ensureServerIdentity: (_) async => 'server-a',
     clock: () => clock,
     onStatus: statuses.add,
@@ -273,6 +288,9 @@ void main() {
     reachability = const SuwayomiReachable('http://server', 'server-a');
     statuses = [];
     clock = DateTime.utc(2026, 11, 1, 12);
+    sources = {
+      '1': SyncLocalSource(id: _source, catalogOrigin: _origin, name: 'P'),
+    };
   });
 
   tearDown(() async {
@@ -673,6 +691,135 @@ void main() {
     await addLocal('/new');
     await engine().sync();
     expect(await journal.pending(), isNotEmpty);
+  });
+
+  group('series no extension here reads ("Needs server")', () {
+    test('join the library and sync their reading', () async {
+      final manga = server.addManga('/n', sourceId: '9');
+      server.addChapter(manga, '/n/1').state = ChapterState(
+        read: true,
+        page: 3,
+        readAt: DateTime.utc(2026, 10, 1),
+      );
+      server.addChapter(manga, '/n/2');
+      final report = await engine().sync();
+      final id = serverOnlySeriesId(manga.id);
+      expect(await libraryHere(), {id});
+      expect(report.notReadableHere, 1);
+      expect(store.log.first.serverOnly, 1);
+      final series = (await catalog.syncSeries()).single;
+      expect(series.source?.sourceId, serverOnlySourceId);
+      expect(series.title, 'Title /n');
+      final states = await catalog.syncChapterStates(id);
+      expect(states[localChapterIdFor(id, '/n/1')]?.read, isTrue);
+
+      // Read here through the server: it goes back like any read.
+      clock = clock.add(const Duration(minutes: 1));
+      await catalog.recordRemoteRead(
+        series: LocalSeries(id: id, title: series.title, chapters: const []),
+        chapterId: localChapterIdFor(id, '/n/2'),
+        chapterTitle: 'Chapter /n/2',
+        progress: 5,
+      );
+      await engine().sync();
+      expect(server.chapter('/n/2').state.page, 5);
+    });
+
+    test('become the real series once the extension is here', () async {
+      final manga = server.addManga('/n', sourceId: '9');
+      server.addChapter(manga, '/n/1').state = ChapterState(
+        read: true,
+        page: 2,
+        readAt: DateTime.utc(2026, 10, 1),
+      );
+      await engine().sync();
+      expect(await libraryHere(), {serverOnlySeriesId(manga.id)});
+
+      sources['9'] = SyncLocalSource(
+        id: 'q:9',
+        catalogOrigin: _origin,
+        name: 'Q',
+      );
+      await engine().sync();
+      final real = localSeriesIdFor(
+        origin: _origin,
+        sourceId: 'q:9',
+        mangaId: kuchieLocatorId('/n'),
+      );
+      expect(await libraryHere(), {real});
+      expect(
+        (await catalog.syncChapterStates(real))[kuchieLocatorId('/n/1')]?.read,
+        isTrue,
+      );
+      expect(
+        await catalog.syncChapterStates(serverOnlySeriesId(manga.id)),
+        isEmpty,
+      );
+      expect(
+        await SyncJournal(
+          catalog,
+        ).remoteIdFor('suwayomi', SyncLinkKind.series, real),
+        manga.id,
+      );
+    });
+  });
+
+  group('built-in Shinigami syncs as the server extension', () {
+    const uuid = 'bd6e8536-6af4-4bf1-b159-8b79284799d0';
+    const chapterUuid = '42577280-3648-4317-a758-2404e06e35da';
+    final shinigamiOrigin = Uri.parse('https://api.shngm.io');
+    String shinigamiId(String mangaId) => localSeriesIdFor(
+      origin: shinigamiOrigin,
+      sourceId: builtInShinigamiPackage,
+      mangaId: mangaId,
+    );
+
+    setUp(() {
+      sources[shinigamiSuwayomiSourceId] = SyncLocalSource(
+        id: builtInShinigamiPackage,
+        catalogOrigin: shinigamiOrigin,
+        name: 'Shinigami',
+        locatorFor: (url) => 'feed:$url',
+      );
+    });
+
+    test('a server series opens with the built-in adapter', () async {
+      final manga = server.addManga(uuid, sourceId: shinigamiSuwayomiSourceId);
+      server.addChapter(manga, chapterUuid).state = ChapterState(
+        read: false,
+        page: 7,
+        readAt: DateTime.utc(2026, 10, 1),
+      );
+      await engine().sync();
+      final id = shinigamiId(uuid);
+      expect(await libraryHere(), {id});
+      final series = (await catalog.syncSeries()).single;
+      expect(series.source?.sourceId, builtInShinigamiPackage);
+      expect(series.source?.mangaId, uuid);
+      expect(series.source?.locator, 'feed:$uuid');
+      // The adapter's chapter id is the API's, which the server stores.
+      expect((await catalog.syncChapterStates(id))[chapterUuid]?.page, 7);
+    });
+
+    test('a series here goes to the server', () async {
+      await catalog.setInLibrary(
+        seriesId: shinigamiId(uuid),
+        title: 'Shinigami series',
+        inLibrary: true,
+        source: const LocalSeriesSource(
+          sourceId: builtInShinigamiPackage,
+          mangaId: uuid,
+          locator: 'feed:$uuid',
+        ),
+      );
+      await engine().sync();
+      final created = server.mangas.values.single;
+      expect(
+        (created.sourceId, created.url),
+        (shinigamiSuwayomiSourceId, uuid),
+      );
+      expect(created.inLibrary, isTrue);
+    });
   });
 }
 

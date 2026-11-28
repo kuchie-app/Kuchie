@@ -27,12 +27,17 @@ class SyncLocalSource {
     required this.id,
     required this.catalogOrigin,
     required this.name,
+    this.locatorFor,
   });
 
-  /// `<package>:<source id>`.
+  /// `<package>:<source id>`, or the built-in Shinigami adapter's id.
   final String id;
   final Uri catalogOrigin;
   final String name;
+
+  /// The Local locator for a server manga URL; the URL itself when null,
+  /// as for Mihon extensions.
+  final String Function(String url)? locatorFor;
 }
 
 /// What one cycle did.
@@ -55,7 +60,8 @@ class SyncReport {
   /// Local series id → why it did not sync; retried next cycle.
   final Map<String, SyncSeriesError> seriesErrors;
 
-  /// Server series left out because no extension here reads them.
+  /// Server series no extension here reads: in the library as "Needs
+  /// server", read through it.
   final int notReadableHere;
   final Object? error;
 
@@ -255,6 +261,7 @@ class SyncEngine {
         pulled: report.pulled,
         pushed: report.pushed,
         seriesErrors: report.seriesErrors.length,
+        serverOnly: report.notReadableHere,
         message: report.error == null ? null : '${report.error}',
       ),
     );
@@ -481,11 +488,17 @@ class _Cycle {
     for (final series in localSeries) {
       if (!series.inLibrary || pairs.containsKey(series.id)) continue;
       final source = series.source;
-      final parsed = source == null ? null : parseLocalSource(source.sourceId);
-      // Imports, Kuchie repo and built-in sources stay on this iPhone.
-      if (source == null || parsed == null) continue;
-      final url = stableLocator(source.locator);
-      final match = remoteByUrl[(parsed.sourceId, url)];
+      final key = source == null
+          ? null
+          : suwayomiKeyOf(
+              sourceId: source.sourceId,
+              mangaId: source.mangaId,
+              locator: source.locator,
+            );
+      // Imports and Kuchie repo sources stay on this iPhone.
+      if (key == null) continue;
+      final (:sourceId, :url) = key;
+      final match = remoteByUrl[(sourceId, url)];
       if (match != null && linkedRemote.add(match.id)) {
         newLinks.add(
           _Pair(
@@ -498,10 +511,9 @@ class _Cycle {
       } else if (firstSync && choice == ConnectChoice.useServer) {
         dropLocal.add(series);
       } else {
-        lookups.add((series, parsed.sourceId, url));
+        lookups.add((series, sourceId, url));
       }
     }
-    var notReadableHere = 0;
     final dropRemote = <String>[];
     for (final series in remoteLibrary) {
       if (linkedRemote.contains(series.id)) continue;
@@ -513,7 +525,6 @@ class _Cycle {
         }
         // No extension here: the series still joins the library, read
         // through the server ("Needs server", design 3.5).
-        notReadableHere++;
         linkedRemote.add(series.id);
         newLinks.add(
           _Pair(
@@ -530,7 +541,7 @@ class _Cycle {
         );
         continue;
       }
-      final mangaId = kuchieLocatorId(series.url);
+      final mangaId = localMangaIdFor(series.sourceId, series.url);
       final localId = localSeriesIdFor(
         origin: source.catalogOrigin,
         sourceId: source.id,
@@ -550,7 +561,7 @@ class _Cycle {
           newSource: LocalSeriesSource(
             sourceId: source.id,
             mangaId: mangaId,
-            locator: series.url,
+            locator: source.locatorFor?.call(series.url) ?? series.url,
             sourceName: source.name,
           ),
         ),
@@ -742,7 +753,7 @@ class _Cycle {
         final localStates = await catalog.syncChapterStates(pair.localId);
         for (final chapter in pair.chapters) {
           _seen(chapter.state.readAt);
-          final chapterId = kuchieLocatorId(chapter.url);
+          final chapterId = localChapterIdFor(pair.localId, chapter.url);
           final key = chapterStateKey(pair.localId, chapterId);
           final base = switch (chapterBases[key]) {
             final json? => ChapterState.fromJson(json),
@@ -1186,7 +1197,13 @@ class _Cycle {
       pulled: _pulled,
       pushed: _pushed,
       seriesErrors: Map.unmodifiable(_errors),
-      notReadableHere: notReadableHere,
+      notReadableHere: active
+          .where(
+            (pair) =>
+                isServerOnlySeriesId(pair.localId) &&
+                (pair.remote?.inLibrary ?? false),
+          )
+          .length,
     );
   }
 }

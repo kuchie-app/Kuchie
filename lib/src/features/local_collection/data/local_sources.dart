@@ -84,12 +84,16 @@ class LocalSourcePackage {
     this.icon,
     this.isNsfw = false,
     this.signingKey,
+    this.sourceIds = const {},
     bool native = false,
     bool mihon = false,
   }) : _native = native,
        _mihon = mihon;
 
   final String id;
+
+  /// The Mihon source ids it serves, when its store lists them.
+  final Set<String> sourceIds;
   final String name;
   final String version;
   final String language;
@@ -1476,6 +1480,11 @@ class LocalSources {
       mihon: !builtIn,
       isNsfw: data['nsfw'] == true,
       signingKey: builtIn ? null : signingKey,
+      sourceIds: {
+        if (data['sources'] case final List<Object?> ids)
+          for (final id in ids.take(256))
+            if (id is String && _mihonId.hasMatch(id)) id,
+      },
     );
   }
 
@@ -1951,6 +1960,8 @@ Map<String, Object?> _repositoryJson(LocalSourceRepository repo) =>
               'apk': package._mihon ? package.url.toString() : null,
               'icon': package.icon?.toString(),
               'nsfw': package.isNsfw,
+              if (package.sourceIds.isNotEmpty)
+                'sources': package.sourceIds.toList(),
             },
         ],
       }

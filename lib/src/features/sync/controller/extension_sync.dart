@@ -20,7 +20,8 @@ class ExtensionSuggestions {
     required this.notInServerStores,
     this.storesToAdd = const [],
     this.seriesByPackage = const {},
-    this.serverOnly = const [],
+    this.missingEverywhere = const [],
+    this.unknownSources = const {},
   });
 
   /// Installed on the server, not here: their series can't be read here,
@@ -40,29 +41,39 @@ class ExtensionSuggestions {
   /// Package → how many series of the server library it reads.
   final Map<String, int> seriesByPackage;
 
-  /// On the server, but not installable here: Kuchie has its own built-in
-  /// Shinigami source, and Keiyoushi lists Shinigami without an APK for
-  /// iPhone. Their series stay on the server.
-  final List<ServerExtension> serverOnly;
+  /// Extensions the server library's series need but neither side has: the
+  /// server lost them (uninstalled), and a store here lists their source.
+  /// Installing puts them on both.
+  final List<ServerExtension> missingEverywhere;
+
+  /// Server source id → series of a source no extension anywhere is known
+  /// for; a store added later may list it.
+  final Map<String, int> unknownSources;
 
   /// Server library series waiting for an extension here.
-  int get seriesWaiting => onlyOnServer.fold(
+  int get seriesWaiting => [...onlyOnServer, ...missingEverywhere].fold(
     0,
     (sum, extension) => sum + (seriesByPackage[extension.package] ?? 0),
   );
 
-  /// Server library series only the server can read.
-  int get seriesServerOnly => serverOnly.fold(
-    0,
-    (sum, extension) => sum + (seriesByPackage[extension.package] ?? 0),
-  );
+  /// Everything one tap installs on this iPhone.
+  List<ServerExtension> get toInstall => [
+    ...onlyOnServer,
+    ...missingEverywhere,
+  ];
+
+  /// Series no known extension reads, here or on the server.
+  int get seriesUnknown => unknownSources.values.sum;
 
   bool get isEmpty =>
       onlyOnServer.isEmpty &&
       onlyHere.isEmpty &&
       notInServerStores.isEmpty &&
-      serverOnly.isEmpty;
+      missingEverywhere.isEmpty;
 }
+
+/// A store package on this iPhone, by the sources it serves.
+typedef StorePackageRef = ({String package, String name, String language});
 
 ExtensionSuggestions compareExtensions({
   required List<ServerExtension> server,
@@ -70,20 +81,39 @@ ExtensionSuggestions compareExtensions({
   List<ServerStore> serverStores = const [],
   Set<String> storeKeysHere = const {},
   Map<String, int> seriesByPackage = const {},
+  Map<String, int> orphanSeries = const {},
+  Map<String, StorePackageRef> packagesBySource = const {},
 }) {
   final listed = {for (final extension in server) extension.package: extension};
-  bool installable(ServerExtension extension) =>
-      extension.package != builtInShinigamiPackage;
-  final missing = [
+  // Series whose source the server lost: a store here may still list it.
+  final byPackage = {...seriesByPackage};
+  final unknown = <String, int>{};
+  final missing = <String, ServerExtension>{};
+  for (final MapEntry(key: sourceId, value: count) in orphanSeries.entries) {
+    final ref = packagesBySource[sourceId];
+    if (ref == null) {
+      unknown[sourceId] = count;
+      continue;
+    }
+    byPackage[ref.package] = (byPackage[ref.package] ?? 0) + count;
+    if (here.contains(ref.package)) continue;
+    missing[ref.package] = ServerExtension(
+      package: ref.package,
+      name: listed[ref.package]?.name ?? ref.name,
+      language: listed[ref.package]?.language ?? ref.language,
+      installed: false,
+      storeIndexUrl: listed[ref.package]?.storeIndexUrl,
+    );
+  }
+  // Shinigami included: Keiyoushi lists it for Kuchie's built-in adapter,
+  // which reads the same ids as the server's extension.
+  final onlyOnServer = [
     for (final extension in server)
       if (extension.installed && !here.contains(extension.package)) extension,
   ];
-  final onlyOnServer = missing.where(installable).toList();
-  onlyOnServer.sort(
-    (a, b) => (seriesByPackage[b.package] ?? 0).compareTo(
-      seriesByPackage[a.package] ?? 0,
-    ),
-  );
+  int bySeries(ServerExtension a, ServerExtension b) =>
+      (byPackage[b.package] ?? 0).compareTo(byPackage[a.package] ?? 0);
+  onlyOnServer.sort(bySeries);
   final neededStores = {
     for (final extension in onlyOnServer) ?extension.storeIndexUrl,
   };
@@ -94,6 +124,8 @@ ExtensionSuggestions compareExtensions({
         if (listed[package] case final extension? when !extension.installed)
           extension,
     ],
+    missingEverywhere: missing.values.toList()..sort(bySeries),
+    unknownSources: unknown,
     notInServerStores: [
       for (final package in here)
         if (!listed.containsKey(package)) package,
@@ -104,10 +136,29 @@ ExtensionSuggestions compareExtensions({
             neededStores.contains(store.indexUrl))
           store,
     ],
-    seriesByPackage: seriesByPackage,
-    serverOnly: missing.whereNot(installable).toList(),
+    seriesByPackage: byPackage,
   );
 }
+
+/// Source id → package, from the stores saved on this iPhone.
+Map<String, StorePackageRef> storePackagesBySource(
+  Iterable<LocalSourceRepository> repositories,
+) => {
+  for (final repository in repositories)
+    for (final package in repository.packages)
+      for (final sourceId in package.sourceIds)
+        sourceId: (
+          package: package.id,
+          name: package.name,
+          language: package.language,
+        ),
+  // Built-in Shinigami serves the Mihon extension's source id.
+  shinigamiSuwayomiSourceId: (
+    package: builtInShinigamiPackage,
+    name: 'Shinigami',
+    language: 'id',
+  ),
+};
 
 /// What "Install from the server" did.
 class ServerExtensionsReport {
@@ -137,6 +188,7 @@ class ExtensionSync {
   final Future<SuwayomiReachability> Function() probe;
   final SuwayomiBackend Function(String baseUrl) backendAt;
   final Future<LocalSources> Function() localSources;
+  bool _storesRefreshed = false;
 
   Future<SuwayomiBackend?> _backend() async {
     if (!engine.enabled) return null;
@@ -147,15 +199,18 @@ class ExtensionSync {
   }
 
   Future<Set<String>> _packagesHere(LocalSources sources) async => {
-    for (final source in await sources.sources())
-      if (parseLocalSource(source.id) case (:final package, sourceId: _))
-        package,
+    for (final source in await sources.sources()) ?suwayomiPackageOf(source.id),
   };
 
   /// Null while sync is off or the server can't be reached.
   Future<ExtensionSuggestions?> suggestions() async {
     final backend = await _backend();
-    if (backend == null) return null;
+    return backend == null ? null : suggestionsFrom(backend);
+  }
+
+  /// Compares with the server behind [backend], sync on or not: connecting
+  /// asks before the first sync.
+  Future<ExtensionSuggestions> suggestionsFrom(SuwayomiBackend backend) async {
     final sources = await localSources();
     final (server, stores, packages, library) = await (
       backend.extensions(),
@@ -163,21 +218,48 @@ class ExtensionSync {
       backend.sourcePackages(),
       backend.library(),
     ).wait;
+    final readHere = {
+      for (final source in await sources.sources())
+        ?suwayomiSourceIdOf(source.id),
+    };
     final seriesByPackage = <String, int>{};
+    final orphanSeries = <String, int>{};
     for (final series in library) {
       if (packages[series.sourceId] case final package?) {
         seriesByPackage[package] = (seriesByPackage[package] ?? 0) + 1;
+      } else if (!readHere.contains(series.sourceId)) {
+        // The server lost its extension, and none here reads it.
+        orphanSeries[series.sourceId] =
+            (orphanSeries[series.sourceId] ?? 0) + 1;
       }
+    }
+    var repositories = await sources.repositories();
+    // Stores saved before Kuchie kept source ids lack them: read them once.
+    if (!_storesRefreshed &&
+        orphanSeries.keys.any(
+          (id) => !storePackagesBySource(repositories).containsKey(id),
+        )) {
+      _storesRefreshed = true;
+      for (final repository in repositories) {
+        try {
+          await sources.refreshRepository(repository.url);
+        } catch (_) {
+          // Offline or retired: what was saved still counts.
+        }
+      }
+      repositories = await sources.repositories();
     }
     return compareExtensions(
       server: server,
       here: await _packagesHere(sources),
       serverStores: stores,
       storeKeysHere: {
-        for (final repository in await sources.repositories())
+        for (final repository in repositories)
           ?repository.signingKey?.toLowerCase(),
       },
       seriesByPackage: seriesByPackage,
+      orphanSeries: orphanSeries,
+      packagesBySource: storePackagesBySource(repositories),
     );
   }
 
@@ -207,6 +289,7 @@ class ExtensionSync {
   Future<ServerExtensionsReport> installFromServer(
     ExtensionSuggestions suggestions, {
     void Function(String step)? onStep,
+    bool syncAfter = true,
   }) async {
     final sources = await localSources();
     final added = <String>[];
@@ -220,15 +303,30 @@ class ExtensionSync {
         failed[store.name] = '$error';
       }
     }
+    final repositories = await sources.repositories();
     final byPackage = <String, LocalSourcePackage>{};
-    for (final repository in await sources.repositories()) {
+    for (final repository in repositories) {
       for (final package in repository.packages) {
         byPackage.putIfAbsent(package.id, () => package);
       }
     }
+    // Sources the server lost that a store added just now lists.
+    final bySource = storePackagesBySource(repositories);
+    final lost = {
+      for (final extension in suggestions.missingEverywhere)
+        extension.package: extension,
+      for (final sourceId in suggestions.unknownSources.keys)
+        if (bySource[sourceId] case final ref?)
+          ref.package: ServerExtension(
+            package: ref.package,
+            name: ref.name,
+            language: ref.language,
+            installed: false,
+          ),
+    };
     final installed = <String>[];
     final here = await _packagesHere(sources);
-    for (final extension in suggestions.onlyOnServer) {
+    for (final extension in [...suggestions.onlyOnServer, ...lost.values]) {
       if (here.contains(extension.package)) continue;
       final package = byPackage[extension.package];
       if (package == null) {
@@ -245,8 +343,25 @@ class ExtensionSync {
         failed[extension.name] = '$error';
       }
     }
+    // The server lost these; it reads their series again once it has them.
+    if (lost.isNotEmpty) {
+      try {
+        final backend = await _backend();
+        for (final package in lost.keys) {
+          try {
+            await backend?.installExtension(package);
+          } catch (_) {
+            // Not in the server's stores: the Sync page says so.
+          }
+        }
+      } catch (_) {
+        // Server unreachable: the iPhone still reads them.
+      }
+    }
     // A large library takes a while; the Library fills in when it's done.
-    if (installed.isNotEmpty) unawaited(engine.sync(manual: true));
+    if (syncAfter && installed.isNotEmpty) {
+      unawaited(engine.sync(manual: true));
+    }
     return ServerExtensionsReport(
       storesAdded: added,
       installed: installed,

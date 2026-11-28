@@ -17,9 +17,6 @@ enum UnsyncedReason {
   /// From a Kuchie repo, which Suwayomi cannot read.
   kuchieRepo,
 
-  /// From the built-in Shinigami source.
-  builtIn,
-
   /// The server could not add it: its extension may be missing there.
   notOnServer,
 
@@ -63,10 +60,8 @@ UnsyncedReason? _reason(
   if (isServerOnlySeriesId(series.id)) return null;
   final source = series.source;
   if (source == null) return UnsyncedReason.importedFile;
-  if (parseLocalSource(source.sourceId) == null) {
-    return source.sourceId == builtInShinigamiPackage
-        ? UnsyncedReason.builtIn
-        : UnsyncedReason.kuchieRepo;
+  if (suwayomiSourceIdOf(source.sourceId) == null) {
+    return UnsyncedReason.kuchieRepo;
   }
   if (errors[series.id] == SyncSeriesError.requestFailed.name) {
     return UnsyncedReason.requestFailed;

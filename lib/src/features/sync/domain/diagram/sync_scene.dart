@@ -648,7 +648,8 @@ SceneScreens screensFor(SyncScene scene, int counter, double t) {
       final k = 1 + (t / 1.6).floor() % 3;
       screens['phone'] = NodeScreen('$k/3', (t / 1.6) % 1);
     case SyncStatusKind.synced:
-      break;
+      // In sync, the server holds the same library as this iPhone.
+      if (method == SyncMethodKind.suwayomi) hubSub = series;
   }
   return SceneScreens(screens: screens, hubSub: hubSub, phoneSub: phoneSub);
 }

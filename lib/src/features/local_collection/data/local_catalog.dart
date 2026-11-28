@@ -322,6 +322,11 @@ class LocalCatalog {
   /// Names of the kept source covers, read once so lists never touch the
   /// disk while they build or scroll.
   Set<String>? _keptCovers;
+
+  /// Fires when a source cover is kept, for lists to repaint; sync keeps
+  /// the server's covers in the background.
+  Stream<void> get keptCoverAdded => _keptCoverAdded.stream;
+  final _keptCoverAdded = StreamController<void>.broadcast(sync: true);
   Future<void>? _keptCoversLoading;
 
   /// Reads which source covers are kept; [keptCover] answers from memory.
@@ -373,6 +378,7 @@ class LocalCatalog {
     await partial.writeAsBytes(bytes, flush: true);
     await partial.rename(target.path);
     (_keptCovers ??= {}).add(p.basename(target.path));
+    _keptCoverAdded.add(null);
   }
 
   Future<_CatalogDatabase> _open() async {

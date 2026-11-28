@@ -13,7 +13,7 @@ Future<bool> installExtensionsFromServer(
   BuildContext context,
   ExtensionSuggestions suggestions,
 ) async {
-  final count = suggestions.onlyOnServer.length;
+  final count = suggestions.toInstall.length;
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
     showDragHandle: true,
@@ -57,7 +57,7 @@ Future<bool> installExtensionsFromServer(
             ),
             Text(
               [
-                for (final extension in suggestions.onlyOnServer)
+                for (final extension in suggestions.toInstall)
                   switch (suggestions.seriesByPackage[extension.package]) {
                     final int series when series > 0 =>
                       '${extension.name} ($series)',
@@ -167,7 +167,7 @@ class ServerLibraryWaitingCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final suggestions = ref.watch(extensionSuggestionsProvider).value;
-    if (suggestions == null || suggestions.onlyOnServer.isEmpty) {
+    if (suggestions == null || suggestions.toInstall.isEmpty) {
       return const SizedBox.shrink();
     }
     return Card(
@@ -189,8 +189,8 @@ class ServerLibraryWaitingCard extends ConsumerWidget {
             Text(
               localText(
                 context,
-                'They come here once this iPhone has the same ${suggestions.onlyOnServer.length} extensions as the server.',
-                'Series itu masuk setelah iPhone ini punya ${suggestions.onlyOnServer.length} extension yang sama dengan server.',
+                'They come here once this iPhone has the same ${suggestions.toInstall.length} extensions as the server.',
+                'Series itu masuk setelah iPhone ini punya ${suggestions.toInstall.length} extension yang sama dengan server.',
               ),
             ),
             const SizedBox(height: 12),
@@ -290,6 +290,48 @@ class _ExtensionSuggestionsSectionState
                     installExtensionsFromServer(context, suggestions),
                   ),
                   child: Text(localText(context, 'Install', 'Pasang')),
+                ),
+              ),
+            if (suggestions.missingEverywhere.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.extension_off_outlined),
+                title: Text(
+                  localText(
+                    context,
+                    '${suggestions.missingEverywhere.length} the server lost',
+                    '${suggestions.missingEverywhere.length} hilang dari server',
+                  ),
+                ),
+                subtitle: Text(
+                  '${names(suggestions.missingEverywhere.map((e) => e.name))}. '
+                  '${localText(context, 'Their series are in the server library, but neither side has the extension. Install puts them on both.', 'Series-nya ada di library server, tapi extension-nya tidak ada di kedua sisi. Pasang memasangnya di keduanya.')}',
+                ),
+                trailing: TextButton(
+                  onPressed: () => unawaited(
+                    installExtensionsFromServer(context, suggestions),
+                  ),
+                  child: Text(localText(context, 'Install', 'Pasang')),
+                ),
+              ),
+            if (suggestions.unknownSources.isNotEmpty)
+              ListTile(
+                leading: Icon(
+                  Icons.help_outline_rounded,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                title: Text(
+                  localText(
+                    context,
+                    '${suggestions.seriesUnknown} series without an extension',
+                    '${suggestions.seriesUnknown} series tanpa extension',
+                  ),
+                ),
+                subtitle: Text(
+                  localText(
+                    context,
+                    "Their extension was removed from the server and no store here lists it. Add its store on the server or here; until then they can't be read.",
+                    'Extension-nya sudah dihapus dari server dan tidak ada di store mana pun di sini. Tambahkan store-nya di server atau di sini; sebelum itu series-nya tidak bisa dibaca.',
+                  ),
                 ),
               ),
             if (suggestions.onlyHere.isNotEmpty)

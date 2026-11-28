@@ -44,14 +44,16 @@ class _Pages extends Fake implements SuwayomiChapterPages {
   Future<int?> chapterId(
     String baseUrl,
     String mangaId,
-    String chapterId,
-  ) async => chapterIds[chapterId];
+    String chapterId, {
+    required String seriesId,
+  }) async => chapterIds[chapterId];
 
   @override
   Future<Set<String>> downloadedChapters(
     String baseUrl,
-    String mangaId,
-  ) async => const {};
+    String mangaId, {
+    required String seriesId,
+  }) async => const {};
 
   @override
   void forget(String mangaId) {}

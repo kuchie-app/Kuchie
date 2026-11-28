@@ -524,6 +524,10 @@ void main() {
                   'code': 2,
                   'version': '1.4.2',
                   'nsfw': 0,
+                  'sources': [
+                    {'name': 'Example', 'lang': 'all', 'id': '7309872737'},
+                    {'name': 'Bad', 'lang': 'all', 'id': 'not-a-number'},
+                  ],
                 },
                 {'name': 'Broken', 'pkg': '../escape', 'apk': 'x.apk'},
                 // Mihon loads neither anime extensions nor other libs.
@@ -573,6 +577,11 @@ void main() {
       expect(repo.url, index);
       final example = repo.packages.single;
       expect(example.name, 'Example');
+      // Sync finds a source's extension by these, also once saved.
+      expect(example.sourceIds, {'7309872737'});
+      expect((await catalog.repositories()).single.packages.single.sourceIds, {
+        '7309872737',
+      });
       expect(
         example.url,
         Uri.parse(

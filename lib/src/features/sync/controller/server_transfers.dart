@@ -177,7 +177,12 @@ class ServerTransfers {
       final manga = await pages.mangaId(transfer.seriesId);
       final id = manga == null
           ? null
-          : await pages.chapterId(baseUrl, manga, transfer.chapterId);
+          : await pages.chapterId(
+              baseUrl,
+              manga,
+              transfer.chapterId,
+              seriesId: transfer.seriesId,
+            );
       if (id == null) {
         await put(
           next(
@@ -310,7 +315,9 @@ class ServerTransfers {
       final manga = await pages.mangaId(seriesId);
       final baseUrl = manga == null ? null : await pages.baseUrl();
       if (manga != null && baseUrl != null) {
-        downloaded.addAll(await pages.downloadedChapters(baseUrl, manga));
+        downloaded.addAll(
+          await pages.downloadedChapters(baseUrl, manga, seriesId: seriesId),
+        );
       }
     } catch (_) {
       // Away from home: only what this iPhone knows.
@@ -333,7 +340,8 @@ class ServerTransfers {
     }
     final ids = <int>[];
     for (final chapterId in chapterIds) {
-      if (await pages.chapterId(baseUrl, manga, chapterId) case final id?) {
+      if (await pages.chapterId(baseUrl, manga, chapterId, seriesId: seriesId)
+          case final id?) {
         ids.add(id);
       }
     }

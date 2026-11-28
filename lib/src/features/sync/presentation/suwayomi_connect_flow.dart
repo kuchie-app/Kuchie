@@ -11,6 +11,7 @@ import '../../onboarding/presentation/onboarding_screen.dart';
 import '../../security/security_settings_screen.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../controller/connect_analysis.dart';
+import '../controller/extension_sync.dart';
 import '../controller/sync_controller.dart';
 import '../data/suwayomi/suwayomi_reachability.dart';
 import '../data/sync_state_store.dart';
@@ -53,7 +54,7 @@ const syncServerStepHost = ServerStepHost(
   signedIn: _syncSignedIn,
 );
 
-enum _Step { server, analysis, saved }
+enum _Step { server, analysis, installing, saved }
 
 /// Connecting Suwayomi (design 3.3): address, sign-in, then an analysis that
 /// writes nothing and ends in a report. The final button saves what the
@@ -75,6 +76,8 @@ class _SuwayomiConnectFlowState extends ConsumerState<SuwayomiConnectFlow> {
   String? _activity;
   ConnectChoice _choice = ConnectChoice.merge;
   ConnectChoice? _saved;
+  String? _installingName;
+  ServerExtensionsReport? _installed;
 
   @override
   void initState() {
@@ -82,8 +85,28 @@ class _SuwayomiConnectFlowState extends ConsumerState<SuwayomiConnectFlow> {
     unawaited(ref.read(sharedPreferencesProvider).remove(_signedInKey));
   }
 
-  Future<void> _save(ConnectChoice choice) async {
+  Future<void> _save(ConnectChoice choice, ConnectAnalysis analysis) async {
     await ref.read(syncStateStoreProvider).setConnectChoice(choice);
+    // The server's extensions first, so the first sync brings in every
+    // series it can read (design 3.5: both sides read the same series).
+    if (analysis.extensions case final extensions?
+        when analysis.toInstall.isNotEmpty) {
+      if (mounted) setState(() => _step = _Step.installing);
+      try {
+        _installed = await ref
+            .read(extensionSyncProvider)
+            .installFromServer(
+              extensions,
+              syncAfter: false,
+              onStep: (name) {
+                if (mounted) setState(() => _installingName = name);
+              },
+            );
+      } catch (error) {
+        _installed = ServerExtensionsReport(failed: {'': '$error'});
+      }
+      ref.invalidate(extensionSuggestionsProvider);
+    }
     // The first sync runs in the background; the Sync page shows it.
     unawaited(ref.read(syncControllerProvider.notifier).syncNow());
     if (mounted) {
@@ -108,8 +131,10 @@ class _SuwayomiConnectFlowState extends ConsumerState<SuwayomiConnectFlow> {
             onSave: _save,
             onSignInAgain: () => setState(() => _step = _Step.server),
           ),
+          _Step.installing => _InstallingStep(name: _installingName),
           _Step.saved => _SavedStep(
             choice: _saved!,
+            installed: _installed,
             onDone: () => Navigator.of(context).pop(_saved),
           ),
         },
@@ -157,7 +182,7 @@ class _AnalysisStep extends ConsumerWidget {
 
   final ConnectChoice choice;
   final ValueChanged<ConnectChoice> onChoice;
-  final ValueChanged<ConnectChoice> onSave;
+  final void Function(ConnectChoice choice, ConnectAnalysis analysis) onSave;
   final VoidCallback onSignInAgain;
 
   @override
@@ -235,7 +260,7 @@ class _AnalysisStep extends ConsumerWidget {
         analysis: analysis,
         choice: choice,
         onChoice: onChoice,
-        onSave: onSave,
+        onSave: (choice) => onSave(choice, analysis),
       ),
     );
   }
@@ -314,6 +339,10 @@ class ConnectReport extends StatelessWidget {
         Text(body, style: theme.textTheme.bodyMedium),
         const SizedBox(height: 16),
         _Numbers(analysis: a),
+        if (a.toInstall.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _ExtensionsToInstall(analysis: a),
+        ],
         if (implied == null) ...[
           const SizedBox(height: 16),
           RadioGroup<ConnectChoice>(
@@ -437,11 +466,83 @@ class _Numbers extends StatelessWidget {
   }
 }
 
+/// The server's extensions the first sync installs here, and why.
+class _ExtensionsToInstall extends StatelessWidget {
+  const _ExtensionsToInstall({required this.analysis});
+
+  final ConnectAnalysis analysis;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final extensions = analysis.toInstall;
+    final waiting = analysis.extensions?.seriesWaiting ?? 0;
+    return SettingsGroupCard(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.extension_outlined),
+          title: Text(
+            localText(
+              context,
+              'Also installs ${extensions.length} extensions from the server',
+              'Juga memasang ${extensions.length} extension dari server',
+            ),
+          ),
+          subtitle: Text(
+            '${localText(context, 'So this iPhone reads the same $waiting series as the server: ', 'Supaya iPhone ini bisa membaca $waiting series yang sama dengan server: ')}'
+            '${extensions.map((extension) => extension.name).join(', ')}.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InstallingStep extends StatelessWidget {
+  const _InstallingStep({this.name});
+
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SyncDiagram(scene: sceneFor(suwayomiMethod, SyncStatusKind.analyzing)),
+        Text(
+          localText(
+            context,
+            "Installing the server's extensions…",
+            'Memasang extension dari server…',
+          ),
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          name ?? '',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SavedStep extends StatelessWidget {
-  const _SavedStep({required this.choice, required this.onDone});
+  const _SavedStep({
+    required this.choice,
+    required this.onDone,
+    this.installed,
+  });
 
   final ConnectChoice choice;
   final VoidCallback onDone;
+
+  /// What installing the server's extensions did, if it ran.
+  final ServerExtensionsReport? installed;
 
   @override
   Widget build(BuildContext context) {
@@ -466,6 +567,27 @@ class _SavedStep extends StatelessWidget {
           ),
           style: theme.textTheme.bodyMedium,
         ),
+        if (installed case final report?) ...[
+          const SizedBox(height: 12),
+          Text(
+            report.failed.isEmpty
+                ? localText(
+                    context,
+                    '${report.installed.length} extensions installed from the server.',
+                    '${report.installed.length} extension dari server terpasang.',
+                  )
+                : localText(
+                    context,
+                    '${report.installed.length} extensions installed. Not installed: '
+                        '${report.failed.keys.where((name) => name.isNotEmpty).join(', ')}. '
+                        'Their series are read through the server until they are.',
+                    '${report.installed.length} extension terpasang. Tidak terpasang: '
+                        '${report.failed.keys.where((name) => name.isNotEmpty).join(', ')}. '
+                        'Series-nya dibaca lewat server sampai extension-nya terpasang.',
+                  ),
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
         const SizedBox(height: 24),
         FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),

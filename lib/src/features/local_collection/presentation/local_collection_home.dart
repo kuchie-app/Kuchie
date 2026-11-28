@@ -46,9 +46,11 @@ import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/sync_controller.dart';
 import '../../sync/controller/sync_disconnect.dart';
 import '../../sync/controller/sync_scheduler.dart';
+import '../../sync/data/suwayomi/suwayomi_identity.dart';
 import '../../sync/domain/sync_status.dart';
 import '../../sync/presentation/extension_suggestions.dart';
 import '../../sync/presentation/server_downloads_section.dart';
+import '../../sync/presentation/server_only_series_screen.dart';
 import '../../sync/presentation/suwayomi_connect_flow.dart';
 import '../../sync/presentation/sync_settings_screen.dart';
 import '../../sync/presentation/sync_status_icon.dart';
@@ -185,6 +187,8 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
 
   @override
   void dispose() {
+    unawaited(_coverAdded?.cancel());
+    _coverRepaint?.cancel();
     _bound?.downloads.completed.removeListener(_refresh);
     _bound?.downloads.removeListener(_onQueue);
     _query.dispose();
@@ -192,11 +196,22 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     super.dispose();
   }
 
+  StreamSubscription<void>? _coverAdded;
+  Timer? _coverRepaint;
+
   void _bind(LocalCollectionServices services) {
     if (identical(_bound, services)) return;
     _bound?.downloads.completed.removeListener(_refresh);
     _bound?.downloads.removeListener(_onQueue);
     _bound = services;
+    // Covers sync keeps arrive one by one; repaint at most once a second.
+    unawaited(_coverAdded?.cancel());
+    _coverAdded = services.catalog.keptCoverAdded.listen((_) {
+      _coverRepaint ??= Timer(const Duration(seconds: 1), () {
+        _coverRepaint = null;
+        if (mounted) setState(() {});
+      });
+    });
     // Save for offline takes a chapter the sync server has from there.
     services.downloads.serverPages = ref.read(serverChapterPagesProvider);
     services.downloads.addListener(_onQueue);
@@ -760,6 +775,10 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     LocalCollectionServices services,
     LocalSeries book,
   ) async {
+    // No extension here reads it: its page comes from the sync server.
+    if (isServerOnlySeriesId(book.id)) {
+      return (closed: openServerOnlySeries(context, services, book));
+    }
     final sources = services.sources;
     final reference = localSeriesReference(sources, book);
     ({LocalExtension extension, LocalSourceManga manga})? selection;
@@ -825,6 +844,16 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         // take a while when the runtime is still starting.
         final opening = _showOpening(context);
         try {
+          if (isServerOnlySeriesId(entry.book.id)) {
+            opening.remove();
+            await openServerOnlyHistoryChapter(
+              context,
+              services,
+              series: entry.book,
+              chapterId: entry.chapter.id,
+            );
+            return;
+          }
           await openRemoteLocalChapter(
             context,
             services,
@@ -1550,7 +1579,10 @@ class _LocalBooksState extends State<_LocalBooks> {
                       ),
                       subtitle: Text(
                         [
-                          ?book.source?.sourceName,
+                          if (isServerOnlySeriesId(book.id))
+                            localText(context, 'Needs server', 'Butuh server')
+                          else
+                            ?book.source?.sourceName,
                           if (book.chapters.isNotEmpty)
                             localText(
                               context,
@@ -1598,20 +1630,33 @@ class _LocalBooksState extends State<_LocalBooks> {
                       key: ValueKey(book.id),
                       fit: StackFit.expand,
                       children: [
-                        MangaCoverGridTile(
-                          titleOverride: book.title,
-                          coverImage: _cover(book),
-                          fallbackCoverImage: pageImage,
-                          badgeCountOverride: preferences.unreadBadges.value
-                              ? _unread(book)
-                              : 0,
-                          showDarkOverlay: false,
-                          outlineOnCovers: true,
-                          borderRadius: glass
-                              ? const BorderRadius.all(Radius.circular(18))
-                              : null,
-                          onPressed: () => widget.onOpen(book),
+                        // A "Needs server" series is dimmed: only the
+                        // server reads it (design 3.5).
+                        Opacity(
+                          opacity: isServerOnlySeriesId(book.id) ? 0.55 : 1,
+                          child: MangaCoverGridTile(
+                            titleOverride: book.title,
+                            coverImage: _cover(book),
+                            fallbackCoverImage: pageImage,
+                            badgeCountOverride: preferences.unreadBadges.value
+                                ? _unread(book)
+                                : 0,
+                            showDarkOverlay: false,
+                            outlineOnCovers: true,
+                            borderRadius: glass
+                                ? const BorderRadius.all(Radius.circular(18))
+                                : null,
+                            onPressed: () => widget.onOpen(book),
+                          ),
                         ),
+                        if (isServerOnlySeriesId(book.id))
+                          const Positioned(
+                            top: 8,
+                            left: 8,
+                            child: IgnorePointer(
+                              child: ServerOnlyBadge(compact: true),
+                            ),
+                          ),
                         // Saved chapters, beside the unread count as in
                         // Tachimanga.
                         if (preferences.downloadedBadges.value && saved > 0)
