@@ -22,6 +22,7 @@ import '../../manga_book/domain/downloads/downloads_model.dart';
 import '../../manga_book/presentation/downloads/controller/downloads_controller.dart';
 import '../../manga_book/presentation/downloads/widgets/only_my_downloads.dart';
 import '../../onboarding/data/onboarding_complete.dart';
+import '../../sync/controller/server_transfers.dart';
 import 'offline_download_progress.dart';
 import 'offline_repository.dart';
 import 'offline_settings_providers.dart';
@@ -155,12 +156,31 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
 
       _DownloadSnapshot? serverSnapshot;
       LocalDownloadQueue? queue;
+      // Downloads on the sync server (Kuchie 2.0), polled while open.
+      ServerTransfers? transfers;
+      try {
+        transfers = ref.read(serverTransfersProvider);
+      } catch (_) {
+        // No sync storage in this container (tests, a session change).
+      }
+      _DownloadSnapshot? syncServerSnapshot() {
+        final status = transfers?.status.value;
+        if (status == null) return null;
+        final (:open, :finished) = status;
+        if (open == 0) return null;
+        return (
+          source: _DownloadSource.server,
+          progress: finished / (finished + open),
+          remaining: open,
+        );
+      }
+
       _DownloadSnapshot? currentSnapshot() {
         final jobs = queue?.value ?? const <LocalDownload>[];
         final job = jobs
             .where((item) => item.state == LocalDownloadState.downloading)
             .firstOrNull;
-        if (job == null) return serverSnapshot;
+        if (job == null) return serverSnapshot ?? syncServerSnapshot();
         return (
           source: _DownloadSource.local,
           progress: job.pageCount == 0 ? null : job.done / job.pageCount,
@@ -193,6 +213,7 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
         (_, _) => attachQueue(),
       );
       attachQueue();
+      transfers?.status.addListener(updateSnapshot);
       var resumeGeneration = 0;
       var wasPaused =
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused;
@@ -243,6 +264,7 @@ class DownloadLiveActivityHost extends HookConsumerWidget {
         subscription?.close();
         localQueueSubscription.close();
         queue?.removeListener(updateSnapshot);
+        transfers?.status.removeListener(updateSnapshot);
         updates.dispose();
       };
     }, [enabled, serverEnabled, container, updates]);

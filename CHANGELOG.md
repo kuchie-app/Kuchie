@@ -2,6 +2,29 @@
 
 All notable changes to Kuchie are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [2.0.1] - 2026-11-28
+
+Connecting to a server now brings in its whole library. See [Sync with Suwayomi](docs/sync.md).
+
+### Fixed
+- **Sync said it was done while the Library stayed empty.** Series whose extension wasn't on the iPhone were skipped without a word. Connecting now installs the server's extensions on the iPhone first, so the first sync brings in every series.
+- **Sync no longer resets reading positions on the server.** A chapter the server held at a page without a "last read" time was sent back as page 0 by the next full sync. If your server lost pages this way, they come back from a backup of the server.
+- A chapter the server can't open says why, instead of "the server can't be reached".
+
+### Every series of the server
+- **Needs server**: a series no extension on the iPhone reads still joins the Library, dimmed and labelled. Its page lists the server's chapters and reads them through the server; marks and reading sync. Once its extension is installed, it becomes a regular series with the same progress.
+- **Shinigami** syncs both ways with the built-in source: the server's Shinigami series open on the iPhone, and the iPhone's go to the server.
+- Extensions the server lost (uninstalled while its library still has their series) are found in the stores on the iPhone and installed on both with one tap. Sources no store lists are reported on the Sync page.
+- Covers from the server appear in the Library as they arrive.
+
+### Server tools on iPhone
+- While sync is on, **Sync → Suwayomi server → Advanced → Server** opens the server's settings, download settings, tracker logins and backups. **Manage trackers** in a series' Tracking sheet signs in.
+- Extension rows in Browse show where an extension is installed: iPhone, Server, or iPhone + Server.
+- Downloads on the server show in the Live Activity.
+
+### Still untested
+- Background sync on a device, a server download finishing from a real source, and servers that require a login.
+
 ## [2.0.0] - 2026-11-28
 
 Kuchie 2.0 has one library, on your iPhone, and syncs it with a Suwayomi server when you have one. See [Sync with Suwayomi](docs/sync.md).

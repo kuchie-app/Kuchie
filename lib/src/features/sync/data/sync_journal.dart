@@ -144,6 +144,22 @@ class SyncJournal {
     ),
   );
 
+  /// Forgets the link of [localKey] and what both sides agreed on for it.
+  Future<void> removeLink(
+    String backend,
+    SyncLinkKind kind,
+    String localKey,
+  ) => _run((db) async {
+    await db.customStatement(
+      'DELETE FROM sync_links WHERE backend = ? AND kind = ? AND local_key = ?',
+      [backend, kind.name, localKey],
+    );
+    await db.customStatement(
+      'DELETE FROM sync_base WHERE backend = ? AND key = ?',
+      [backend, localKey],
+    );
+  });
+
   Future<void> removeLinks(String backend) => _run(
     (db) => db.customStatement('DELETE FROM sync_links WHERE backend = ?', [
       backend,

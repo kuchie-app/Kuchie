@@ -41,7 +41,8 @@ void main() {
       {
         'import': UnsyncedReason.importedFile,
         'repo': UnsyncedReason.kuchieRepo,
-        'shinigami': UnsyncedReason.builtIn,
+        // Built-in Shinigami syncs as the server's Shinigami extension.
+        'shinigami': UnsyncedReason.waiting,
         'missing': UnsyncedReason.notOnServer,
         'failed': UnsyncedReason.requestFailed,
         'new': UnsyncedReason.waiting,

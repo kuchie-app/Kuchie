@@ -55,7 +55,7 @@ class SyncDisconnect {
     for (final link in await SyncJournal(services.catalog).links('suwayomi')) {
       if (link.kind != SyncLinkKind.series) continue;
       for (final chapter in await backend.chaptersOf(link.remoteId)) {
-        final id = kuchieLocatorId(chapter.url);
+        final id = localChapterIdFor(link.localKey, chapter.url);
         if (!chapter.downloaded || saved.contains((link.localKey, id))) {
           continue;
         }

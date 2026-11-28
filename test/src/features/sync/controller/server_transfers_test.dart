@@ -44,14 +44,16 @@ class _Pages extends Fake implements SuwayomiChapterPages {
   Future<int?> chapterId(
     String baseUrl,
     String mangaId,
-    String chapterId,
-  ) async => chapterIds[chapterId];
+    String chapterId, {
+    required String seriesId,
+  }) async => chapterIds[chapterId];
 
   @override
   Future<Set<String>> downloadedChapters(
     String baseUrl,
-    String mangaId,
-  ) async => const {};
+    String mangaId, {
+    required String seriesId,
+  }) async => const {};
 
   @override
   void forget(String mangaId) {}
@@ -161,6 +163,8 @@ void main() {
       await job.moveToServer([('s', saved)], keepLocal: false);
       expect(server.requested, [7]);
       expect(await stateOf(saved), SyncTransferState.requested);
+      // The Live Activity shows the server's queue.
+      expect(job.status.value, (open: 1, finished: 0));
 
       server.reports[7] = (downloaded: true, pageCount: 2);
       await job.run();
@@ -169,6 +173,7 @@ void main() {
       server.reports[7] = (downloaded: true, pageCount: 3);
       await job.run();
       expect(await stateOf(saved), SyncTransferState.done);
+      expect(job.status.value, (open: 0, finished: 0));
       expect(await savedHere(), isFalse);
       expect(catalog.removed, [saved]);
       job.dispose();

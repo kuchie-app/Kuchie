@@ -6,6 +6,8 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/digests/sha256.dart';
 
+import '../../../local_collection/data/local_collection_services.dart';
+
 /// The id Kuchie gives a Mihon manga or chapter: the SHA-256 of its URL, as
 /// `LocalSources` derives it from a runtime locator's stable part. A server
 /// URL is already that stable part.
@@ -39,8 +41,54 @@ String stableLocator(String locator) {
 }
 
 /// The built-in Shinigami adapter, which shares its package name with the
-/// Mihon extension but has no Suwayomi source id.
+/// Mihon extension. Its local source id has no Suwayomi source id in it.
 const builtInShinigamiPackage = 'eu.kanade.tachiyomi.extension.id.shinigami';
+
+/// Suwayomi's source id for Shinigami. The server's Mihon extension stores
+/// the API's manga and chapter ids as URLs, the same ids the built-in
+/// adapter uses, so its series sync like any other.
+const shinigamiSuwayomiSourceId = '3411809758861089969';
+
+/// The Suwayomi source id a Local source reads, or null for imports and
+/// Kuchie repo sources, which the server has no source for.
+String? suwayomiSourceIdOf(String localSourceId) =>
+    localSourceId == builtInShinigamiPackage
+    ? shinigamiSuwayomiSourceId
+    : parseLocalSource(localSourceId)?.sourceId;
+
+/// The extension package of a Local source the server can read, or null.
+String? suwayomiPackageOf(String localSourceId) =>
+    localSourceId == builtInShinigamiPackage
+    ? builtInShinigamiPackage
+    : parseLocalSource(localSourceId)?.package;
+
+/// Where a Local series is on Suwayomi: the source id and manga URL to
+/// match, or null when the server has no source for it.
+({String sourceId, String url})? suwayomiKeyOf({
+  required String sourceId,
+  required String mangaId,
+  required String locator,
+}) {
+  if (sourceId == builtInShinigamiPackage) {
+    return (sourceId: shinigamiSuwayomiSourceId, url: mangaId);
+  }
+  final parsed = parseLocalSource(sourceId);
+  return parsed == null
+      ? null
+      : (sourceId: parsed.sourceId, url: stableLocator(locator));
+}
+
+/// Kuchie's manga id for server manga [url] of source [suwayomiSourceId].
+String localMangaIdFor(String suwayomiSourceId, String url) =>
+    suwayomiSourceId == shinigamiSuwayomiSourceId ? url : kuchieLocatorId(url);
+
+/// Kuchie's chapter id for server chapter [url] of Local series [seriesId].
+/// Built-in Shinigami series keep the API's chapter id; every other series,
+/// "Needs server" ones included, the URL's SHA-256.
+String localChapterIdFor(String seriesId, String url) =>
+    parseLocalSourceSeriesId(seriesId)?.sourceId == builtInShinigamiPackage
+    ? url
+    : kuchieLocatorId(url);
 
 /// A series in the Local library, as matching needs it.
 class LocalSeriesRef {
@@ -48,6 +96,7 @@ class LocalSeriesRef {
     required this.id,
     required this.title,
     this.sourceId,
+    this.mangaId,
     this.locator,
   });
 
@@ -56,6 +105,7 @@ class LocalSeriesRef {
 
   /// Null for imported files.
   final String? sourceId;
+  final String? mangaId;
   final String? locator;
 }
 
@@ -90,11 +140,6 @@ final class ImportedFile extends LocalOnlyReason {
 /// From a Kuchie repo catalog, which Suwayomi cannot read.
 final class KuchieRepo extends LocalOnlyReason {
   const KuchieRepo();
-}
-
-/// From the built-in Shinigami adapter.
-final class BuiltIn extends LocalOnlyReason {
-  const BuiltIn();
 }
 
 /// From a Mihon extension the server doesn't have yet.
@@ -156,25 +201,25 @@ SeriesMatch matchSeries({
       onlyLocal.add((series, const ImportedFile()));
       continue;
     }
-    final parsed = parseLocalSource(sourceId);
-    if (parsed == null) {
-      onlyLocal.add((
-        series,
-        sourceId == builtInShinigamiPackage
-            ? const BuiltIn()
-            : const KuchieRepo(),
-      ));
+    final key = suwayomiKeyOf(
+      sourceId: sourceId,
+      mangaId: series.mangaId ?? '',
+      locator: locator,
+    );
+    final package = suwayomiPackageOf(sourceId);
+    if (key == null || package == null) {
+      onlyLocal.add((series, const KuchieRepo()));
       continue;
     }
-    final match = byKey[(parsed.sourceId, stableLocator(locator))];
+    final match = byKey[(key.sourceId, key.url)];
     if (match != null && linkedRemote.add(match.id)) {
       links[series.id] = match.id;
     } else {
       onlyLocal.add((
         series,
-        serverPackages.contains(parsed.package)
+        serverPackages.contains(package)
             ? const Sendable()
-            : ExtensionMissing(parsed.package),
+            : ExtensionMissing(package),
       ));
     }
   }
@@ -188,3 +233,21 @@ SeriesMatch matchSeries({
     ],
   );
 }
+
+/// The source of a series only the sync server can read: its extension
+/// isn't on this iPhone (design 3.5, "Needs server"). No colon, so it never
+/// parses as a Mihon source.
+const serverOnlySourceId = 'suwayomi';
+
+const _serverOnlyPrefix = 'suwayomi-manga-';
+
+/// The Local id of server manga [remoteId] while only the server reads it.
+String serverOnlySeriesId(String remoteId) => '$_serverOnlyPrefix$remoteId';
+
+bool isServerOnlySeriesId(String seriesId) =>
+    seriesId.startsWith(_serverOnlyPrefix);
+
+/// The server manga id of a [serverOnlySeriesId], or null.
+String? serverOnlyRemoteId(String seriesId) => isServerOnlySeriesId(seriesId)
+    ? seriesId.substring(_serverOnlyPrefix.length)
+    : null;

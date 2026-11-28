@@ -222,6 +222,7 @@ class SyncLogEntry {
     this.pulled = 0,
     this.pushed = 0,
     this.seriesErrors = 0,
+    this.serverOnly = 0,
     this.message,
   });
 
@@ -233,6 +234,9 @@ class SyncLogEntry {
   final int pulled;
   final int pushed;
   final int seriesErrors;
+
+  /// Series in the library that only the server reads ("Needs server").
+  final int serverOnly;
   final String? message;
 
   String encode() => jsonEncode({
@@ -241,6 +245,7 @@ class SyncLogEntry {
     'pulled': pulled,
     'pushed': pushed,
     'errors': seriesErrors,
+    if (serverOnly > 0) 'serverOnly': serverOnly,
     'message': ?message,
   });
 
@@ -255,6 +260,7 @@ class SyncLogEntry {
             pulled: map['pulled'] as int? ?? 0,
             pushed: map['pushed'] as int? ?? 0,
             seriesErrors: map['errors'] as int? ?? 0,
+            serverOnly: map['serverOnly'] as int? ?? 0,
             message: map['message'] as String?,
           ),
         _ => null,
