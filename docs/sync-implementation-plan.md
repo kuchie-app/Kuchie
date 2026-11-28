@@ -497,6 +497,28 @@ lib/src/features/sync/controller/sync_engine.dart
 
 **Dari spike S4b (28 November 2026, preview v2.4.2512):** library dan progres per pengguna. `restoreBackup` hanya berefek untuk token dengan role ADMIN (atau server Stable tanpa pengguna). Untuk pengguna biasa, engine membuat manga lewat `fetchSourceManga` + `updateMangas(inLibrary: true)`, dan mengirim `lastPageRead` setelah `fetchChapterPages`. `sync.suwayomi.userId` diisi dari klaim `sub` di JWT. Lihat [sync-spike-results.md](sync-spike-results.md#s4b-multi-pengguna-preview-v242512).
 
+**Status (28 November 2026):** engine, backend Suwayomi, dan tes fake backend selesai. Sudah dicoba ke server QA nyata, Stable v2.4.2366 dan preview v2.4.2512, lewat `tool/qa/sync_spike/sync_engine_qa_test.dart` (source lokal server, tanpa extension). Keduanya lolos semua langkah:
+
+1. Sync pertama (merge): series di server masuk ke iPhone beserta progres chapter-nya, dan series di iPhone yang ada di server tapi di luar library masuk ke library server.
+2. Baca di iPhone sampai halaman 7 pada chapter yang belum pernah dibuka server: halaman sampai di server (percobaan ulang S2 lewat `fetchChapterPages` berjalan).
+3. Dua sync manual tanpa perubahan: nol mutasi dan nol tulisan lokal.
+4. Read dan bookmark dari server sampai di iPhone.
+5. Unread di iPhone sampai di server.
+6. Kategori baru di iPhone dibuat di server dan series masuk ke kategori itu.
+7. Series dihapus dari library server tanpa dibaca di iPhone: ikut keluar dari library iPhone, lalu sync berikutnya tenang.
+
+Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan belum dengan server yang memakai login. Keputusan yang diambil:
+
+- `LocalCatalog` mendapat `syncSeries()`, `syncChapterStates()`, dan `applySync()`. `applySync` menulis semua hasil pull dalam satu transaksi dan tidak menulis outbox.
+- ID chapter lokal adalah SHA-256 dari URL chapter (`kuchieLocatorId`), jadi chapter server dicocokkan lewat `url` tanpa tabel link. Hanya series yang disimpan di `sync_links`.
+- Base chapter menyimpan `lastReadAt` milik server. Waktu baca server yang masih sama dengan base dianggap waktu baca iPhone, supaya stempel server dari push Kuchie sendiri tidak terbaca sebagai bacaan baru.
+- Pull bertahap: `SyncChaptersSince(kursor)` ditambah `SyncChaptersOfManga` untuk series yang punya perubahan chapter di outbox. Pull penuh saat sync manual, sync pertama, atau setiap 24 jam. Sidik jari per series belum dipakai; perubahan `isRead`/bookmark dari klien lain menunggu pull penuh.
+- `lastPageRead` yang dibuang server (S2) dicoba lagi lewat `fetchChapterPages`, paling banyak 10 chapter per siklus. Base chapter disimpan sesuai jawaban server, jadi yang masih ditolak dikirim lagi di siklus berikutnya.
+- Jenis data yang dimatikan (progres, bookmark, library) tidak ikut merge. Base untuk field itu tetap nilai server, supaya saat dinyalakan lagi perubahan di iPhone ikut terkirim.
+- Outbox hanya dipangkas kalau siklus tanpa error per series. Base tetap sumber kebenaran.
+- Status engine masuk ke `SyncController`. Tombol *Sinkronkan sekarang* dan *Coba lagi* menjalankan siklus manual, dan alur hubungkan memulai sync pertama setelah pilihan disimpan.
+- **Belum:** membuat manga baru di server. Series yang belum ada di server (`MangaBySourceUrl` kosong) dilaporkan sebagai `notOnServer` dan dicoba lagi. Butuh encoder backup Mihon untuk `restoreBackup` (admin/Stable) atau `fetchSourceManga` + `updateMangas` (pengguna biasa, S4b). Juga belum: `sync.suwayomi.userId` dari klaim `sub`, penghapusan kategori, dan error per series yang disimpan (PR 13).
+
 ### PR 9: Pemicu dan background
 
 - `sync_scheduler.dart`:

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/features/sync/controller/connect_analysis.dart';
+import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
+import 'package:kuchie/src/features/sync/controller/sync_engine_provider.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_library_reader.dart';
 import 'package:kuchie/src/features/sync/data/sync_state_store.dart';
@@ -9,6 +11,30 @@ import 'package:kuchie/src/global_providers/global_providers.dart';
 import 'package:kuchie/src/l10n/generated/app_localizations.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Records first syncs instead of running them.
+class _RecordingEngine extends SyncEngine {
+  _RecordingEngine(SyncStateStore store)
+    : super(
+        catalog: () => throw UnimplementedError(),
+        store: store,
+        probe: () => throw UnimplementedError(),
+        backendAt: (_) => throw UnimplementedError(),
+        localSources: () => throw UnimplementedError(),
+        ensureServerIdentity: (_) => throw UnimplementedError(),
+      );
+
+  final runs = <bool>[];
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<SyncReport> sync({bool manual = false}) async {
+    runs.add(manual);
+    return const SyncReport(SyncOutcome.skipped);
+  }
+}
 
 LocalSeriesRef _local(String id, {String? source = 'p:1'}) => LocalSeriesRef(
   id: id,
@@ -145,17 +171,19 @@ void main() {
     });
   });
 
-  testWidgets('the flow saves the choice and writes nothing else', (
+  testWidgets('the flow saves the choice and starts the first sync', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
+    final engine = _RecordingEngine(SyncStateStore(prefs));
     final analysis = _analyze([], [_remote(1, 'a')]);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           connectAnalysisProvider.overrideWith((ref) async => analysis),
+          syncEngineProvider.overrideWithValue(engine),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -169,8 +197,12 @@ void main() {
     await tester.ensureVisible(find.text('Start sync'));
     await tester.tap(find.text('Start sync'));
     await tester.pump();
-    expect(find.text('Choice saved'), findsOneWidget);
-    expect(prefs.getKeys(), {SyncStateStore.connectChoiceKey});
+    expect(find.text('Sync started'), findsOneWidget);
+    // The cycle itself writes the rest; the recording engine runs none.
+    expect(prefs.getKeys().where((key) => key.startsWith('sync.')), [
+      SyncStateStore.connectChoiceKey,
+    ]);
     expect(SyncStateStore(prefs).connectChoice, ConnectChoice.useServer);
+    expect(engine.runs, [true]);
   });
 }
