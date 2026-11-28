@@ -42,12 +42,20 @@ class LocalCollectionServices {
   final LocalDownloadQueue downloads;
 }
 
-String localSourceSeriesId(LocalExtension source, String mangaId) => base64Url
-    .encode(
-      utf8.encode(
-        jsonEncode([source.catalogOrigin.toString(), source.id, mangaId]),
-      ),
-    )
+String localSourceSeriesId(LocalExtension source, String mangaId) =>
+    localSeriesIdFor(
+      origin: source.catalogOrigin,
+      sourceId: source.id,
+      mangaId: mangaId,
+    );
+
+/// [localSourceSeriesId] from its parts, for series sync adds from a server.
+String localSeriesIdFor({
+  required Uri origin,
+  required String sourceId,
+  required String mangaId,
+}) => base64Url
+    .encode(utf8.encode(jsonEncode([origin.toString(), sourceId, mangaId])))
     .replaceAll('=', '');
 
 typedef LocalSeriesIdentity = ({

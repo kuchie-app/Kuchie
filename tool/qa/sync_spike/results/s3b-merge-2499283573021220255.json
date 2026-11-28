@@ -1,0 +1,53 @@
+[
+  {
+    "step": "before",
+    "c0": {
+      "url": "/chapter/40c5f395-0d0f-4ca2-9fc1-1000ca0ac46e",
+      "isRead": false,
+      "lastPageRead": 5,
+      "lastReadAt": "1700000000",
+      "isBookmarked": false
+    },
+    "c1": {
+      "url": "/chapter/04185893-c392-4322-adf3-1e43ec4c3c8c",
+      "isRead": true,
+      "lastPageRead": 0,
+      "lastReadAt": "0",
+      "isBookmarked": false
+    }
+  },
+  {
+    "step": "lower page (2), unread c1, older history (2020)",
+    "c0": {
+      "url": "/chapter/40c5f395-0d0f-4ca2-9fc1-1000ca0ac46e",
+      "isRead": false,
+      "lastPageRead": 5,
+      "lastReadAt": "1700000000",
+      "isBookmarked": false
+    },
+    "c1": {
+      "url": "/chapter/04185893-c392-4322-adf3-1e43ec4c3c8c",
+      "isRead": true,
+      "lastPageRead": 0,
+      "lastReadAt": "0",
+      "isBookmarked": false
+    }
+  },
+  {
+    "step": "higher page (9), bookmark, newer history (2025)",
+    "c0": {
+      "url": "/chapter/40c5f395-0d0f-4ca2-9fc1-1000ca0ac46e",
+      "isRead": false,
+      "lastPageRead": 9,
+      "lastReadAt": "1750000000",
+      "isBookmarked": true
+    },
+    "c1": {
+      "url": "/chapter/04185893-c392-4322-adf3-1e43ec4c3c8c",
+      "isRead": true,
+      "lastPageRead": 0,
+      "lastReadAt": "1750000000",
+      "isBookmarked": false
+    }
+  }
+]

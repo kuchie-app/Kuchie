@@ -26,8 +26,6 @@ import '../../../account/presentation/sign_out_action.dart';
 import '../../../auth/data/auth_session_status.dart';
 import '../../../auth/data/auth_state.dart';
 import '../../../local_collection/presentation/local_settings.dart';
-import '../../../onboarding/data/collection_mode.dart';
-import '../../../onboarding/presentation/collection_mode_picker.dart';
 import '../../../quick_open/presentation/unified_search/desktop_search_field.dart';
 import '../../../quick_open/presentation/unified_search/phone_search_view.dart';
 import '../../../quick_open/presentation/unified_search/unified_search_providers.dart';
@@ -177,20 +175,6 @@ class MoreScreen extends ConsumerWidget {
                   KuchieLogo(size: context.height * .2),
                 ],
                 accountSection(),
-                if (supportsLocalCollection)
-                  group([
-                    SettingsGroupRow(
-                      icon: Icons.swap_horiz_rounded,
-                      title: collectionModeTitle(context),
-                      subtitle: 'Server',
-                      trailing: chevron,
-                      onTap: () => showServerCollectionPicker(
-                        context,
-                        ref,
-                        section: 'more',
-                      ),
-                    ),
-                  ]),
                 if (compactIOS)
                   const Divider(height: 16)
                 else

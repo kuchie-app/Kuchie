@@ -13,6 +13,7 @@ import 'package:graphql/client.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../constants/db_keys.dart';
@@ -41,18 +42,51 @@ import '../../auth/data/auth_credentials_store.dart';
 import '../../auth/data/custom_headers_store.dart';
 import '../../auth/data/ui_login_token_rejected.dart';
 import '../../auth/presentation/sign_in_action.dart';
+import '../../local_collection/data/local_collection_platform.dart';
 import '../../settings/data/server_connection/server_port.dart';
 import '../../settings/data/server_connection/server_url.dart';
 import '../../settings/presentation/appearance/widgets/app_theme_selector/app_theme_selector.dart';
 import '../../settings/presentation/connection/custom_headers_section.dart';
 import '../../settings/widgets/app_theme_mode_tile/app_theme_mode_tile.dart';
-import '../data/collection_mode.dart';
 import '../data/onboarding_complete.dart';
 import '../data/server_discovery.dart';
 import '../data/server_resolver.dart';
 import 'collection_choice_step.dart';
 import 'onboarding_motion.dart';
 import 'onboarding_sign_in.dart';
+
+/// How [ServerStep] keeps its drafts and finishes signing in, so Sync can
+/// reuse the step without touching onboarding's state.
+class ServerStepHost {
+  const ServerStepHost({
+    required this.prefix,
+    required this.finishSignIn,
+    required this.signedIn,
+  });
+
+  static const onboarding = ServerStepHost(
+    prefix: 'onboarding',
+    finishSignIn: finishOnboardingSignIn,
+    signedIn: _onboardingSignedIn,
+  );
+
+  /// SharedPreferences prefix for the address draft and a pending probe.
+  final String prefix;
+
+  /// Runs `signIn`, then records that the step is done.
+  final Future<void> Function(WidgetRef ref, Future<void> Function() signIn)
+  finishSignIn;
+
+  /// Whether `finishSignIn` has completed.
+  final bool Function(SharedPreferences preferences) signedIn;
+}
+
+bool _onboardingSignedIn(SharedPreferences preferences) =>
+    preferences.getInt('onboarding.step') == 2;
+
+/// Set when onboarding ends with "Add a server": the Local
+/// library opens the Sync connect flow once.
+const connectSyncAfterOnboardingKey = 'onboarding.connectSync';
 
 class OnboardingScreen extends HookConsumerWidget {
   const OnboardingScreen({super.key});
@@ -62,17 +96,19 @@ class OnboardingScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preferences = ref.watch(sharedPreferencesProvider);
+    // iOS keeps the library here and starts with one choice: read here,
+    // or also connect a Suwayomi server for Sync. Other platforms still
+    // set up the Server collection.
     final isDualMode = supportsLocalCollection;
-    final savedMode = ref.watch(collectionModeProvider);
     final resume =
-        (!isDualMode || savedMode == CollectionMode.server) &&
+        !isDualMode &&
         ref.watch(onboardingCompleteProvider) != true &&
         preferences.getInt('onboarding.step') == 2;
     final targetSection = preferences.getString('onboarding.returnSection');
-    final choice = useState<CollectionMode?>(isDualMode ? savedMode : null);
+    final choice = useState<StartChoice?>(null);
     final savedStep = preferences.getInt('onboarding.step') ?? 0;
     final step = useState(
-      isDualMode && savedMode == null
+      isDualMode
           ? 0
           : resume
           ? 2
@@ -121,23 +157,16 @@ class OnboardingScreen extends HookConsumerWidget {
     }
 
     Future<void> confirmChoice() async {
-      if (choice.value == CollectionMode.local) {
-        localFinish.value = true;
-        step.value = 2;
-        return;
+      final picked = choice.value;
+      if (picked == null) return;
+      if (picked == StartChoice.connectServer) {
+        await preferences.setBool(connectSyncAfterOnboardingKey, true);
+      } else {
+        await preferences.remove(connectSyncAfterOnboardingKey);
       }
-      if (choice.value != CollectionMode.server || changingMode.value) return;
-      changingMode.value = true;
-      try {
-        await preferences.setInt('onboarding.step', 1);
-        if (!context.mounted) return;
-        await ref
-            .read(collectionModeProvider.notifier)
-            .select(CollectionMode.server);
-        if (context.mounted) step.value = 1;
-      } finally {
-        changingMode.value = false;
-      }
+      if (!context.mounted) return;
+      localFinish.value = true;
+      step.value = 2;
     }
 
     return Scaffold(
@@ -339,7 +368,7 @@ class _OnboardingBody extends StatelessWidget {
   final VoidCallback finish;
   final bool localFinish;
   final VoidCallback skip;
-  final ValueNotifier<CollectionMode?>? choice;
+  final ValueNotifier<StartChoice?>? choice;
   final VoidCallback confirmChoice;
 
   Widget _dotsRow(BuildContext context, int step, bool desktop) {
@@ -361,7 +390,7 @@ class _OnboardingBody extends StatelessWidget {
               child: Text(
                 choice == null
                     ? context.l10n.onboardingSkip
-                    : collectionText(context, 'Use Local', 'Pakai Lokal'),
+                    : collectionText(context, 'Start here', 'Mulai di sini'),
               ),
             ),
           ),
@@ -377,7 +406,7 @@ class _OnboardingBody extends StatelessWidget {
         appearance: const _ThemeStep(showWelcome: false),
       ),
       0 => const _ThemeStep(),
-      1 => _ServerStep(
+      1 => ServerStep(
         nextRequest: requestState.value,
         onActivityChanged: (value) {
           if (context.mounted && stepState.value == 1) {
@@ -406,8 +435,7 @@ class _OnboardingBody extends StatelessWidget {
       isLast: isLast,
       onBack: () => move(stepState.value - 1),
       nextLabel:
-          (choosingMode && choice?.value == CollectionMode.local) ||
-              (isLast && localFinish)
+          (choosingMode && choice?.value != null) || (isLast && localFinish)
           ? collectionText(context, 'Start reading', 'Mulai membaca')
           : null,
       onNext: choosingMode && choice?.value == null
@@ -664,12 +692,17 @@ class _ServerPickerSheet extends StatelessWidget {
   }
 }
 
-class _ServerStep extends HookConsumerWidget {
-  const _ServerStep({
+class ServerStep extends HookConsumerWidget {
+  const ServerStep({
+    super.key,
     required this.nextRequest,
     required this.onActivityChanged,
     required this.onSignedIn,
+    this.host = ServerStepHost.onboarding,
   });
+
+  /// Where the step keeps its drafts and how it finishes signing in.
+  final ServerStepHost host;
   final ValueChanged<String?> onActivityChanged;
   final int nextRequest;
   final VoidCallback onSignedIn;
@@ -681,7 +714,7 @@ class _ServerStep extends HookConsumerWidget {
     final preferences = ref.watch(sharedPreferencesProvider);
     final urlController = useTextEditingController(
       text:
-          preferences.getString('onboarding.urlDraft') ??
+          preferences.getString('${host.prefix}.urlDraft') ??
           () {
             final stored = ref.read(serverExternalUrlProvider);
             return (stored == null || stored == DBKeys.serverUrl.initial)
@@ -690,7 +723,7 @@ class _ServerStep extends HookConsumerWidget {
           }(),
     );
     final pendingProbe = useMemoized(
-      () => preferences.getString('onboarding.pendingProbe'),
+      () => preferences.getString('${host.prefix}.pendingProbe'),
     );
     final state = useState(_TestState.idle);
     final version = useState<String?>(null);
@@ -761,7 +794,7 @@ class _ServerStep extends HookConsumerWidget {
         builder: (_) => AccountCodeDialog(
           mode: mode,
           onSubmit: ({required code, username, required password}) async {
-            await finishOnboardingSignIn(ref, () async {
+            await host.finishSignIn(ref, () async {
               await adopt(base);
               await ref
                   .read(accountActionsProvider)
@@ -775,7 +808,7 @@ class _ServerStep extends HookConsumerWidget {
         ),
         animationStyle: context.motionStyle,
       );
-      if (context.mounted && preferences.getInt('onboarding.step') == 2) {
+      if (context.mounted && host.signedIn(preferences)) {
         onSignedIn();
       }
     }
@@ -830,7 +863,7 @@ class _ServerStep extends HookConsumerWidget {
             password: pass,
           );
         }
-        await finishOnboardingSignIn(ref, () async {
+        await host.finishSignIn(ref, () async {
           await adopt(base);
           await performSignIn(
             ref,
@@ -851,14 +884,14 @@ class _ServerStep extends HookConsumerWidget {
     Future<void> completeConnection() async {
       final base = resolvedUrl.value;
       if (base == null) return;
-      await finishOnboardingSignIn(ref, () => adopt(base));
+      await host.finishSignIn(ref, () => adopt(base));
       if (context.mounted) onSignedIn();
     }
 
     Future<void> markConnected() async {
       state.value = _TestState.connected;
 
-      if (preferences.getBool('onboarding.advanceAfterProbe') == true) {
+      if (preferences.getBool('${host.prefix}.advanceAfterProbe') == true) {
         await completeConnection();
       }
     }
@@ -975,8 +1008,8 @@ class _ServerStep extends HookConsumerWidget {
         state.value = _TestState.failed;
 
         if (context.mounted) {
-          await preferences.setString('onboarding.pendingProbe', '');
-          await preferences.setBool('onboarding.advanceAfterProbe', false);
+          await preferences.setString('${host.prefix}.pendingProbe', '');
+          await preferences.setBool('${host.prefix}.advanceAfterProbe', false);
         }
         return;
       }
@@ -992,15 +1025,18 @@ class _ServerStep extends HookConsumerWidget {
       final sessionIsCurrent = ref
           .read(authCredentialsStoreProvider.notifier)
           .captureSession();
-      await preferences.setString('onboarding.pendingProbe', input);
+      await preferences.setString('${host.prefix}.pendingProbe', input);
       if (!context.mounted) return;
       if (isWeb) {
         try {
           await testWeb();
         } finally {
           if (context.mounted && sessionIsCurrent()) {
-            await preferences.setString('onboarding.pendingProbe', '');
-            await preferences.setBool('onboarding.advanceAfterProbe', false);
+            await preferences.setString('${host.prefix}.pendingProbe', '');
+            await preferences.setBool(
+              '${host.prefix}.advanceAfterProbe',
+              false,
+            );
           }
         }
         return;
@@ -1060,8 +1096,8 @@ class _ServerStep extends HookConsumerWidget {
       } finally {
         client.close();
         if (context.mounted && sessionIsCurrent()) {
-          await preferences.setString('onboarding.pendingProbe', '');
-          await preferences.setBool('onboarding.advanceAfterProbe', false);
+          await preferences.setString('${host.prefix}.pendingProbe', '');
+          await preferences.setBool('${host.prefix}.advanceAfterProbe', false);
         }
       }
     }
@@ -1159,7 +1195,7 @@ class _ServerStep extends HookConsumerWidget {
           await signIn();
         } else {
           if (urlController.text.trim().isNotEmpty) {
-            await preferences.setBool('onboarding.advanceAfterProbe', true);
+            await preferences.setBool('${host.prefix}.advanceAfterProbe', true);
           }
           if (context.mounted) await testConnection();
         }
@@ -1263,7 +1299,7 @@ class _ServerStep extends HookConsumerWidget {
             prefixIcon: const Icon(FluentIcons.server_24_regular),
           ),
           onChanged: (value) {
-            preferences.setString('onboarding.urlDraft', value);
+            preferences.setString('${host.prefix}.urlDraft', value);
             capabilityGeneration.value++;
             serverAccountCapability.value = AccountCapability.unknown;
             resetToIdle();

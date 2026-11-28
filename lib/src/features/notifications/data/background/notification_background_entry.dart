@@ -6,6 +6,7 @@
 
 import 'package:workmanager/workmanager.dart';
 
+import '../../../sync/controller/sync_background.dart';
 import 'notification_worker.dart';
 
 const kNewChapterCheckTask = 'kuchie.newChapterCheck';
@@ -18,12 +19,16 @@ const kNewChapterCheckNowName = 'kuchie.newChapterCheck.now';
 const kNewChapterFollowUpName = 'kuchie.newChapterCheck.followup';
 
 // WorkManager requires a top-level vm:entry-point callback in the new isolate.
+// One dispatcher serves every background task: new-chapter checks (Android)
+// and Sync's background refresh (iOS).
 @pragma('vm:entry-point')
 void notificationCallbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     switch (task) {
       case kNewChapterCheckTask:
         return runNewChapterCheck();
+      case kSyncBackgroundTask:
+        return runBackgroundSync();
       default:
         return true;
     }

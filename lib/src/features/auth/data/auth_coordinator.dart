@@ -22,9 +22,9 @@ import '../../../utils/platform/web_auth_mode.dart';
 import '../../account/data/account_notice.dart';
 import '../../account/data/account_session_repository.dart';
 import '../../account/domain/account_binding.dart';
+import '../../local_collection/data/local_collection_platform.dart';
 import '../../offline/data/offline_server_identity.dart';
 import '../../offline/data/offline_server_identity_repository.dart';
-import '../../onboarding/data/collection_mode.dart';
 import '../../onboarding/data/server_resolver.dart'
     show authProbeAuthorized, authProbeExplicitlyRejects, basicAuthConfirms;
 import '../../settings/data/server_connection/basic_auth_credentials.dart';

@@ -33,6 +33,7 @@ import 'src/features/auth/data/auth_state.dart';
 import 'src/features/auth/data/basic_auth_migration.dart';
 import 'src/features/auth/data/custom_headers_store.dart';
 import 'src/features/auth/data/secure_credentials_provider.dart';
+import 'src/features/local_collection/data/local_collection_platform.dart';
 import 'src/features/local_collection/data/local_reading_stats.dart';
 import 'src/features/notifications/data/background/notification_background_entry.dart';
 import 'src/features/offline/data/account_storage_recovery_state.dart';
@@ -45,8 +46,6 @@ import 'src/features/offline/data/offline_download_coordinator.dart';
 import 'src/features/offline/data/offline_repository.dart';
 import 'src/features/offline/data/offline_runtime_storage.dart';
 import 'src/features/offline/data/offline_server_identity_repository.dart';
-import 'src/features/onboarding/data/collection_mode.dart';
-import 'src/features/onboarding/data/onboarding_complete.dart';
 import 'src/features/settings/data/preference_migrations.dart';
 import 'src/features/settings/data/server_connection/auth_username.dart';
 import 'src/features/settings/data/server_connection/basic_auth_credentials.dart';
@@ -135,7 +134,10 @@ Future<void> _startApp() async {
   await _setUpCrashReporting();
   // Initialize after the binding and before starting any download service.
   initForegroundTaskService();
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  // Android checks for new chapters; iOS runs Sync's background refresh.
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
     unawaited(Workmanager().initialize(notificationCallbackDispatcher));
   }
   if (isFlatpak) {
@@ -199,11 +201,8 @@ Future<void> _startApp() async {
     debugPrint('auth preload failed, falling back to empty state: $e\n$st');
   }
 
-  try {
-    await seedCollectionMode(sharedPreferences);
-  } catch (e, st) {
-    debugPrint('collection selection migration failed: $e\n$st');
-  }
+  // Kuchie 2.0 has one collection on iOS; the old choice is gone.
+  unawaited(sharedPreferences.remove('collectionMode'));
 
   try {
     await _seedTestConfig(container);
@@ -355,6 +354,10 @@ Future<void> _startApp() async {
     restart: restartSession,
     onRetained: retainSession,
     sessionKey: (session) {
+      // iOS has one collection, on this iPhone: a new server address or
+      // login only changes what Sync talks to, which its own client
+      // follows, so the app keeps its screens (Kuchie 2.0).
+      if (supportsLocalCollection) return const ();
       final credentials = session.read(authCredentialsStoreProvider).value;
       return (
         session.read(authTypeKeyProvider),
@@ -466,21 +469,11 @@ void _setupDeepLinkListener(ProviderContainer Function() currentContainer) {
       Future<void> openDownloads() async {
         final target = currentContainer();
         if (supportsLocalCollection) {
-          final modes = target.read(collectionModeProvider.notifier);
-          if (tab == 'local') {
-            await modes.select(CollectionMode.local);
-            if (currentContainer() == target) {
-              target
-                  .read(routerConfigProvider)
-                  .go(
-                    localCollectionLocation('downloads', ++downloadOpenRequest),
-                  );
-            }
-            return;
-          }
-          if (target.read(onboardingCompleteProvider) != true) return;
-          await modes.select(CollectionMode.server);
-          if (currentContainer() != target) return;
+          // One collection: every download link opens the Local Downloads.
+          target
+              .read(routerConfigProvider)
+              .go(localCollectionLocation('downloads', ++downloadOpenRequest));
+          return;
         }
         target
             .read(routerConfigProvider)

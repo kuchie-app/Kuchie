@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../constants/app_sizes.dart';
 import '../../../constants/navigation_bar_data.dart';
 import '../../../constants/urls.dart';
+import '../../../global_providers/global_providers.dart';
 import '../../../routes/router_config.dart';
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
@@ -35,12 +36,21 @@ import '../../../widgets/shell/detail_navigation_shell_screen.dart';
 import '../../../widgets/shell/nav_tabs_preference.dart';
 import '../../history/presentation/widgets/history_item_tile.dart';
 import '../../manga_book/presentation/manga_details/widgets/chapter_list_tile.dart';
-import '../../onboarding/data/collection_mode.dart';
-import '../../onboarding/presentation/collection_mode_picker.dart';
+import '../../onboarding/presentation/onboarding_screen.dart'
+    show connectSyncAfterOnboardingKey;
 import '../../security/security_settings_screen.dart';
 import '../../settings/presentation/downloads/widgets/downloads_overview.dart';
 import '../../settings/presentation/incognito/incognito_mode.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
+import '../../sync/controller/server_chapter_pages.dart';
+import '../../sync/controller/sync_controller.dart';
+import '../../sync/controller/sync_disconnect.dart';
+import '../../sync/controller/sync_scheduler.dart';
+import '../../sync/domain/sync_status.dart';
+import '../../sync/presentation/server_downloads_section.dart';
+import '../../sync/presentation/suwayomi_connect_flow.dart';
+import '../../sync/presentation/sync_settings_screen.dart';
+import '../../sync/presentation/sync_status_icon.dart';
 import '../data/local_backups.dart';
 import '../data/local_catalog.dart';
 import '../data/local_collection_providers.dart';
@@ -60,13 +70,8 @@ import 'local_ui.dart';
 const _sections = ['library', 'updates', 'browse', 'history', 'more'];
 
 class LocalCollectionHome extends ConsumerStatefulWidget {
-  const LocalCollectionHome({
-    super.key,
-    required this.onOpenServer,
-    this.initialSection,
-  });
+  const LocalCollectionHome({super.key, this.initialSection});
 
-  final void Function(String section) onOpenServer;
   final String? initialSection;
 
   @override
@@ -98,6 +103,29 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   void initState() {
     super.initState();
     unawaited(_applyDefaultTab());
+    // Sync runs on its own from here: on opening, when the network comes
+    // back and after reading. A finished cycle shows what it pulled.
+    ref.read(syncSchedulerProvider).start();
+    // "Add a server" in onboarding opens the connect flow once.
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (preferences.getBool(connectSyncAfterOnboardingKey) ?? false) {
+      unawaited(preferences.remove(connectSyncAfterOnboardingKey));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openSuwayomiConnect(context);
+      });
+    }
+    unawaited(
+      ref
+          .read(syncDisconnectProvider)
+          .finishPendingDisconnect()
+          .catchError((Object _) {}),
+    );
+    ref.listenManual(
+      syncControllerProvider.select((overview) => overview.status),
+      (previous, next) {
+        if (previous is SyncInProgress && next is! SyncInProgress) _refresh();
+      },
+    );
     // History shows each title's reading time.
     unawaited(
       LocalReadingStats.instance.load().then((_) {
@@ -168,6 +196,8 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     _bound?.downloads.completed.removeListener(_refresh);
     _bound?.downloads.removeListener(_onQueue);
     _bound = services;
+    // Save for offline takes a chapter the sync server has from there.
+    services.downloads.serverPages = ref.read(serverChapterPagesProvider);
     services.downloads.addListener(_onQueue);
     // Lists read kept covers from memory; repaint once they are known.
     unawaited(
@@ -243,16 +273,6 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       _refresh();
     } catch (error) {
       if (mounted) localFailure(context, error);
-    }
-  }
-
-  Future<void> _chooseMode() async {
-    final selected = await showCollectionModePicker(
-      context,
-      CollectionMode.local,
-    );
-    if (selected == CollectionMode.server && mounted) {
-      widget.onOpenServer(_downloads ? 'downloads' : _sections[_tab]);
     }
   }
 
@@ -351,10 +371,20 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
           : AppBar(
               centerTitle: _tab == 4 ? true : false,
               title: library
-                  ? CollectionModePageTitle(
-                      title,
-                      mode: CollectionMode.local,
-                      onPressed: _chooseMode,
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SyncStatusIcon(
+                          onPressed: () => openSyncSettings(context),
+                        ),
+                      ],
                     )
                   : _tab == 4
                   ? Text(title)
@@ -599,7 +629,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
     final matching = library
         .where((book) => book.title.toLowerCase().contains(query))
         .toList();
-    return _LocalBooks(
+    final shelf = _LocalBooks(
       books: matching,
       lastOnlineRead: _lastOnlineRead,
       categoryRevision: _categoryRevision,
@@ -655,6 +685,18 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
               ],
             ),
       onOpen: (book) => _openManga(services, book),
+    );
+    final sync = ref.watch(syncControllerProvider);
+    if (sync.status is SyncOff) return shelf;
+    // Pulling down syncs now, then shows what came in.
+    return RefreshIndicator(
+      notificationPredicate: (notification) =>
+          notification.metrics.axis == Axis.vertical,
+      onRefresh: () async {
+        await ref.read(syncControllerProvider.notifier).syncNow();
+        _refresh();
+      },
+      child: shelf,
     );
   }
 
@@ -862,14 +904,6 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
   Widget _more(LocalCollectionServices services) => ListView(
     padding: EdgeInsets.fromLTRB(0, 8, 0, scrollBottomInset(context)),
     children: [
-      SettingsGroupRow(
-        icon: Icons.swap_horiz_rounded,
-        title: collectionModeTitle(context),
-        subtitle: collectionModeLabel(context, CollectionMode.local),
-        trailing: const Icon(FluentIcons.chevron_right_24_regular),
-        onTap: _chooseMode,
-      ),
-      const Divider(height: 16),
       Consumer(
         builder: (context, ref, _) {
           final incognito = ref.watch(incognitoModeProvider);
@@ -920,6 +954,15 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
         FluentIcons.arrow_counterclockwise_24_regular,
         localText(context, 'Backup & Restore', 'Backup & Pulihkan'),
         () => openLocalBackups(context, services, onRestored: _refresh),
+      ),
+      Consumer(
+        builder: (context, ref, _) => SettingsGroupRow(
+          icon: FluentIcons.arrow_sync_24_regular,
+          title: localText(context, 'Sync', 'Sinkronisasi'),
+          subtitle: syncSummary(context, ref.watch(syncControllerProvider)),
+          trailing: const Icon(FluentIcons.chevron_right_24_regular),
+          onTap: () => openSyncSettings(context),
+        ),
       ),
       _moreRow(
         FluentIcons.shield_lock_24_regular,
@@ -1057,6 +1100,7 @@ class _LocalCollectionHomeState extends ConsumerState<LocalCollectionHome> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         RecentlyDownloadedRow(onTap: () => _openRecentlyDownloaded(services)),
+        const ServerDownloadsSection(),
         ListenableBuilder(
           listenable: Listenable.merge([
             queue,

@@ -1,0 +1,388 @@
+{
+  "server": "v2.4.2512",
+  "manga": {
+    "id": 1,
+    "title": "QA - Lantern Station",
+    "url": "QA - Lantern Station"
+  },
+  "chapters": [
+    {
+      "id": 1,
+      "name": "Chapter 01",
+      "url": "QA - Lantern Station/Chapter 01",
+      "sourceOrder": 1
+    },
+    {
+      "id": 2,
+      "name": "Chapter 02",
+      "url": "QA - Lantern Station/Chapter 02",
+      "sourceOrder": 2
+    },
+    {
+      "id": 3,
+      "name": "Chapter 03",
+      "url": "QA - Lantern Station/Chapter 03",
+      "sourceOrder": 3
+    }
+  ],
+  "anonymousIs": {
+    "id": 1,
+    "username": "admin",
+    "roles": [
+      "ADMIN"
+    ],
+    "permissions": []
+  },
+  "createdWith": "register (as user 1 without auth)",
+  "adminClaims": {
+    "iss": "suwayomi-server",
+    "aud": "suwayomi-server-api",
+    "sub": "1",
+    "token_type": "access",
+    "exp": 1795802340,
+    "roles": [
+      "ADMIN"
+    ],
+    "permissions": [],
+    "token_version": 0
+  },
+  "adminMe": {
+    "id": 1,
+    "username": "admin",
+    "roles": [
+      "ADMIN"
+    ],
+    "permissions": []
+  },
+  "readerClaims": {
+    "iss": "suwayomi-server",
+    "aud": "suwayomi-server-api",
+    "sub": "2",
+    "token_type": "access",
+    "exp": 1795802340,
+    "roles": [
+      "USER"
+    ],
+    "permissions": [
+      "DOWNLOAD_CHAPTERS",
+      "INSTALL_EXTENSIONS",
+      "INSTALL_EXTERNAL_EXTENSIONS",
+      "UNINSTALL_EXTENSIONS"
+    ],
+    "token_version": 0
+  },
+  "readerMe": {
+    "id": 2,
+    "username": "qa-reader",
+    "roles": [
+      "USER"
+    ],
+    "permissions": [
+      "DOWNLOAD_CHAPTERS",
+      "INSTALL_EXTENSIONS",
+      "INSTALL_EXTERNAL_EXTENSIONS",
+      "UNINSTALL_EXTENSIONS"
+    ]
+  },
+  "before": {
+    "admin": {
+      "inLibrary": false,
+      "inLibraryAt": "0",
+      "libraryCount": 0,
+      "readCount": 0,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    },
+    "reader": {
+      "inLibrary": false,
+      "inLibraryAt": "0",
+      "libraryCount": 0,
+      "readCount": 0,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    }
+  },
+  "afterProgress": {
+    "admin": {
+      "inLibrary": true,
+      "inLibraryAt": "1795802040",
+      "libraryCount": 1,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": true,
+          "lastPageRead": 5,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    },
+    "reader": {
+      "inLibrary": false,
+      "inLibraryAt": "0",
+      "libraryCount": 0,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": true,
+          "isBookmarked": false,
+          "lastPageRead": 3,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    }
+  },
+  "restore": {
+    "state": "SUCCESS",
+    "totalManga": 0,
+    "mangaProgress": 0
+  },
+  "afterRestore": {
+    "admin": {
+      "inLibrary": true,
+      "inLibraryAt": "1795802040",
+      "libraryCount": 1,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": true,
+          "lastPageRead": 5,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    },
+    "reader": {
+      "inLibrary": false,
+      "inLibraryAt": "0",
+      "libraryCount": 0,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": true,
+          "isBookmarked": false,
+          "lastPageRead": 3,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    }
+  },
+  "startDownloaderError": "[{\"message\": \"Exception while fetching data (/startDownloader) : Timed out waiting for 30000 ms\\r\\n\\r\\nkotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 30000 ms\\n\\tat kotlinx.cor",
+  "afterDownload": {
+    "admin": {
+      "inLibrary": true,
+      "inLibraryAt": "1795802040",
+      "libraryCount": 1,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": true,
+          "lastPageRead": 5,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    },
+    "reader": {
+      "inLibrary": false,
+      "inLibraryAt": "0",
+      "libraryCount": 0,
+      "readCount": 1,
+      "chapters": [
+        {
+          "sourceOrder": 1,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 2,
+          "pageCount": 18,
+          "isRead": true,
+          "isBookmarked": false,
+          "lastPageRead": 3,
+          "lastReadAt": "1795802040",
+          "isDownloaded": false
+        },
+        {
+          "sourceOrder": 3,
+          "pageCount": 18,
+          "isRead": false,
+          "isBookmarked": false,
+          "lastPageRead": 0,
+          "lastReadAt": "0",
+          "isDownloaded": false
+        }
+      ]
+    }
+  },
+  "authAfter": {
+    "data": {
+      "settings": {
+        "authMode": "NONE"
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "settings": {
+    "downloadsPath": "",
+    "downloadAsCbz": true
+  },
+  "full": {
+    "trail": [
+      {
+        "t": 0.0,
+        "state": "DOWNLOADING",
+        "tries": 0,
+        "progress": 0.25,
+        "downloader": "STARTED"
+      },
+      {
+        "t": 2.0,
+        "state": "DOWNLOADING",
+        "tries": 2,
+        "progress": 1.0,
+        "downloader": "STARTED"
+      },
+      {
+        "t": 4.6,
+        "state": "ERROR",
+        "tries": 3,
+        "progress": 1.0,
+        "downloader": "STOPPED"
+      }
+    ],
+    "chapter": {
+      "id": 222,
+      "name": "Chapter 5",
+      "isDownloaded": false,
+      "pageCount": 20,
+      "sourceOrder": 5,
+      "manga": {
+        "id": 80,
+        "title": "One Piece"
+      }
+    },
+    "seconds": 4.6,
+    "filesOnDisk": 1
+  }
+}

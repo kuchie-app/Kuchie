@@ -4,14 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import 'dart:convert';
-
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../../constants/db_keys.dart';
 import '../../../../../constants/enum.dart';
-import '../../../../../global_providers/global_providers.dart';
+import '../../../../local_collection/data/local_collection_providers.dart';
 import '../../../../settings/presentation/reader/widgets/reader_auto_webtoon_mode/reader_auto_webtoon_mode.dart';
 import '../../../../settings/presentation/reader/widgets/reader_filter_prefs/reader_filter_prefs.dart';
 import '../../../../settings/presentation/reader/widgets/reader_general_prefs/reader_general_prefs.dart';
@@ -465,19 +463,8 @@ abstract class ReaderSettingsState with _$ReaderSettingsState {
 /// Resolves per-series overrides over global settings for the settings sheet.
 @riverpod
 class ReaderSettingsModel extends _$ReaderSettingsModel {
-  static const _localNamespace = 'local.reader.manga.';
   late String? _localSeriesId;
   Map<String, dynamic>? _localMeta;
-
-  static Map<String, dynamic> _readLocalMeta(Object? encoded) {
-    if (encoded is! String) return {};
-    try {
-      final decoded = jsonDecode(encoded);
-      return decoded is Map<String, dynamic> ? decoded : {};
-    } on FormatException {
-      return {};
-    }
-  }
 
   // Capture notifiers before global writes rebuild this model and invalidate its ref.
   late PinchToZoom _pinchToZoom;
@@ -612,10 +599,9 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
     _readerOrientationKey = ref.read(readerOrientationKeyProvider.notifier);
     _readerPaddingKey = ref.read(readerPaddingKeyProvider.notifier);
     if (localSeriesId != null) {
-      final preferences = ref.watch(sharedPreferencesProvider);
-      _localMeta ??= _readLocalMeta(
-        preferences.getString('$_localNamespace$localSeriesId'),
-      );
+      _localMeta ??= ref
+          .watch(localSeriesReaderMetaProvider)
+          .read(localSeriesId);
       return _resolve(MangaMeta.fromJson(_localMeta!));
     }
     return _resolve(
@@ -933,7 +919,7 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
     MangaMetaKeys key,
     Object? value,
   ) {
-    final prefs = ref.read(sharedPreferencesProvider);
+    final meta = ref.read(localSeriesReaderMetaProvider);
     final values = _localMeta!;
     if (value == null) {
       values.remove(key.key);
@@ -941,7 +927,7 @@ class ReaderSettingsModel extends _$ReaderSettingsModel {
       values[key.key] = value.toString();
     }
     state = _resolve(MangaMeta.fromJson(values));
-    return prefs.setString('$_localNamespace$seriesId', jsonEncode(values));
+    return meta.patch(seriesId, key.key, value);
   }
 }
 

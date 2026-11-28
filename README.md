@@ -17,19 +17,18 @@
 
 ---
 
-Kuchie lets you read from two kinds of collection. Pick one the first time you open the app and switch any time from **Library** or **More → Collection mode**; each keeps its own library.
+Kuchie keeps your library, history and downloads on your iPhone. Import CBZ/ZIP archives and image folders from Files, add Kuchie extension repositories, or add any [Mihon extension store](docs/local-extensions.md#mihon-extension-stores).
 
-- **Local** keeps your library, history and downloads on your iPhone. Import CBZ/ZIP archives and image folders from Files, add Kuchie extension repositories, or add any [Mihon extension store](docs/local-extensions.md#mihon-extension-stores).
-- **Server** connects to a [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) server for your server library, history, download queue and trackers. Chapters can also be saved to the iPhone for offline reading.
+If you run a [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) server, **Sync** keeps it and the iPhone alike: library, progress, bookmarks and more, with downloads stored on the server. Kuchie still works fully without it. See [Sync with Suwayomi](docs/sync.md).
 
 ## Features
 
-- **Reader**: paged (right-to-left, left-to-right, vertical) and continuous webtoon modes, chapter-to-chapter reading, zoom, page actions, reading progress synced to the server or kept locally.
+- **Reader**: paged (right-to-left, left-to-right, vertical) and continuous webtoon modes, chapter-to-chapter reading, zoom and page actions.
 - **Library**: categories, filters, sorting, unread badges, search, duplicate finder, ratings, notes and tags.
-- **Updates and history** for both collections, with resume-where-you-left-off.
+- **Updates and history**, with resume-where-you-left-off.
 - **Offline**: save chapters to the device, with download progress in Live Activities and the Dynamic Island.
-- **Extensions** (Local): Mihon stores (Keiyoushi, Suwayomi, Yūzōnō and others), Kuchie repositories, and imported packages. Every APK is checked against its store's signing key before it runs; see [how Kuchie decides an APK is safe](docs/local-extensions.md#how-kuchie-decides-an-apk-is-safe).
-- **Server tools**: extensions, migration between sources, trackers, backups and server settings for Suwayomi.
+- **Sync with Suwayomi**: two-way sync of library, categories, progress, history, bookmarks, ratings, tags, notes and reader settings; downloads on the server; reading through the server; trackers through the server. See [docs/sync.md](docs/sync.md).
+- **Extensions**: Mihon stores (Keiyoushi, Suwayomi, Yūzōnō and others), Kuchie repositories, and imported packages. Every APK is checked against its store's signing key before it runs; see [how Kuchie decides an APK is safe](docs/local-extensions.md#how-kuchie-decides-an-apk-is-safe).
 - **Appearance**: themes, pure black, Liquid Glass, alternate Home Screen icons, and 20+ languages.
 
 ## Install
@@ -43,8 +42,8 @@ Kuchie needs iOS 15 or later. Liquid Glass controls need iOS 26; earlier version
 
 ## Getting started
 
-- **Local**: choose *Local* in onboarding, then **Import manga** from Files or **Browse → Extensions → Extension stores → +** to add a store link. Details are in [Local extensions](docs/local-extensions.md).
-- **Server**: choose *Server*, enter your Suwayomi address (for example `http://192.168.1.10:4567`), or tap **Search my network**. Kuchie supports no-auth, basic and UI-login servers.
+1. Open Kuchie and tap **Start here**, then **Import manga** from Files, or **Browse → Extensions → Extension stores → +** to add a store link. Details are in [Local extensions](docs/local-extensions.md).
+2. Have a Suwayomi server? Pick **Add a server** instead, or later go to **More → Sync**, and enter its address (for example `http://192.168.1.10:4567`) or tap **Search my network**. No-auth, basic and UI-login servers work. See [Sync with Suwayomi](docs/sync.md).
 
 Kuchie uses the bundle ID `app.kuchie.reader` with its own settings, credentials and offline files.
 
@@ -67,7 +66,7 @@ ios/MihonRuntime/prepare.sh
 flutter build ios
 ```
 
-Builds without the runtime still support the Server collection, Kuchie repositories and file imports. See [the runtime notes](ios/MihonRuntime/README.md) before distributing a build that includes it.
+Builds without the runtime still support Kuchie repositories, file imports and Sync with a Suwayomi server. See [the runtime notes](ios/MihonRuntime/README.md) before distributing a build that includes it.
 
 ### Release configuration
 
@@ -137,7 +136,7 @@ Issues and pull requests are welcome. Run `flutter analyze` and `flutter test` b
 
 Kuchie stands on the work of these projects and their contributors:
 
-- [Suwayomi-Tsumiru](https://github.com/Suwayomi/Suwayomi-Tsumiru): the Flutter client Kuchie is based on (MPL-2.0), and [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), which powers the Server collection.
+- [Suwayomi-Tsumiru](https://github.com/Suwayomi/Suwayomi-Tsumiru): the Flutter client Kuchie is based on (MPL-2.0), and [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), which Kuchie syncs with.
 - [Mihon](https://github.com/mihonapp/mihon) and the Tachiyomi community: the extension store formats, the extension API and the signing-key trust model Kuchie follows.
 - [Keiyoushi](https://github.com/keiyoushi/extensions), [Yūzōnō](https://github.com/yuzono) and the other extension store maintainers.
 - [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server) by kodjodevf and [1Selxo's iOS runtime fork](https://github.com/1Selxo/M-Extension-Server), which Kuchie embeds with the patches in `ios/MihonRuntime/patches/`.

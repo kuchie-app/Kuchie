@@ -1,0 +1,414 @@
+// The sync engine (PR 8) against a real Suwayomi server.
+//
+// Start a fresh QA server, then run:
+//
+//   python3 tool/qa/server.py --jar <Suwayomi JAR> --java <java 21>
+//   KUCHIE_QA_SERVER=http://127.0.0.1:14567 \
+//     flutter test tool/qa/sync_spike/sync_engine_qa_test.dart
+//
+// It uses the server's local source (id 0) and the three series
+// `server.py` seeds, so it needs no extension or network. One of them is
+// created on the server by sync, through `restoreBackup`. It writes to the
+// server, so run it once per fresh server.
+
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql/client.dart';
+import 'package:http/http.dart' as http;
+import 'package:kuchie/src/features/local_collection/data/local_catalog.dart';
+import 'package:kuchie/src/features/local_collection/data/local_collection_services.dart';
+import 'package:kuchie/src/features/local_collection/data/local_series_reader_meta.dart';
+import 'package:kuchie/src/features/offline/data/offline_server_identity_repository.dart';
+import 'package:kuchie/src/features/sync/controller/server_chapter_pages.dart';
+import 'package:kuchie/src/features/sync/controller/server_transfers.dart';
+import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_backend.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_reachability.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_sync_client.dart';
+import 'package:kuchie/src/features/sync/data/sync_journal.dart';
+import 'package:kuchie/src/features/sync/data/sync_state_store.dart';
+import 'package:kuchie/src/features/sync/domain/sync_records.dart';
+import 'package:kuchie/src/utils/graphql/legacy_user_fields_link.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+
+final _server = Platform.environment['KUCHIE_QA_SERVER'];
+final _origin = Uri.parse('https://qa.kuchie.local');
+const _source = 'local:0';
+
+void main() {
+  test(
+    'two-way sync against the QA server',
+    timeout: const Timeout(Duration(minutes: 5)),
+    skip: _server == null
+        ? 'Set KUCHIE_QA_SERVER to a fresh QA server.'
+        : false,
+    () async {
+      final client = GraphQLClient(
+        link: LegacyUserFieldsLink().concat(HttpLink('$_server/api/graphql')),
+        cache: GraphQLCache(),
+        defaultPolicies: DefaultPolicies(
+          query: Policies(fetch: FetchPolicy.noCache),
+          mutate: Policies(fetch: FetchPolicy.noCache),
+        ),
+      );
+      Future<Map<String, dynamic>> request(
+        String document, [
+        Map<String, dynamic> variables = const {},
+      ]) async {
+        final result = await client.query(
+          QueryOptions(
+            document: gql(document),
+            variables: variables,
+            fetchPolicy: FetchPolicy.noCache,
+          ),
+        );
+        if (result.hasException) throw result.exception!;
+        return result.data!;
+      }
+
+      // The server side, as WebUI would see it.
+      // Only two of the three seeded series get a server row; Night Ferry
+      // stays unknown until sync creates it.
+      final ids = <String, String>{};
+      for (final query in ['Lantern', 'Paper']) {
+        final found = await request(
+          'mutation(\$q: String!) { fetchSourceManga(input: {source: "0", '
+          'type: SEARCH, page: 1, query: \$q}) { mangas { id url } } }',
+          {'q': query},
+        );
+        for (final manga
+            in found['fetchSourceManga']['mangas'] as List<dynamic>) {
+          ids[manga['url'] as String] = '${manga['id']}';
+        }
+      }
+      expect(ids.keys, isNot(contains('QA - Night Ferry')));
+      final lantern = ids['QA - Lantern Station']!;
+      final paper = ids['QA - Paper Signal']!;
+      Future<List<Map<String, dynamic>>> chapters(String mangaId) async {
+        await request(
+          'mutation(\$id: Int!) { fetchMangaAndChapters(input: {id: \$id, '
+          'fetchManga: true, fetchChapters: true}) { manga { id } } }',
+          {'id': int.parse(mangaId)},
+        );
+        final data = await request(
+          'query(\$id: Int!) { chapters(condition: {mangaId: \$id}, '
+          'order: [{by: SOURCE_ORDER, byType: ASC}]) { nodes { id url '
+          'user { isRead isBookmarked lastPageRead lastReadAt } } } }',
+          {'id': int.parse(mangaId)},
+        );
+        return (data['chapters']['nodes'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+      }
+
+      Future<Map<String, dynamic>> chapterOnServer(
+        String mangaId,
+        String url,
+      ) async =>
+          (await chapters(mangaId)).firstWhere((c) => c['url'] == url)['user']
+              as Map<String, dynamic>;
+
+      Future<bool> inServerLibrary(String mangaId) async =>
+          (await request(
+                'query(\$id: Int!) { manga(id: \$id) { user { inLibrary } } }',
+                {'id': int.parse(mangaId)},
+              ))['manga']['user']['inLibrary']
+              as bool;
+
+      // The server has Lantern Station, with chapter 1 read to page 5.
+      final lanternChapters = await chapters(lantern);
+      final lantern1 = lanternChapters[0], lantern2 = lanternChapters[1];
+      await request(
+        'mutation(\$ids: [Int!]!) { updateMangas(input: {ids: \$ids, '
+        'patch: {inLibrary: true}}) { clientMutationId } }',
+        {
+          'ids': [int.parse(lantern)],
+        },
+      );
+      // Opened once, so the server keeps its page (spike S2).
+      await request(
+        'mutation(\$id: Int!) { fetchChapterPages(input: {chapterId: \$id}) '
+        '{ pages } }',
+        {'id': lantern1['id']},
+      );
+      await request(
+        'mutation(\$ids: [Int!]!) { updateChapters(input: {ids: \$ids, '
+        'patch: {isRead: true, lastPageRead: 5}}) { clientMutationId } }',
+        {
+          'ids': [lantern1['id']],
+        },
+      );
+
+      // This iPhone has Paper Signal, which the server has outside its
+      // library.
+      final workspace = await Directory.systemTemp.createTemp('kuchie-qa-sync');
+      addTearDown(() => workspace.delete(recursive: true));
+      final catalog = LocalCatalog(Directory(p.join(workspace.path, 'c')));
+      addTearDown(catalog.close);
+      String seriesId(String url) => localSeriesIdFor(
+        origin: _origin,
+        sourceId: _source,
+        mangaId: kuchieLocatorId(url),
+      );
+      await catalog.setInLibrary(
+        seriesId: seriesId('QA - Paper Signal'),
+        title: 'QA - Paper Signal',
+        inLibrary: true,
+        source: LocalSeriesSource(
+          sourceId: _source,
+          mangaId: kuchieLocatorId('QA - Paper Signal'),
+          locator: 'QA - Paper Signal',
+        ),
+      );
+
+      await catalog.setInLibrary(
+        seriesId: seriesId('QA - Night Ferry'),
+        title: 'QA - Night Ferry',
+        inLibrary: true,
+        source: LocalSeriesSource(
+          sourceId: _source,
+          mangaId: kuchieLocatorId('QA - Night Ferry'),
+          locator: 'QA - Night Ferry',
+        ),
+      );
+
+      // ignore: invalid_use_of_visible_for_testing_member
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final store = SyncStateStore(preferences);
+      final readerMeta = LocalSeriesReaderMeta(
+        preferences,
+        onChanged: catalog.recordReaderMetaChange,
+      );
+      await store.setConnectChoice(ConnectChoice.merge);
+      final identity = OfflineServerIdentityRepository(client);
+      final engine = SyncEngine(
+        catalog: () async => catalog,
+        store: store,
+        probe: () => SuwayomiReachabilityProbe(
+          addresses: [_server!],
+          readIdentity: (_) => identity.read(),
+          expectedIdentity: store.serverIdentity,
+        ).probe(),
+        backendAt: (_) => SuwayomiBackend(client),
+        localSources: () async => {
+          '0': SyncLocalSource(
+            id: _source,
+            catalogOrigin: _origin,
+            name: 'Local',
+          ),
+        },
+        ensureServerIdentity: (_) => identity.resolve(),
+        readerMeta: readerMeta,
+      );
+      Future<SyncReport> sync({bool manual = false}) async {
+        final report = await engine.sync(manual: manual);
+        // ignore: avoid_print
+        print(report);
+        expect(report.outcome, SyncOutcome.synced);
+        expect(report.seriesErrors, isEmpty);
+        return report;
+      }
+
+      Future<ChapterState?> stateHere(String series, String chapterUrl) async =>
+          (await catalog.syncChapterStates(seriesId(series)))[kuchieLocatorId(
+            chapterUrl,
+          )];
+
+      // 1. First sync, merge: each side gets the other's series.
+      await sync();
+      expect(store.serverIdentity, isNotNull);
+      expect(await inServerLibrary(paper), isTrue);
+      // Created on the server from a minimal backup, with its chapters.
+      final ferry =
+          (await request(
+                '{ mangas(condition: {sourceId: "0", url: "QA - Night Ferry"}) '
+                '{ nodes { id user { inLibrary } } } }',
+              ))['mangas']['nodes']
+              as List<dynamic>;
+      expect(ferry, hasLength(1));
+      expect(ferry.single['user']['inLibrary'], isTrue);
+      expect(await chapters('${ferry.single['id']}'), hasLength(3));
+      final here = {
+        for (final series in await catalog.syncSeries())
+          if (series.inLibrary) series.id,
+      };
+      expect(here, {
+        seriesId('QA - Lantern Station'),
+        seriesId('QA - Paper Signal'),
+        seriesId('QA - Night Ferry'),
+      });
+      final pulled = await stateHere(
+        'QA - Lantern Station',
+        lantern1['url'] as String,
+      );
+      expect(pulled?.read, isTrue);
+      expect(pulled?.page, 5);
+      expect(pulled?.readAt, isNotNull);
+
+      // Reading through the server (PR 14): its pages, with the headers the
+      // sync client sends, load as images.
+      final serverPages = SuwayomiChapterPages(
+        engine: engine,
+        client: SuwayomiSyncClient(addresses: [_server!], build: (_) => client),
+        probe: () async => SuwayomiReachable(_server!, store.serverIdentity),
+        journal: () async => SyncJournal(catalog),
+      );
+      final pages = await serverPages.pages(
+        seriesId('QA - Lantern Station'),
+        kuchieLocatorId(lantern1['url'] as String),
+      );
+      expect(pages, hasLength(18));
+      final image = await http.get(
+        pages!.first.url,
+        headers: pages.first.headers,
+      );
+      expect(image.statusCode, 200);
+      expect(image.headers['content-type'], startsWith('image/'));
+
+      // Download to the server (PR 15): requested, then proven by the
+      // server's own report.
+      final transfers = ServerTransfers(
+        engine: engine,
+        catalog: () async => catalog,
+        pages: serverPages,
+        backendAt: (_) => SuwayomiBackend(client),
+      );
+      final lantern3Id = kuchieLocatorId(lanternChapters[2]['url'] as String);
+      Future<SyncTransferState> transferState() async =>
+          (await SyncJournal(catalog).transfers())
+              .firstWhere((transfer) => transfer.chapterId == lantern3Id)
+              .state;
+      await transfers.download(seriesId('QA - Lantern Station'), lantern3Id);
+      expect(await transferState(), SyncTransferState.requested);
+      for (var i = 0; i < 40; i++) {
+        await transfers.run();
+        if (await transferState() == SyncTransferState.done) break;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      // ignore: avoid_print
+      print('server download: ${await transferState()}');
+      transfers.dispose();
+
+      // 2. Read here; it reaches the server, even on a chapter the server
+      // never opened (spike S2).
+      final paper1 = (await chapters(paper)).first;
+      final series = await catalog.find(seriesId('QA - Paper Signal'));
+      await catalog.recordRemoteRead(
+        series: series!,
+        chapterId: kuchieLocatorId(paper1['url'] as String),
+        chapterTitle: 'Chapter 01',
+        progress: 7,
+      );
+      await sync();
+      expect(
+        (await chapterOnServer(paper, paper1['url'] as String))['lastPageRead'],
+        7,
+      );
+
+      // 3. Nothing changed: nothing is sent or written, both ways.
+      for (var i = 0; i < 2; i++) {
+        final quiet = await sync(manual: true);
+        expect(quiet.pushed + quiet.pulled, 0, reason: 'cycle ${i + 1}');
+      }
+
+      // 4. Read on the server; it reaches this iPhone.
+      await request(
+        'mutation(\$ids: [Int!]!) { updateChapters(input: {ids: \$ids, '
+        'patch: {isRead: true, isBookmarked: true}}) { clientMutationId } }',
+        {
+          'ids': [lantern2['id']],
+        },
+      );
+      await sync(manual: true);
+      final marked = await stateHere(
+        'QA - Lantern Station',
+        lantern2['url'] as String,
+      );
+      expect(marked?.read, isTrue);
+      expect(marked?.bookmarked, isTrue);
+
+      // 5. Unread here; the server follows.
+      await catalog.setChapterMarks(seriesId('QA - Lantern Station'), [
+        kuchieLocatorId(lantern1['url'] as String),
+      ], read: false);
+      await sync();
+      expect(
+        (await chapterOnServer(lantern, lantern1['url'] as String))['isRead'],
+        isFalse,
+      );
+
+      // 6. A category here appears on the server with its series.
+      await catalog.createCategory('QA Action');
+      await catalog.setCategories(seriesId('QA - Lantern Station'), [
+        'QA Action',
+      ]);
+      await sync();
+      final onServer = await request(
+        'query(\$id: Int!) { manga(id: \$id) { categories { nodes { name } } } }',
+        {'id': int.parse(lantern)},
+      );
+      expect(
+        [
+          for (final node
+              in onServer['manga']['categories']['nodes'] as List<dynamic>)
+            node['name'],
+        ],
+        ['QA Action'],
+      );
+
+      // 7. Rating from Server mode comes here; notes and a reader setting
+      // here reach the server.
+      await request(
+        'mutation(\$id: Int!) { setMangaMeta(input: {meta: {mangaId: \$id, '
+        'key: "flutter_rating", value: "4"}}) { meta { value } } }',
+        {'id': int.parse(lantern)},
+      );
+      await catalog.setNotes(seriesId('QA - Lantern Station'), 'QA note');
+      await readerMeta.patch(
+        seriesId('QA - Lantern Station'),
+        'flutter_readerMode',
+        'webtoon',
+      );
+      await sync(manual: true);
+      expect(
+        (await catalog.seriesMeta(seriesId('QA - Lantern Station'))).rating,
+        4,
+      );
+      final meta = {
+        for (final entry
+            in (await request(
+                  'query(\$id: Int!) { manga(id: \$id) { meta { key value } } }',
+                  {'id': int.parse(lantern)},
+                ))['manga']['meta']
+                as List<dynamic>)
+          entry['key']: entry['value'],
+      };
+      expect(meta['kuchie_notes'], 'QA note');
+      expect(meta['flutter_readerMode'], 'webtoon');
+      expect(meta['flutter_rating'], '4');
+      final metaQuiet = await sync(manual: true);
+      expect(metaQuiet.pushed + metaQuiet.pulled, 0);
+
+      // 8. Removed on the server, not read here since: it leaves here too.
+      await request(
+        'mutation(\$ids: [Int!]!) { updateMangas(input: {ids: \$ids, '
+        'patch: {inLibrary: false}}) { clientMutationId } }',
+        {
+          'ids': [int.parse(paper)],
+        },
+      );
+      await sync(manual: true);
+      expect(
+        (await catalog.syncSeries())
+            .firstWhere((s) => s.id == seriesId('QA - Paper Signal'))
+            .inLibrary,
+        isFalse,
+      );
+      final settled = await sync(manual: true);
+      expect(settled.pushed + settled.pulled, 0);
+    },
+  );
+}

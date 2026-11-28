@@ -1,0 +1,1157 @@
+<meta charset="utf-8">
+<title>Kuchie Sync Diagram</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: review page with an iPhone-sized Kuchie screen on the left and a state panel on the right; stacks on phones. */
+:root {
+  --bg: #f4f4fb;
+  --fg: #17162a;
+  --muted: #5d5c78;
+  --line: #dcdcee;
+  --panel: #ffffff;
+  --accent: #5b5af0;
+  --frame: #1b1a2b;
+  --danger: #d6334a;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d16; --fg: #ececf6; --muted: #a2a1bd; --line: #2a2a3d;
+    --panel: #15151f; --accent: #8f8eff; --frame: #2c2b40; --danger: #ff6b7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d16; --fg: #ececf6; --muted: #a2a1bd; --line: #2a2a3d;
+  --panel: #15151f; --accent: #8f8eff; --frame: #2c2b40; --danger: #ff6b7a; color-scheme: dark;
+}
+
+/* In-app tokens (Indigo Night), switched by the app theme select. */
+.screen {
+  --s-bg: #0f0f17; --s-surface: #1a1a26;
+  --s-fg: #f1f1fa; --s-muted: #9a99b6; --s-line: #2c2c3e;
+  --s-accent: #7c7bff; --s-accent-2: #33d6ff; --s-danger: #ff6b7a;
+  --s-on-accent: #0f0f17; --s-node: #d9d8f2;
+}
+.screen[data-app-theme="black"] {
+  --s-bg: #000000; --s-surface: #111118; --s-line: #24242f;
+}
+.screen[data-app-theme="light"] {
+  --s-bg: #f6f6fb; --s-surface: #ffffff; --s-fg: #191829; --s-muted: #63627c;
+  --s-line: #e2e2ee; --s-accent: #5654e6; --s-accent-2: #0a9fc4; --s-danger: #d6334a;
+  --s-on-accent: #ffffff; --s-node: #3b3a55;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.page { max-width: 1040px; margin: 0 auto; display: grid; gap: 28px; }
+.intro h1 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(1.6rem, 3.4vw, 2.2rem);
+  line-height: 1.15; margin: 0 0 8px; text-wrap: balance;
+}
+.intro p { margin: 0; color: var(--muted); max-width: 64ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 390px) minmax(0, 1fr); gap: 36px; align-items: start; }
+@media (max-width: 820px) { .layout { grid-template-columns: minmax(0, 1fr); justify-items: center; } .panel { width: 100%; } }
+
+/* Device */
+.device {
+  width: min(390px, 100%); border-radius: 46px; border: 10px solid var(--frame);
+  background: var(--frame); position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px);
+}
+@media (max-width: 820px) { .device { position: static; } }
+.screen {
+  border-radius: 36px; overflow: hidden; background: var(--s-bg); color: var(--s-fg);
+  height: 760px; display: flex; flex-direction: column; font-size: 15px;
+}
+.statusbar { display: flex; justify-content: space-between; padding: 14px 26px 4px; font-weight: 600; font-size: 14px; }
+.statusbar .dots { display: flex; gap: 6px; align-items: center; color: var(--s-fg); }
+.navbar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 6px 14px 10px; }
+.navbar h2 { margin: 0; text-align: center; font-size: 17px; font-weight: 600; }
+.round {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--s-line);
+  background: var(--s-surface); color: var(--s-fg); display: grid; place-items: center; cursor: pointer;
+}
+.round:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+.scroll { overflow-y: auto; flex: 1; min-height: 0; padding: 0 16px 28px; display: flex; flex-direction: column; gap: 22px; }
+.scroll > * { flex: none; }
+
+.hero {
+  background: var(--s-surface); border: 1px solid var(--s-line); border-radius: 22px;
+  padding: 14px 16px 18px; display: grid; gap: 12px; position: relative; overflow: hidden;
+}
+.diagram { position: relative; height: 262px; }
+.hero-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--s-line); font-size: 12.5px; font-weight: 600; color: var(--s-fg); white-space: nowrap;
+}
+.pill svg { color: var(--s-accent); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--s-accent)); position: relative; }
+.live-dot::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--dot, var(--s-accent));
+  animation: ping 1.6s ease-out infinite; opacity: 0;
+}
+.live-dot.still::after, .reduce .live-dot::after { animation: none; }
+@keyframes ping { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.6); opacity: 0; } }
+.diagram canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.nlabel {
+  position: absolute; transform: translateX(-50%); text-align: center; font-size: 12px;
+  line-height: 1.3; color: var(--s-muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+  transition: opacity .3s;
+}
+.nlabel b { display: block; color: var(--s-fg); font-weight: 600; font-size: 12.5px; }
+.kiri {
+  position: absolute; right: 2px; bottom: 62px; width: 92px; opacity: 0;
+  transform: translateY(10px); transition: opacity .4s, transform .4s; pointer-events: none;
+}
+.kiri.show { opacity: 1; transform: none; }
+.hero.with-kiri .status, .hero.with-kiri .banner { margin-right: 84px; }
+.explain-caption {
+  position: absolute; left: 0; right: 0; bottom: 0; text-align: center; font-weight: 600; font-size: 15px;
+  opacity: 0; transition: opacity .3s;
+}
+.explain-caption.show { opacity: 1; }
+.steps { display: none; justify-content: center; gap: 8px; }
+.steps.show { display: flex; }
+.steps button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: var(--s-line); cursor: pointer; }
+.steps button[aria-current="step"] { background: var(--s-accent); width: 20px; border-radius: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--s-line); }
+.lg.on { color: var(--s-fg); }
+.lg.on::before { content: "✓"; color: var(--s-accent); }
+.lg.off { color: var(--s-muted); }
+.lg.off::before { content: "–"; }
+.lg small { font-weight: 500; color: var(--s-muted); }
+.status { display: grid; gap: 4px; }
+.status strong { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.status span { color: var(--s-muted); font-size: 14px; }
+.banner { font-size: 13px; color: var(--s-fg); background: color-mix(in srgb, var(--s-accent) 12%, transparent); border-radius: 12px; padding: 8px 10px; }
+.cta {
+  border: 0; border-radius: 999px; padding: 12px 18px; font: 600 15px var(--font-body);
+  background: var(--s-accent); color: var(--s-on-accent); cursor: pointer; transition: opacity .2s;
+}
+.cta:disabled { opacity: .5; cursor: default; }
+.cta.secondary { background: transparent; color: var(--s-accent); border: 1px solid var(--s-line); }
+
+.group { display: grid; gap: 6px; }
+.group h3 { margin: 0 4px; font-size: 13px; font-weight: 600; color: var(--s-muted); }
+.list { background: var(--s-surface); border: 1px solid var(--s-line); border-radius: 16px; overflow: hidden; }
+.row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; width: 100%;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left;
+}
+.row + .row, .list details + details { border-top: 1px solid var(--s-line); }
+.row .grow { flex: 1; min-width: 0; }
+.row small { display: block; color: var(--s-muted); font-size: 12.5px; }
+.radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--s-muted); flex: none; display: grid; place-items: center; }
+.radio.on { border-color: var(--s-accent); }
+.row:has(.soon) .grow { opacity: .7; }
+.radio.on::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--s-accent); }
+button.row { cursor: pointer; }
+.soon { font-size: 11.5px; font-weight: 600; color: var(--s-accent); border: 1px solid var(--s-line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.switch { width: 44px; height: 26px; border-radius: 999px; background: var(--s-line); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--s-fg); transition: transform .2s; }
+.switch.on { background: var(--s-accent); }
+.switch.on::after { transform: translateX(18px); background: var(--s-on-accent); }
+details summary { list-style: none; display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; cursor: pointer; }
+details summary::-webkit-details-marker { display: none; }
+details summary::after { content: "⌄"; color: var(--s-muted); transition: transform .2s; }
+details[open] summary::after { transform: rotate(180deg); }
+details p { margin: 0; padding: 0 14px 14px; color: var(--s-muted); font-size: 14px; }
+
+/* Review panel */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: grid; gap: 22px; min-width: 0; }
+.panel h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; margin: 0 0 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px;
+  padding: 7px 13px; font: 500 14px var(--font-body); cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.chip:focus-visible, .panel select:focus-visible, .panel input:focus-visible, .panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.meaning { margin: 0; color: var(--muted); max-width: 60ch; }
+.meaning b { color: var(--fg); }
+.controls { display: grid; gap: 12px; }
+.controls label { display: flex; align-items: center; gap: 10px; }
+.controls select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.lib-preview { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); width: fit-content; }
+.lib-preview .title { font-weight: 700; font-size: 1.3rem; font-family: var(--font-body); }
+.lib-preview small { color: var(--muted); }
+.lib-icon { width: 26px; height: 26px; color: var(--accent); }
+.lib-icon .spin { transform-origin: 13px 14px; animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.reduce .lib-icon .spin { animation: none; }
+.panel .btn {
+  border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 999px;
+  padding: 8px 14px; font: 600 14px var(--font-body); cursor: pointer; width: fit-content;
+}
+.flowtip { margin: 0; font-size: 13.5px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header class="intro">
+    <h1>Diagram hidup halaman Sinkronisasi</h1>
+    <p>Prototipe untuk review sebelum ditulis di Flutter. Pilih status di panel kanan, atau ketuk tombol di layar untuk mengikuti alurnya: hubungkan, periksa, sinkron, lalu tersinkron.</p>
+  </header>
+
+  <div class="layout">
+    <div class="device" aria-label="Pratinjau layar iPhone">
+      <div class="screen" id="screen" data-app-theme="dark">
+        <div class="statusbar" aria-hidden="true"><span>12.16</span><span class="dots">
+          <svg width="18" height="12" viewBox="0 0 18 12"><path d="M1 9h2v2H1zM5 7h2v4H5zM9 4h2v7H9zM13 1h2v10h-2z" fill="currentColor"/></svg>
+          <svg width="26" height="12" viewBox="0 0 26 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="23.5" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/></svg>
+        </span></div>
+        <div class="navbar">
+          <button class="round" type="button" aria-label="Kembali"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 2 4 8l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <h2>Sinkronisasi</h2>
+          <button class="round" type="button" id="helpBtn" aria-label="Putar penjelasan cara kerja">?</button>
+        </div>
+        <div class="scroll">
+          <section class="hero" id="hero" aria-live="polite">
+            <div class="hero-top">
+              <span class="pill" id="methodPill"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="1.5" width="11" height="4.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="8" width="11" height="4.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span id="methodText">Suwayomi</span></span>
+              <span class="pill"><span class="live-dot" id="liveDot"></span><span id="liveText">Aktif</span></span>
+            </div>
+            <div class="diagram" id="diagram" role="img" aria-label="">
+              <canvas id="canvas"></canvas>
+              <div class="explain-caption" id="caption"></div>
+            </div>
+            <div class="steps" id="steps" role="group" aria-label="Langkah penjelasan">
+              <button type="button" aria-label="Langkah 1"></button><button type="button" aria-label="Langkah 2"></button><button type="button" aria-label="Langkah 3"></button>
+            </div>
+            <div class="legend" id="legend" role="list" aria-label="Yang disinkronkan"></div>
+            <div class="status" id="statusBlock">
+              <strong id="statusText"></strong>
+              <span id="explainText"></span>
+            </div>
+            <div class="banner" id="banner" hidden>Belum tersinkron sejak 3 Nov. Perubahan aman di iPhone.</div>
+            <button class="cta" type="button" id="cta"></button>
+            <img class="kiri" id="kiriComplete" src="kiri-complete.png" alt="">
+            <img class="kiri" id="kiriOffline" src="kiri-offline.png" alt="">
+          </section>
+
+          <section class="group" aria-labelledby="gMethod">
+            <h3 id="gMethod">Metode</h3>
+            <div class="list" id="methodList">
+              <button class="row" type="button" data-method="local"><span class="radio"></span><span class="grow">Mati<small>Semua tersimpan di iPhone ini</small></span></button>
+              <button class="row" type="button" data-method="suwayomi"><span class="radio"></span><span class="grow">Server Suwayomi<small>192.168.1.10:4567</small></span><span aria-hidden="true">›</span></button>
+              <button class="row" type="button" data-method="icloud"><span class="radio"></span><span class="grow">iCloud<small>Antar perangkat Apple</small></span><span class="soon">Segera hadir</span></button>
+              <button class="row" type="button" data-method="syncyomi"><span class="radio"></span><span class="grow">SyncYomi<small>Server sync untuk aplikasi keluarga Tachiyomi</small></span><span class="soon">Segera hadir</span></button>
+              <button class="row" type="button" data-method="kosync"><span class="radio"></span><span class="grow">KOReader Sync<small>Posisi baca lewat server kosync</small></span><span class="soon">Segera hadir</span></button>
+              <button class="row" type="button" data-method="komga"><span class="radio"></span><span class="grow">Komga<small>Server komik dan manga</small></span><span class="soon">Segera hadir</span></button>
+              <button class="row" type="button" data-method="kavita"><span class="radio"></span><span class="grow">Kavita<small>Server bacaan pribadi</small></span><span class="soon">Segera hadir</span></button>
+              <button class="row" type="button" data-method="drive"><span class="radio"></span><span class="grow">Google Drive<small>File sync berkala di Drive</small></span><span class="soon">Segera hadir</span></button>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="gWhen">
+            <h3 id="gWhen">Kapan</h3>
+            <div class="list">
+              <button class="row" type="button" data-toggle aria-pressed="true"><span class="grow">Saat membuka Kuchie</span><span class="switch on"></span></button>
+              <button class="row" type="button" data-toggle aria-pressed="true"><span class="grow">Setelah selesai membaca chapter</span><span class="switch on"></span></button>
+              <button class="row" type="button" data-toggle aria-pressed="false"><span class="grow">Hanya lewat Wi-Fi</span><span class="switch"></span></button>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="gFaq">
+            <h3 id="gFaq">Pertanyaan umum</h3>
+            <div class="list">
+              <details><summary>Apa itu Sinkronisasi?</summary><p>Sinkronisasi menyamakan library, progres baca, dan bookmark antara iPhone dan server Suwayomi milikmu. Library tetap tersimpan di iPhone, jadi Kuchie bisa dipakai walau server mati.</p></details>
+              <details><summary>Apa saja yang disinkronkan?</summary><p>Library dan kategori, progres baca dan riwayat, bookmark chapter, dan setelan reader per series. Rating, tag, dan catatan bisa dinyalakan di Lanjutan.</p></details>
+              <details><summary>Apa yang tidak disinkronkan?</summary><p>File unduhan tidak disalin otomatis. Series dari file import dan repo Kuchie tetap hanya di iPhone, karena server tidak punya source-nya.</p></details>
+              <details><summary>Bagaimana kalau server mati atau aku di luar rumah?</summary><p>Kuchie tetap jalan dari data di iPhone. Chapter dibaca langsung dari source lewat extension di iPhone, dan perubahan dikirim saat server terjangkau lagi.</p></details>
+              <details><summary>Unduhan disimpan di mana?</summary><p>Saat terhubung ke server, unduhan disimpan di server supaya iPhone tidak penuh. Pakai Simpan untuk offline kalau ingin membaca tanpa internet. Unduhan lama di iPhone bisa dipindahkan ke server lewat Penyimpanan.</p></details>
+              <details><summary>Apakah extension perlu dipasang dua kali?</summary><p>Tidak. Tombol Pasang memasang extension di iPhone dan di server sekaligus.</p></details>
+              <details><summary>Bagaimana cara berhenti memakai server?</summary><p>Buka Server Suwayomi, lalu Putuskan koneksi. Library dan progres tetap di iPhone, dan chapter di server tidak dihapus.</p></details>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel" id="panel">
+      <section>
+        <h2>Metode</h2>
+        <div class="chips" id="methodChips" role="group" aria-label="Pilih metode"></div>
+        <p class="flowtip">Setiap metode punya diagram sendiri. Di prototipe, metode berlabel Segera hadir bisa dipilih untuk melihat animasinya.</p>
+      </section>
+      <section>
+        <h2>Status</h2>
+        <div class="chips" id="chips" role="group" aria-label="Pilih status"></div>
+      </section>
+      <section>
+        <h2>Arti animasi</h2>
+        <p class="meaning" id="meaning"></p>
+      </section>
+      <section>
+        <h2>Ikon di judul Library</h2>
+        <div class="lib-preview"><span class="title">Library</span><span id="libIcon"></span></div>
+        <p class="flowtip" id="libTip"></p>
+      </section>
+      <section>
+        <h2>Mode Penjelasan</h2>
+        <p class="flowtip">Diputar otomatis saat halaman pertama kali dibuka dengan sync mati, dan setiap kali tombol ? diketuk.</p>
+        <button class="btn" type="button" id="explainBtn">Putar penjelasan</button>
+      </section>
+      <section class="controls">
+        <h2>Pengaturan pratinjau</h2>
+        <label><input type="checkbox" id="reduceMotion"> Kurangi gerakan (Reduce Motion)</label>
+        <label><input type="checkbox" id="longWait"> Menunggu server lebih dari 7 hari</label>
+        <label>Tema aplikasi
+          <select id="appTheme">
+            <option value="dark">Gelap</option>
+            <option value="black">Hitam pekat</option>
+            <option value="light">Terang</option>
+          </select>
+        </label>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const screen = $('screen'), canvas = $('canvas'), ctx = canvas.getContext('2d');
+  const diagram = $('diagram');
+  const mql = matchMedia('(prefers-reduced-motion: reduce)');
+  let reduce = mql.matches;
+  $('reduceMotion').checked = reduce;
+
+  const lag = (d, k) => Math.min(42, Math.max(0, d - k));
+  const pair = (n) => ({ t: `${n}/42`, p: n / 42 });
+  const SIZE = { phone: [24, 43], tablet: [33, 23], mac: [33, 27], android: [22, 41], ereader: [27, 38], hub: [28, 28], ghost: [26, 26], source: [13, 13] };
+  const ROUND = { hub: 1, ghost: 1, source: 1 };
+
+  // ---------- Methods: topology, flows and texts ----------
+  const SLOT = { S: { x: .34, y: 40 }, P: { x: .14, y: 150 }, H: { x: .5, y: 150 }, R1: { x: .85, y: 82 }, R2: { x: .85, y: 194 }, R: { x: .85, y: 146 } };
+  const node = (id, kind, slot, label, sub, extra = {}) => ({ id, kind, ...SLOT[slot], label, sub, ...extra });
+  const SRC = node('source', 'source', 'S', 'Source', '');
+  const PHONE = node('phone', 'phone', 'P', 'iPhone', '42 series');
+
+  const METHODS = {
+    local: {
+      name: 'Lokal', pill: 'phone', chip: 'Lokal',
+      nodes: [{ ...SRC, x: .5 }, { ...PHONE, x: .3 }, node('hub', 'ghost', 'H', 'Sync', 'Belum terhubung', { x: .74 })],
+      links: [['source', 'phone', 'source'], ['phone', 'hub', 'ghost']],
+      legend: [['Library', 1, 'di iPhone'], ['Progres', 1, 'di iPhone'], ['Unduhan', 1, 'di iPhone'], ['Antar perangkat', 0]],
+      statuses: ['local'], def: 'local'
+    },
+    suwayomi: {
+      name: 'Suwayomi', pill: 'server', chip: 'Suwayomi', hub: 'server',
+      nodes: [SRC, PHONE, node('hub', 'hub', 'H', 'Server', '130 series'), node('r1', 'tablet', 'R1', 'iPad', 'Kuchie'), node('r2', 'mac', 'R2', 'Mac', 'WebUI Suwayomi')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r1', 'fan'], ['hub', 'r2', 'fan'], ['source', 'phone', 'source'], ['source', 'hub', 'source2']],
+      flows: [{ route: 'phone>hub', kind: 'mix', n: 3, speed: .55, lane: -5 }, { route: 'hub>phone', kind: 'dot', n: 2, speed: .4, lane: 5 }, { route: 'hub>r1', kind: 'mix', n: 2, speed: .5 }, { route: 'hub>r2', kind: 'mix', n: 2, speed: .45 }],
+      legend: [['Library', 1], ['Progres', 1], ['Unduhan', 1, 'di server'], ['Perangkat lain', 1]],
+      statuses: ['analyzing', 'syncing', 'synced', 'waiting', 'action', 'serverDownload', 'moveToServer', 'saveOffline'], def: 'synced',
+      texts: {
+        syncing: ['Menyinkronkan · {d} dari 42', 'Mengirim library dan progres ke server. Perangkat lain yang memakai server yang sama ikut menerima perubahannya.',
+          '<b>Cover kecil = library, titik = progres.</b> Keduanya mengalir dari iPhone ke server (atas) dan sebaliknya (bawah), lalu dari server ke perangkat lain. Angka di iPad dan Mac naik di belakang iPhone karena perubahan sampai ke sana lewat server.'],
+        synced: ['Tersinkron · 2 menit lalu', 'Library dan progres bacamu sama di iPhone, server, dan perangkat lain.',
+          '<b>Tenang tapi hidup.</b> Garis bergerak pelan, orbit server berputar, riak muncul setiap 4 detik, dan satu denyut berjalan dari iPhone ke server lalu ke perangkat lain setiap 6 detik.'],
+        waiting: ['Menunggu server · 3 perubahan', 'Server tidak terjangkau. Kamu tetap bisa membaca langsung dari source, dan perubahan akan terkirim nanti.',
+          '<b>Garis ke server terputus</b> dan tiga perubahan menunggu (titik yang memantul). Perangkat lain redup karena dicapai lewat server. <b>Garis Source ke iPhone menyala</b>: membaca tetap jalan.']
+      }
+    },
+    icloud: {
+      name: 'iCloud', pill: 'cloud', chip: 'iCloud', hub: 'cloud',
+      nodes: [SRC, PHONE, node('hub', 'hub', 'H', 'iCloud', 'akunmu'), node('r1', 'tablet', 'R1', 'iPad', 'Kuchie'), node('r2', 'mac', 'R2', 'Mac', 'Kuchie')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r1', 'fan'], ['hub', 'r2', 'fan'], ['source', 'phone', 'source'], ['source', 'r1', 'sourceOther']],
+      flows: [{ route: 'phone>hub', kind: 'mix', n: 3, speed: .6 }, { route: 'hub>r1', kind: 'mix', n: 2, speed: .55 }, { route: 'hub>r2', kind: 'mix', n: 2, speed: .5 }],
+      legend: [['Library', 1], ['Progres', 1], ['Setelan', 1], ['Unduhan', 0, 'tiap perangkat sendiri']],
+      statuses: ['syncing', 'synced', 'waiting'], def: 'synced',
+      texts: {
+        syncing: ['Menyinkronkan lewat iCloud · {d} dari 42', 'Library, progres, dan setelan dikirim ke akun iCloud-mu, lalu diterima Kuchie di iPad dan Mac.',
+          '<b>Hanya data kecil yang lewat iCloud</b>: cover kecil untuk library, titik untuk progres. Tidak ada halaman chapter yang lewat awan. iPad dan Mac mengambil chapter sendiri dari source (garis tipis dari Source ke iPad).'],
+        synced: ['Tersinkron dengan iCloud', 'Semua perangkat Apple-mu punya library dan progres yang sama. Setiap perangkat membaca langsung dari source.',
+          '<b>Awan diam dengan riak pelan.</b> Denyut sesekali berjalan dari iPhone ke awan lalu ke iPad dan Mac, tanda semua perangkat terhubung.'],
+        waiting: ['Menunggu iCloud · 3 perubahan', 'Tidak ada internet. Perubahan tersimpan di iPhone dan dikirim saat tersambung lagi.',
+          '<b>Garis ke awan terputus</b>, tiga perubahan menunggu di iPhone. Chapter yang sudah diunduh di iPhone tetap bisa dibaca.']
+      }
+    },
+    syncyomi: {
+      name: 'SyncYomi', pill: 'server', chip: 'SyncYomi', hub: 'syncyomi',
+      nodes: [SRC, PHONE, node('hub', 'hub', 'H', 'SyncYomi', 'server sync'), node('r1', 'android', 'R1', 'Android', 'Mihon'), node('r2', 'tablet', 'R2', 'Tablet', 'Fork Tachiyomi')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r1', 'fan'], ['hub', 'r2', 'fan'], ['source', 'phone', 'source']],
+      flows: [{ route: 'phone>hub', kind: 'bundle', every: 3.6, travel: 1.3, delay: 0 }, { route: 'hub>r1', kind: 'bundle', every: 3.6, travel: 1.2, delay: 1.5 }, { route: 'hub>r2', kind: 'bundle', every: 3.6, travel: 1.3, delay: 1.9 }],
+      legend: [['Library', 1], ['Kategori', 1], ['Progres', 1], ['Unduhan', 0]],
+      statuses: ['syncing', 'synced', 'waiting'], def: 'synced',
+      texts: {
+        syncing: ['Menyinkronkan dengan SyncYomi', 'Library, kategori, dan progres dikirim sebagai satu paket ke server SyncYomi, lalu diambil Mihon dan aplikasi keluarga Tachiyomi lainnya.',
+          '<b>Data bergerak sebagai paket (kotak), bukan aliran terus-menerus</b>, karena SyncYomi menyinkronkan seluruh data library sekaligus secara berkala. Angka di perangkat lain berubah saat paket tiba.'],
+        synced: ['Tersinkron dengan SyncYomi', 'Library di Kuchie dan aplikasi lain yang memakai SyncYomi sudah sama.',
+          '<b>Server diam</b>, denyut sesekali menunjukkan koneksi masih hidup. Paket berikutnya dikirim saat ada perubahan atau sesuai jadwal.'],
+        waiting: ['Menunggu SyncYomi · 3 perubahan', 'Server SyncYomi tidak terjangkau. Perubahan dikirim dalam paket berikutnya.',
+          '<b>Garis ke server terputus.</b> Perubahan menunggu dan akan dikemas dalam paket berikutnya.']
+      }
+    },
+    kosync: {
+      name: 'KOReader Sync', pill: 'server', chip: 'KOReader Sync', hub: 'kosync',
+      nodes: [SRC, PHONE, node('hub', 'hub', 'H', 'KOReader Sync', 'server kosync'), node('r', 'ereader', 'R', 'E-reader', 'KOReader')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r', 'fan'], ['source', 'phone', 'source']],
+      flows: [{ route: 'phone>hub', kind: 'mark', n: 2, speed: .4, lane: -5 }, { route: 'hub>r', kind: 'mark', n: 2, speed: .4, lane: -5 }, { route: 'r>hub', kind: 'mark', n: 1, speed: .3, lane: -5 }, { route: 'hub>phone', kind: 'mark', n: 1, speed: .3, lane: -5 }],
+      legend: [['Posisi baca', 1, 'per chapter'], ['Library', 0], ['Unduhan', 0]],
+      statuses: ['syncing', 'synced', 'waiting'], def: 'synced',
+      texts: {
+        syncing: ['Mengirim posisi baca', 'Hanya posisi baca per chapter yang dikirim ke server KOReader Sync, supaya bisa dilanjutkan di KOReader.',
+          '<b>Hanya penanda halaman (pita) yang bergerak</b>, dua arah antara iPhone dan e-reader lewat server. Library dan unduhan tidak ikut. Angka di layar adalah persen chapter yang sudah dibaca.'],
+        synced: ['Posisi baca tersinkron', 'Chapter yang sedang dibaca berada di halaman yang sama di iPhone dan KOReader.',
+          '<b>Kedua layar menunjukkan persen yang sama.</b> Denyut sesekali lewat dari iPhone ke e-reader.'],
+        waiting: ['Menunggu server kosync', 'Posisi baca disimpan di iPhone dan dikirim saat server terjangkau.',
+          '<b>Garis ke server terputus.</b> Posisi terakhir disimpan di iPhone.']
+      }
+    },
+    komga: {
+      name: 'Komga', pill: 'server', chip: 'Komga / Kavita', hub: 'media',
+      nodes: [PHONE, node('hub', 'hub', 'H', 'Komga', 'koleksi file'), node('r1', 'mac', 'R1', 'Mac', 'WebUI Komga', { y: 92 }), node('r2', 'tablet', 'R2', 'iPad', 'Kuchie')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r1', 'fan'], ['hub', 'r2', 'fan']],
+      flows: [{ route: 'hub>phone', kind: 'page', n: 3, speed: .35, lane: 5 }, { route: 'phone>hub', kind: 'dot', n: 2, speed: .5, lane: -5 }, { route: 'hub>r2', kind: 'page', n: 2, speed: .3 }],
+      legend: [['Koleksi file', 1, 'di server'], ['Progres', 1], ['Baca langsung', 1], ['Extension', 0, 'tidak perlu']],
+      statuses: ['syncing', 'synced', 'waiting'], def: 'syncing',
+      texts: {
+        syncing: ['Membaca dari Komga', 'Komga menyimpan file manga di servermu. Kuchie membaca halaman langsung dari server dan mengirim progres balik.',
+          '<b>Arahnya terbalik dari metode lain.</b> Halaman mengalir dari server ke iPhone karena koleksi file ada di server, sementara progres (titik) mengalir dari iPhone ke server. Tidak ada Source atau extension.'],
+        synced: ['Tersinkron dengan Komga', 'Progres baca di Kuchie sama dengan di Komga dan aplikasi lain yang memakai server ini.',
+          '<b>Server diam dengan riak pelan.</b> Halaman baru mengalir saat kamu membuka chapter.'],
+        waiting: ['Komga tidak terjangkau', 'Chapter yang sudah diunduh tetap bisa dibaca. Progres dikirim saat server terjangkau.',
+          '<b>Garis ke server terputus</b>, dan tidak ada Source sebagai cadangan, karena semua file ada di server. Hanya unduhan di iPhone yang bisa dibaca.']
+      }
+    },
+    drive: {
+      name: 'Google Drive', pill: 'cloud', chip: 'Google Drive', hub: 'drive',
+      nodes: [SRC, PHONE, node('hub', 'hub', 'H', 'Google Drive', 'file sync'), node('r1', 'tablet', 'R1', 'iPad', 'Kuchie'), node('r2', 'mac', 'R2', 'Mac', 'Kuchie')],
+      links: [['phone', 'hub', 'sync'], ['hub', 'r1', 'fan'], ['hub', 'r2', 'fan'], ['source', 'phone', 'source']],
+      flows: [{ route: 'phone>hub', kind: 'file', every: 4.2, travel: 1.4, delay: 0 }, { route: 'hub>r1', kind: 'file', every: 4.2, travel: 1.3, delay: 1.8 }, { route: 'hub>r2', kind: 'file', every: 4.2, travel: 1.4, delay: 2.3 }],
+      legend: [['Library', 1], ['Progres', 1], ['Langsung', 0, 'berkala'], ['Unduhan', 0]],
+      statuses: ['syncing', 'synced', 'waiting'], def: 'synced',
+      texts: {
+        syncing: ['Mengunggah file sync ke Drive', 'Kuchie menyimpan satu file berisi library dan progres di Drive-mu secara berkala. Perangkat lain mengambil file itu.',
+          '<b>Satu file bergerak sesekali, bukan aliran.</b> Drive hanya menyimpan salinan berkala, jadi perubahan baru muncul di perangkat lain setelah file berikutnya diambil.'],
+        synced: ['File sync terbaru di Drive · 10 menit lalu', 'iPad dan Mac memakai file yang sama dengan iPhone.',
+          '<b>Drive diam.</b> Tidak ada denyut terus-menerus, karena metode ini memang bekerja berkala.'],
+        waiting: ['Menunggu Drive', 'Tidak ada internet. File sync diunggah saat tersambung lagi.',
+          '<b>Garis ke Drive terputus.</b> Perubahan menunggu sampai file berikutnya diunggah.']
+      }
+    }
+  };
+  METHODS.kavita = { ...METHODS.komga, name: 'Kavita', chip: null,
+    nodes: METHODS.komga.nodes.map(n => n.id === 'hub' ? { ...n, label: 'Kavita' } : n.id === 'r1' ? { ...n, sub: 'WebUI Kavita' } : n),
+    texts: Object.fromEntries(Object.entries(METHODS.komga.texts).map(([k, v]) => [k, v.map(x => x.replace(/Komga/g, 'Kavita'))])) };
+  const METHOD_ORDER = ['local', 'suwayomi', 'icloud', 'syncyomi', 'kosync', 'komga', 'drive'];
+
+  // ---------- Statuses ----------
+  const BASE = { hubA: 1, sync: 1, fan: 1, others: 1, src: .35, srcHot: 0, src2: .3, dashed: 0, broken: 0, lock: 0, check: 0 };
+  const KEYS = Object.keys(BASE);
+  const STATUS = {
+    local: { label: 'Lokal', v: { hubA: .5, sync: .35, fan: 0, others: 0, src: 1, srcHot: 1, dashed: 1 }, spin: 0, rings: 0, march: 0,
+      live: ['Tanpa sync', 'muted', true], icon: 'none', localFlows: true,
+      text: ['Hanya di iPhone', 'Library, progres, dan unduhan tersimpan di iPhone ini. Chapter diambil langsung dari source lewat extension.',
+        '<b>Tanpa sync, semuanya terjadi di iPhone.</b> Halaman mengalir dari Source lewat extension, dan unduhan mengisi penyimpanan iPhone (bar di layar). Lingkaran putus-putus di kanan adalah tempat metode sync akan terhubung.'],
+      cta: ['Hubungkan sinkronisasi'] },
+    analyzing: { label: 'Memeriksa', v: { fan: .35, others: .5, src: .4 }, spin: .8, rings: 1.6, march: 0, drawOn: true, scan: true, flows: [],
+      live: ['Memeriksa', 'accent'], icon: 'spin', hubSub: 'Memeriksa',
+      text: ['Memeriksa server…', 'Membandingkan library di iPhone dan di server. Belum ada yang diubah.',
+        '<b>Garis digambar dari iPhone ke server</b>, lalu satu denyut bolak-balik selama Kuchie membandingkan kedua library.'],
+      cta: ['Memeriksa…', 'disabled'] },
+    syncing: { label: 'Menyinkronkan', v: {}, spin: 2.4, rings: 1.1, march: 40, leds: true, counter: { total: 50, step: .18 },
+      live: ['Berjalan', 'accent'], icon: 'spin', cta: ['Menyinkronkan…', 'disabled'] },
+    synced: { label: 'Tersinkron', v: { check: 1 }, spin: .25, rings: 4, march: 8, pulse: true, flows: [],
+      live: ['Aktif', 'accent'], icon: 'check', cta: ['Sinkronkan sekarang', 'secondary'] },
+    waiting: { label: 'Menunggu', v: { hubA: .4, sync: .45, fan: .2, others: .35, src: 1, srcHot: 1, broken: 1 }, spin: 0, rings: 0, march: 0, pending: 3, waitFlows: true,
+      live: ['Menunggu', 'muted', true], icon: 'wait', cta: ['Coba lagi', 'secondary'] },
+    action: { label: 'Perlu tindakan', v: { hubA: .85, sync: .35, fan: .3, others: .5, lock: 1 }, spin: 0, rings: 0, march: 0, flows: [],
+      live: ['Perlu tindakan', 'danger', true], icon: 'alert', hubSub: 'Perlu masuk lagi',
+      text: ['Perlu masuk lagi', 'Login ke server kedaluwarsa. Masuk lagi untuk melanjutkan sync.',
+        '<b>Semua diam</b>, kecuali ikon kunci di server yang bergoyang sekali, supaya pengguna fokus pada satu tindakan.'],
+      cta: ['Masuk lagi'] },
+    serverDownload: { label: 'Unduh di server', v: { sync: .6, fan: .6, others: .8, src2: 1 }, spin: 1, rings: 0, march: 0, leds: true,
+      flows: [{ route: 'source>hub', kind: 'page', n: 3, speed: .35 }], live: ['Berjalan', 'accent'], icon: 'check',
+      text: ['Mengunduh di server · 4 chapter', 'Server mengunduh chapter dari source. iPhone tidak ikut penuh.',
+        '<b>Halaman berjalan dari Source ke Server</b>, dan server berkedip setiap halaman tiba. iPhone tidak terlibat, jadi ruang dan kuota iPhone aman.'],
+      cta: ['Lihat antrean', 'secondary'] },
+    moveToServer: { label: 'Pindahkan ke server', v: { fan: .5, others: .8 }, spin: 2, rings: 1.4, march: 30, leds: true,
+      flows: [{ route: 'phone>hub', kind: 'page', n: 3, speed: .32 }], counter: { total: 86, step: .45, start: 34, loop: true },
+      live: ['Berjalan', 'accent'], icon: 'spin',
+      text: ['Memindahkan · {d}/86 · {gb} GB dilegakan', 'Salinan di iPhone dihapus setelah server menyimpannya.',
+        '<b>Halaman berjalan dari iPhone ke Server.</b> Angka di iPhone turun, label server naik, dan GB yang dilegakan bertambah.'],
+      cta: ['Jeda', 'secondary'] },
+    saveOffline: { label: 'Simpan untuk offline', v: { fan: .5, others: .8 }, spin: -2, rings: 1.4, march: -30,
+      flows: [{ route: 'hub>phone', kind: 'page', n: 3, speed: .32 }], live: ['Berjalan', 'accent'], icon: 'spin',
+      text: ['Menyimpan untuk offline · 3 chapter', 'Chapter disalin dari server ke iPhone supaya bisa dibaca tanpa internet.',
+        '<b>Halaman berjalan dari Server ke iPhone</b>, dan layar iPhone menghitung chapter yang tersimpan.'],
+      cta: ['Lihat unduhan', 'secondary'] }
+  };
+
+  function sceneFor(mKey, sKey) {
+    const m = METHODS[mKey], st = STATUS[sKey];
+    const v = { ...BASE, ...st.v };
+    let flows = st.flows;
+    if (sKey === 'syncing') flows = m.flows;
+    if (st.localFlows) flows = [{ route: 'source>phone', kind: 'page', n: 3, speed: .3 }];
+    if (st.waitFlows) flows = m.links.some(l => l[0] === 'source' && l[1] === 'phone') ? [{ route: 'source>phone', kind: 'page', n: 3, speed: .3 }] : [];
+    if (sKey === 'waiting' && !m.links.some(l => l[0] === 'source')) { v.src = 0; }
+    const tx = st.text || (m.texts && m.texts[sKey]) || ['', '', ''];
+    return { m, mKey, sKey, st, v, flows, text: tx, periodic: flows.some(f => f.every) };
+  }
+
+  // Screens: phone, r1, r2, r texts/progress and hub sub label.
+  function screens(sc, d, t) {
+    const { mKey, sKey } = sc;
+    const out = { phone: { t: '42', p: 1 }, r1: pair(42), r2: pair(42), r: pair(42), hub: null };
+    const stale = (delay, travel, every) => (t % every) < delay + travel && t < every ? pair(38) : pair(42);
+    if (sKey === 'local') { out.phone = { t: '42', p: .3 + ((t * .05) % .5) }; out.hub = 'Belum terhubung'; return out; }
+    if (mKey === 'kosync') {
+      const pct = sKey === 'syncing' ? 40 + Math.min(42, d) : sKey === 'synced' ? 82 : 61;
+      const other = sKey === 'syncing' ? 40 + lag(d, 6) : sKey === 'synced' ? 82 : 55;
+      out.phone = { t: `${pct}%`, p: pct / 100 }; out.r = { t: sKey === 'waiting' ? '?' : `${other}%`, p: other / 100 }; return out;
+    }
+    if (sKey === 'syncing') {
+      if (sc.periodic) {
+        out.phone = pair(42);
+        const f = sc.flows; out.r1 = stale(f[1].delay, f[1].travel, f[1].every); out.r2 = stale(f[2].delay, f[2].travel, f[2].every);
+        if ((t % f[0].every) < f[0].travel) out.hub = mKey === 'drive' ? 'Mengunggah file' : 'Menerima paket';
+        return out;
+      }
+      if (mKey === 'komga' || mKey === 'kavita') { const pg = 1 + Math.floor(t * 2) % 24; out.phone = { t: `${pg}/24`, p: pg / 24 }; return out; }
+      out.phone = pair(Math.min(42, d)); out.r1 = pair(lag(d, 4)); out.r2 = pair(lag(d, 8)); return out;
+    }
+    if (sKey === 'waiting') { out.phone = { t: '+3', p: 1 }; out.r1 = out.r2 = out.r = { t: '?', p: 0 }; out.hub = 'Tidak terjangkau'; return out; }
+    if (sKey === 'analyzing') { const dots = '.'.repeat(1 + Math.floor(t * 3) % 3); out.r1 = out.r2 = { t: dots, p: 0 }; out.hub = 'Memeriksa'; return out; }
+    if (sKey === 'action') { out.hub = 'Perlu masuk lagi'; return out; }
+    if (sKey === 'serverDownload') { out.hub = `Mengunduh ${1 + Math.floor(t / 1.6) % 4}/4`; return out; }
+    if (sKey === 'moveToServer') { out.phone = { t: `${86 - d}`, p: (86 - d) / 86 }; out.hub = `Diterima ${d}/86`; return out; }
+    if (sKey === 'saveOffline') { const k = 1 + Math.floor(t / 1.6) % 3; out.phone = { t: `${k}/3`, p: (t / 1.6) % 1 }; return out; }
+    return out;
+  }
+
+  // ---------- State ----------
+  let methodKey = 'suwayomi', statusKey = 'synced', scene = sceneFor('suwayomi', 'synced');
+  let cur = { ...scene.v };
+  let flowFade = 1, drawOn = 1, sceneT = 0, counter = 0, rot = 0, marchOff = 0, topoFade = 1;
+  let checkPop = [1, 1, 1, 1];
+  const bumps = {};
+  const cycles = new Map();
+  let explainStep = -1, explainTimer = null, flowTimer = null, kiriTimer = null;
+  let W = 0, H = 0, dpr = 1, last = performance.now(), t = 0, raf = 0, lastHub = '';
+  let G = {}, P = {}, labelEls = {}, topoM = null;
+
+  const css = (name) => getComputedStyle(screen).getPropertyValue(name).trim();
+  function rgba(c, a) { const n = parseInt(c.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${Math.max(0, Math.min(1, a))})`; }
+  let C = {};
+  function readColors() {
+    C = { node: css('--s-node'), accent: css('--s-accent'), accent2: css('--s-accent-2'), muted: css('--s-muted'),
+      danger: css('--s-danger'), surface: css('--s-surface'), fg: css('--s-fg'), line: css('--s-line'), onAccent: css('--s-on-accent') };
+  }
+
+  // ---------- Geometry ----------
+  function bez(p0, c1, c2, p1, n = 48) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, v = 1 - u;
+      pts.push({ x: v * v * v * p0.x + 3 * v * v * u * c1.x + 3 * v * u * u * c2.x + u * u * u * p1.x,
+                 y: v * v * v * p0.y + 3 * v * v * u * c1.y + 3 * v * u * u * c2.y + u * u * u * p1.y });
+    }
+    return pts;
+  }
+  function withLengths(pts) {
+    const L = [0];
+    for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    return { pts, L, total: L[L.length - 1] };
+  }
+  function at(path, u) {
+    u = Math.max(0, Math.min(1, u));
+    const target = u * path.total, { pts, L } = path;
+    let i = 1; while (i < L.length - 1 && L[i] < target) i++;
+    const seg = L[i] - L[i - 1] || 1, k = (target - L[i - 1]) / seg;
+    const a = pts[i - 1], b = pts[i];
+    const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty) || 1;
+    return { x: a.x + tx * k, y: a.y + ty * k, nx: -ty / tl, ny: tx / tl };
+  }
+  function center(n) { const c = { x: n.x * W, y: n.y }; if (n.kind === 'mac') c.y -= 4; return c; }
+  function anchor(n, toward) {
+    const c = center(n), [hw, hh] = SIZE[n.kind];
+    const dx = toward.x - c.x, dy = toward.y - c.y, l = Math.hypot(dx, dy) || 1;
+    if (ROUND[n.kind]) return { x: c.x + dx / l * (hw + 3), y: c.y + dy / l * (hh + 3) };
+    const s = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+    return { x: c.x + dx * s + dx / l * 3, y: c.y + dy * s + dy / l * 3 };
+  }
+  function buildPaths() {
+    G = {}; P = {};
+    scene.m.nodes.forEach(n => { G[n.id] = n; });
+    scene.m.links.forEach(([a, b, role]) => {
+      const na = G[a], nb = G[b];
+      const ca = center(na), cb = center(nb);
+      const p0 = anchor(na, cb), p1 = anchor(nb, ca);
+      const dx = p1.x - p0.x, dy = p1.y - p0.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+      const lerp = (k) => ({ x: p0.x + dx * k, y: p0.y + dy * k });
+      let c1, c2;
+      if (role.startsWith('source')) { const b2 = (p1.x < p0.x ? 1 : -1) * 22; c1 = { x: lerp(.3).x + nx * b2, y: lerp(.3).y + ny * b2 }; c2 = { x: lerp(.7).x + nx * b2, y: lerp(.7).y + ny * b2 }; }
+      else { const b2 = 16; c1 = { x: lerp(.35).x + nx * b2, y: lerp(.35).y + ny * b2 }; c2 = { x: lerp(.65).x - nx * b2, y: lerp(.65).y - ny * b2 }; }
+      const pts = bez(p0, c1, c2, p1);
+      P[`${a}-${b}`] = withLengths(pts); P[`${a}>${b}`] = P[`${a}-${b}`]; P[`${b}>${a}`] = withLengths([...pts].reverse());
+    });
+  }
+  function buildLabels() {
+    diagram.querySelectorAll('.nlabel').forEach(e => e.remove());
+    labelEls = {};
+    scene.m.nodes.forEach(n => {
+      if (n.kind === 'source') {
+        const el = document.createElement('div'); el.className = 'nlabel'; el.style.left = `${n.x * 100}%`; el.style.top = `${n.y - 40}px`;
+        el.innerHTML = '<b>Source</b>'; diagram.appendChild(el); labelEls[n.id] = el; return;
+      }
+      const [, hh] = SIZE[n.kind];
+      const above = n.y < 110 && n.id !== 'phone';
+      const el = document.createElement('div'); el.className = 'nlabel';
+      el.style.left = `${n.x * 100}%`;
+      el.style.top = above ? `${n.y - hh - 38}px` : `${n.y + hh + (n.kind === 'hub' || n.kind === 'ghost' ? 12 : 8)}px`;
+      el.innerHTML = `<b>${n.label}</b><span>${n.sub || ''}</span>`;
+      diagram.appendChild(el); labelEls[n.id] = el;
+    });
+    lastHub = '';
+  }
+
+  function resize() {
+    const r = diagram.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildPaths(); render();
+  }
+
+  // ---------- Drawing primitives ----------
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  function strokePts(pts, to, gapFrom, gapTo) {
+    ctx.beginPath(); let pen = false;
+    for (let i = 0; i <= to; i++) {
+      if (i > gapFrom && i < gapTo) { pen = false; continue; }
+      const q = pts[i]; if (!pen) { ctx.moveTo(q.x, q.y); pen = true; } else ctx.lineTo(q.x, q.y);
+    }
+    ctx.stroke();
+  }
+  function stroke(path, { width, color, a, dash = 0, march = 0, progress = 1, broken = 0 }) {
+    if (!path || a <= .01 || progress <= 0) return;
+    const pts = path.pts, n = pts.length;
+    const lastIdx = Math.min(n - 1, Math.max(1, Math.round((n - 1) * progress)));
+    const gapFrom = broken > .05 ? Math.floor(n * (.5 - .14 * broken)) : n, gapTo = broken > .05 ? Math.ceil(n * (.5 + .14 * broken)) : n;
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (march && dash <= .01) { ctx.strokeStyle = rgba(color, a * .22); ctx.lineWidth = width + 2; strokePts(pts, lastIdx, gapFrom, gapTo); }
+    ctx.strokeStyle = rgba(color, a); ctx.lineWidth = width;
+    if (dash > .01) ctx.setLineDash([3, 5 + 3 * dash]);
+    else if (march) { ctx.setLineDash([2, 7]); ctx.lineDashOffset = -marchOff * Math.sign(march); }
+    strokePts(pts, lastIdx, gapFrom, gapTo);
+    ctx.restore();
+    if (broken > .5) [pts[gapFrom], pts[gapTo]].forEach(m => { if (!m) return; ctx.save(); ctx.strokeStyle = rgba(color, a); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(m.x - 3, m.y - 5); ctx.lineTo(m.x + 3, m.y + 5); ctx.stroke(); ctx.restore(); });
+  }
+  function text(x, y, s, color, size = 11) {
+    if (!s) return;
+    ctx.save(); ctx.fillStyle = color; ctx.font = `700 ${size}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); ctx.restore();
+  }
+  function bar(x, y, w, p) {
+    ctx.fillStyle = rgba(C.node, .2); rr(x, y, w, 4, 2); ctx.fill();
+    if (p > 0) { ctx.fillStyle = C.accent; rr(x, y, w * Math.min(1, p), 4, 2); ctx.fill(); }
+  }
+  function badge(x, y, i) {
+    const s = cur.check * checkPop[i];
+    if (s <= .01) return;
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C.onAccent; ctx.lineWidth = 2.1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-3.8, 0); ctx.lineTo(-1, 2.8); ctx.lineTo(4, -2.8); ctx.stroke(); ctx.restore();
+  }
+  function flash(x, y, w, h, r, b) { if (b > .01) { ctx.fillStyle = rgba(C.accent, .32 * b); rr(x, y, w, h, r); ctx.fill(); } }
+  function withBump(c, b, fn) { const s = 1 + .07 * (b || 0); ctx.save(); ctx.translate(c.x, c.y); ctx.scale(s, s); ctx.translate(-c.x, -c.y); fn(); ctx.restore(); }
+  function frame(x, y, w, h, r, dashed) {
+    ctx.fillStyle = C.surface; rr(x, y, w, h, r); ctx.fill();
+    ctx.strokeStyle = C.node; ctx.lineWidth = 2.2; if (dashed) ctx.setLineDash([4, 4]);
+    rr(x, y, w, h, r); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // ---------- Nodes ----------
+  function drawPhone(n, s) {
+    const c = center(n);
+    withBump(c, bumps.phone, () => {
+      const w = 48, h = 86, x = c.x - w / 2, y = c.y - h / 2;
+      frame(x, y, w, h, 12, false);
+      ctx.fillStyle = rgba(C.accent, .1); rr(x + 4, y + 4, w - 8, h - 8, 9); ctx.fill();
+      flash(x + 4, y + 4, w - 8, h - 8, 9, bumps.phone);
+      ctx.fillStyle = C.node; rr(c.x - 8, y + 6, 16, 4, 2); ctx.fill();
+      text(c.x, y + 21, s.t, C.fg, s.t.length > 5 ? 9.5 : 11);
+      const lit = scene.sKey === 'local' ? 6 : Math.round(s.p * 6);
+      for (let i = 0; i < 6; i++) {
+        const cx = x + 9 + (i % 3) * 11, cy = y + 32 + Math.floor(i / 3) * 15;
+        ctx.fillStyle = i < lit ? rgba(C.accent, .9) : rgba(C.node, .18); rr(cx, cy, 8, 11, 2); ctx.fill();
+      }
+      bar(x + 9, y + h - 18, w - 18, Math.max(.04, s.p));
+      ctx.fillStyle = rgba(C.node, .6); rr(c.x - 9, y + h - 8, 18, 2.5, 1.2); ctx.fill();
+      badge(x + w - 2, y + 2, 0);
+    });
+  }
+  function drawDevice(n, s, idx) {
+    const c = center(n), dashed = cur.dashed > .3;
+    ctx.save(); ctx.globalAlpha *= Math.max(cur.others, .15);
+    withBump(c, bumps[n.id], () => {
+      if (n.kind === 'tablet') {
+        const w = 66, h = 46, x = c.x - w / 2, y = c.y - h / 2;
+        frame(x, y, w, h, 8, dashed);
+        ctx.fillStyle = rgba(C.accent, .1); rr(x + 4, y + 4, w - 8, h - 8, 5); ctx.fill(); flash(x + 4, y + 4, w - 8, h - 8, 5, bumps[n.id]);
+        text(c.x, y + 19, s.t, C.fg, 11.5); bar(x + 12, y + 31, w - 24, s.p); badge(x + w - 2, y + 2, idx);
+      } else if (n.kind === 'mac') {
+        const w = 66, h = 42, x = c.x - w / 2, y = c.y - h / 2 - 2;
+        frame(x, y, w, h, 6, dashed);
+        ctx.fillStyle = rgba(C.accent, .1); rr(x + 4, y + 4, w - 8, h - 8, 4); ctx.fill(); flash(x + 4, y + 4, w - 8, h - 8, 4, bumps[n.id]);
+        text(c.x, y + 17, s.t, C.fg, 11.5); bar(x + 12, y + 28, w - 24, s.p);
+        ctx.fillStyle = C.node; rr(c.x - 3, y + h, 6, 7, 1); ctx.fill(); rr(c.x - 14, y + h + 7, 28, 3, 1.5); ctx.fill();
+        badge(x + w - 2, y + 2, idx);
+      } else if (n.kind === 'android') {
+        const w = 44, h = 82, x = c.x - w / 2, y = c.y - h / 2;
+        frame(x, y, w, h, 9, dashed);
+        ctx.fillStyle = rgba(C.accent2, .1); rr(x + 4, y + 4, w - 8, h - 8, 6); ctx.fill(); flash(x + 4, y + 4, w - 8, h - 8, 6, bumps[n.id]);
+        ctx.fillStyle = C.node; ctx.beginPath(); ctx.arc(c.x, y + 8, 2, 0, Math.PI * 2); ctx.fill();
+        text(c.x, y + 26, s.t, C.fg, 10.5);
+        for (let i = 0; i < 4; i++) { ctx.fillStyle = i < Math.round(s.p * 4) ? rgba(C.accent2, .85) : rgba(C.node, .18); rr(x + 9 + (i % 2) * 14, y + 38 + Math.floor(i / 2) * 15, 12, 12, 2); ctx.fill(); }
+        badge(x + w - 2, y + 2, idx);
+      } else if (n.kind === 'ereader') {
+        const w = 54, h = 76, x = c.x - w / 2, y = c.y - h / 2;
+        frame(x, y, w, h, 7, dashed);
+        ctx.fillStyle = rgba(C.node, .12); rr(x + 6, y + 6, w - 12, h - 20, 3); ctx.fill(); flash(x + 6, y + 6, w - 12, h - 20, 3, bumps[n.id]);
+        ctx.fillStyle = rgba(C.node, .45); for (let i = 0; i < 5; i++) { rr(x + 11, y + 13 + i * 6, w - 22 - (i % 2) * 8, 2, 1); ctx.fill(); }
+        text(c.x, y + 50, s.t, C.fg, 11);
+        ctx.fillStyle = rgba(C.node, .5); rr(c.x - 8, y + h - 9, 16, 3, 1.5); ctx.fill();
+        badge(x + w - 2, y + 2, idx);
+      }
+    });
+    ctx.restore();
+  }
+  function drawHubGlyph(kind, c, col) {
+    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (kind === 'cloud' || kind === 'drive') {
+      ctx.beginPath();
+      ctx.moveTo(c.x - 11, c.y + 7); ctx.lineTo(c.x + 10, c.y + 7);
+      ctx.arc(c.x + 9, c.y + 1, 6, Math.PI / 2, -Math.PI / 2, true);
+      ctx.arc(c.x + 1, c.y - 3, 7.5, -0.2, Math.PI + .5, true);
+      ctx.arc(c.x - 9, c.y + 2, 5, -Math.PI / 2, Math.PI / 2, true);
+      ctx.closePath(); ctx.stroke();
+      if (kind === 'drive') { ctx.beginPath(); ctx.moveTo(c.x - 4, c.y + 1); ctx.lineTo(c.x + 4, c.y + 1); ctx.moveTo(c.x - 4, c.y + 4); ctx.lineTo(c.x + 2, c.y + 4); ctx.stroke(); }
+    } else if (kind === 'syncyomi') {
+      for (let k = 0; k < 2; k++) {
+        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(k * Math.PI);
+        ctx.beginPath(); ctx.arc(0, 0, 10, Math.PI * 1.1, Math.PI * 1.85); ctx.stroke();
+        const ex = Math.cos(Math.PI * 1.85) * 10, ey = Math.sin(Math.PI * 1.85) * 10;
+        ctx.beginPath(); ctx.moveTo(ex - 5, ey - 1); ctx.lineTo(ex, ey); ctx.lineTo(ex + 1, ey + 5); ctx.stroke(); ctx.restore();
+      }
+    } else if (kind === 'kosync') {
+      rr(c.x - 11, c.y - 10, 22, 20, 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x + 2, c.y - 10); ctx.lineTo(c.x + 2, c.y + 1); ctx.lineTo(c.x + 5.5, c.y - 2); ctx.lineTo(c.x + 9, c.y + 1); ctx.lineTo(c.x + 9, c.y - 10); ctx.closePath(); ctx.fill();
+    } else if (kind === 'media') {
+      [[-11, 14, 0], [-5, 16, 1], [1, 12, 0], [7, 15, 1]].forEach(([dx, h, tilt]) => {
+        ctx.save(); ctx.translate(c.x + dx + 2, c.y + 9); ctx.rotate(tilt ? -.18 : 0); rr(-2.5, -h, 5, h, 1); ctx.stroke(); ctx.restore();
+      });
+      ctx.beginPath(); ctx.moveTo(c.x - 13, c.y + 10); ctx.lineTo(c.x + 13, c.y + 10); ctx.stroke();
+    } else {
+      [-11, 1].forEach((dy, i) => {
+        rr(c.x - 13, c.y + dy, 26, 10, 3); ctx.stroke();
+        const on = scene.st.leds && !reduce ? Math.sin(t * (9 + i * 4) + i * 2) > -.1 : cur.hubA > .6;
+        ctx.fillStyle = on ? C.accent2 : rgba(C.node, .35); ctx.beginPath(); ctx.arc(c.x - 7.5, c.y + dy + 5, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = rgba(C.node, .5); rr(c.x - 2, c.y + dy + 4, 11, 2, 1); ctx.fill();
+      });
+    }
+  }
+  function drawHub(n) {
+    const c = center(n), a = cur.hubA, R = 28, st = scene.st;
+    if (n.kind === 'ghost') {
+      const pulse = reduce ? 0 : (Math.sin(t * 2) + 1) / 2;
+      ctx.save(); ctx.strokeStyle = rgba(C.muted, .6 + .3 * pulse); ctx.lineWidth = 2; ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 6;
+      ctx.beginPath(); ctx.arc(c.x, c.y, 26, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = C.muted; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(c.x - 7, c.y); ctx.lineTo(c.x + 7, c.y); ctx.moveTo(c.x, c.y - 7); ctx.lineTo(c.x, c.y + 7); ctx.stroke();
+      ctx.restore(); return;
+    }
+    if (st.rings && !reduce) {
+      const period = st.rings;
+      for (let k = 0; k < (period > 2 ? 1 : 2); k++) {
+        const ph = ((t + k * period / 2) % period) / period;
+        ctx.save(); ctx.strokeStyle = rgba(C.accent, (1 - ph) * .45 * a); ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(c.x, c.y, R + 4 + ph * 24, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+    }
+    ctx.save(); ctx.globalAlpha *= Math.max(a, .2);
+    ctx.strokeStyle = rgba(a > .6 ? C.accent : C.muted, .55); ctx.lineWidth = 1.4; ctx.setLineDash([2, 5]); ctx.lineDashOffset = -rot * 12;
+    ctx.beginPath(); ctx.arc(c.x, c.y, R + 7, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    if (a > .6 && !scene.periodic) { ctx.fillStyle = C.accent2; ctx.beginPath(); ctx.arc(c.x + Math.cos(rot) * (R + 7), c.y + Math.sin(rot) * (R + 7), 3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    withBump(c, bumps.hub, () => {
+      ctx.save(); ctx.globalAlpha *= Math.max(a, .25);
+      ctx.fillStyle = C.surface; ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba(C.accent, .12 + .25 * (bumps.hub || 0)); ctx.beginPath(); ctx.arc(c.x, c.y, R - 3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = a > .6 ? C.accent : C.muted; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.stroke();
+      drawHubGlyph(scene.m.hub, c, a > .6 ? C.fg : C.muted);
+      ctx.restore();
+    });
+    if (cur.lock > .01) {
+      const wob = reduce ? 0 : Math.sin(Math.min(sceneT, 1.2) * 14) * (1 - Math.min(sceneT, 1.2) / 1.2) * .35;
+      ctx.save(); ctx.globalAlpha *= cur.lock; ctx.translate(c.x + 21, c.y - 21); ctx.rotate(wob);
+      ctx.fillStyle = C.danger; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = C.surface; ctx.fillStyle = C.surface; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -2.5, 3.3, Math.PI, 0); ctx.stroke(); rr(-4.8, -2, 9.6, 6.6, 1.6); ctx.fill();
+      ctx.restore();
+    }
+  }
+  function drawGlobe(n) {
+    const c = center(n), sw = reduce ? 5 : 2 + Math.abs(Math.sin(t * .9)) * 7;
+    ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = 1.6;
+    ctx.fillStyle = C.surface; ctx.beginPath(); ctx.arc(c.x, c.y, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, sw, 13, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c.x - 13, c.y); ctx.lineTo(c.x + 13, c.y); ctx.stroke();
+    ctx.restore();
+  }
+  function backdrop() {
+    const step = 18, off = reduce ? 0 : (t * 5) % step;
+    ctx.save(); ctx.fillStyle = rgba(C.node, .07);
+    for (let y = 8; y < H; y += step) for (let x = -step + off; x < W + step; x += step) { ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+
+  // ---------- Tokens ----------
+  function token(kind, q, color, fade, i) {
+    const x = q.x, y = q.y;
+    ctx.save(); ctx.globalAlpha *= fade;
+    if (kind === 'mix') kind = i % 2 ? 'dot' : 'cover';
+    if (kind === 'cover') {
+      ctx.fillStyle = color; rr(x - 5, y - 7, 10, 14, 2); ctx.fill();
+      ctx.fillStyle = rgba(C.surface, .9); rr(x - 3, y - 4.5, 6, 2, 1); ctx.fill();
+    } else if (kind === 'page') {
+      ctx.fillStyle = C.surface; ctx.strokeStyle = color; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x - 6, y - 8); ctx.lineTo(x + 2, y - 8); ctx.lineTo(x + 6, y - 4); ctx.lineTo(x + 6, y + 8); ctx.lineTo(x - 6, y + 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 3, y - 1); ctx.lineTo(x + 3, y - 1); ctx.moveTo(x - 3, y + 3); ctx.lineTo(x + 3, y + 3); ctx.stroke();
+    } else if (kind === 'bundle') {
+      ctx.fillStyle = color; rr(x - 9, y - 7, 18, 14, 3); ctx.fill();
+      ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 9, y - 2); ctx.lineTo(x + 9, y - 2); ctx.moveTo(x, y - 7); ctx.lineTo(x, y - 2); ctx.stroke();
+    } else if (kind === 'mark') {
+      ctx.fillStyle = C.accent2; ctx.beginPath(); ctx.moveTo(x - 5, y - 8); ctx.lineTo(x + 5, y - 8); ctx.lineTo(x + 5, y + 8); ctx.lineTo(x, y + 4); ctx.lineTo(x - 5, y + 8); ctx.closePath(); ctx.fill();
+    } else if (kind === 'file') {
+      ctx.fillStyle = C.surface; ctx.strokeStyle = color; ctx.lineWidth = 1.7;
+      ctx.beginPath(); ctx.moveTo(x - 7, y - 9); ctx.lineTo(x + 3, y - 9); ctx.lineTo(x + 7, y - 5); ctx.lineTo(x + 7, y + 9); ctx.lineTo(x - 7, y + 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y + 5); ctx.lineTo(x, y - 3); ctx.moveTo(x - 3, y); ctx.lineTo(x, y - 3); ctx.lineTo(x + 3, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function comet(path, u, lane, color, fade) {
+    for (let k = 3; k >= 0; k--) {
+      const uu = u - k * .03; if (uu < 0) continue;
+      const q = at(path, uu);
+      ctx.fillStyle = rgba(color, (1 - k * .25) * fade);
+      ctx.beginPath(); ctx.arc(q.x + q.nx * lane, q.y + q.ny * lane, Math.max(1, 3.4 - k * .7), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function arrowAt(path, u, color, lane = 0) {
+    const q = at(path, u), q2 = at(path, u + .02);
+    const dx = q2.x - q.x, dy = q2.y - q.y, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l;
+    const x = q.x + q.nx * lane, y = q.y + q.ny * lane;
+    ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x - ux * 7 - uy * 5, y - uy * 7 + ux * 5); ctx.lineTo(x, y); ctx.lineTo(x - ux * 7 + uy * 5, y - uy * 7 - ux * 5); ctx.stroke();
+    ctx.restore();
+  }
+  function hit(dest) { bumps[dest] = Math.min(1, (bumps[dest] || 0) + .8); }
+
+  function linkStyle(role) {
+    const lineColor = cur.dashed > .5 ? C.muted : C.accent;
+    const m = reduce ? 0 : scene.st.march;
+    switch (role) {
+      case 'sync': return { width: 3, color: lineColor, a: cur.sync, dash: cur.dashed, march: m, progress: scene.st.drawOn ? Math.min(1, drawOn * 1.6) : 1, broken: cur.broken };
+      case 'fan': return { width: 2.4, color: lineColor, a: cur.fan, dash: cur.dashed, march: m, progress: scene.st.drawOn ? Math.max(0, drawOn * 2 - 1) : 1 };
+      case 'ghost': return { width: 2, color: C.muted, a: .45, dash: 1 };
+      case 'source': { const hot = cur.srcHot > .5; return { width: 1.8, color: hot ? C.accent2 : C.muted, a: Math.max(cur.src, cur.src > .01 ? .18 : 0), march: hot && !reduce ? 24 : 0 }; }
+      case 'source2': { const hot = cur.src2 > .7; return { width: 1.8, color: hot ? C.accent2 : C.muted, a: Math.max(cur.src2 * (1 - cur.broken), .1), dash: cur.dashed, march: hot && !reduce ? 24 : 0 }; }
+      case 'sourceOther': return { width: 1.4, color: C.muted, a: .28 * Math.max(cur.others, .3), dash: .6 };
+    }
+    return { width: 2, color: C.muted, a: .3 };
+  }
+
+  function render() {
+    if (!W || !scene) return;
+    const sc = scene, st = sc.st;
+    ctx.clearRect(0, 0, W, H);
+    backdrop();
+    ctx.save(); ctx.globalAlpha = topoFade;
+    sc.m.links.forEach(([a, b, role]) => stroke(P[`${a}-${b}`], linkStyle(role)));
+    let d = 0;
+    if (st.counter) d = reduce ? (sc.sKey === 'moveToServer' ? 34 : 24) : Math.min(st.counter.total, Math.floor((st.counter.start || 0) + counter));
+    const s = screens(sc, d, sceneT);
+    const fl = (k) => reduce ? 0 : Math.sin(t * 1.3 + k) * 2;
+    let devIdx = 1;
+    sc.m.nodes.forEach((n, i) => {
+      ctx.save(); ctx.translate(0, n.kind === 'source' || n.kind === 'hub' || n.kind === 'ghost' ? 0 : fl(i * 1.3));
+      if (n.kind === 'source') drawGlobe(n);
+      else if (n.kind === 'hub' || n.kind === 'ghost') drawHub(n);
+      else if (n.kind === 'phone') drawPhone(n, s.phone);
+      else drawDevice(n, s[n.id] || pair(42), devIdx++);
+      ctx.restore();
+    });
+
+    (sc.flows || []).forEach((f, fi) => {
+      const path = P[f.route]; if (!path) return;
+      const color = f.route.startsWith('source') ? C.accent2 : C.accent;
+      const lane = f.lane || 0, dest = f.route.split('>')[1];
+      if (reduce) { arrowAt(path, .5, f.kind === 'mark' ? C.accent2 : color, lane); return; }
+      if (f.every) {
+        const ph = (sceneT - f.delay) % f.every, cyc = Math.floor((sceneT - f.delay) / f.every);
+        if (sceneT < f.delay || ph > f.travel) return;
+        const u = ph / f.travel, key = `${fi}`;
+        if (u > .96 && cycles.get(key) !== cyc) { hit(dest); cycles.set(key, cyc); }
+        const q = at(path, u);
+        token(f.kind, { x: q.x, y: q.y + Math.sin(u * Math.PI) * -6 }, color, Math.min(u / .08, (1 - u) / .08, 1) * flowFade, 0);
+        return;
+      }
+      for (let i = 0; i < f.n; i++) {
+        const raw = sceneT * f.speed + i / f.n, u = raw % 1, cyc = Math.floor(raw), key = `${fi}-${i}`;
+        if (cycles.has(key) && cycles.get(key) !== cyc && flowFade > .5) hit(dest);
+        cycles.set(key, cyc);
+        const edge = Math.min(u / .1, (1 - u) / .1, 1) * flowFade;
+        if (f.kind === 'dot') comet(path, u, lane, color, edge);
+        else { const q = at(path, u), bob = Math.sin(t * 6 + u * 10) * 1.2; token(f.kind, { x: q.x + q.nx * lane, y: q.y + q.ny * lane + bob }, color, edge, i); }
+      }
+    });
+    const sync = P['phone>hub'];
+    if (st.scan && drawOn >= 1 && !reduce && sync) comet(sync, .5 - .5 * Math.cos(sceneT * 2.2), 0, C.accent, 1);
+    if (st.pulse && !reduce && sync && !sc.periodic) {
+      const ph = t % 6;
+      if (ph < 1.2) comet(sync, ph / 1.2, 0, C.accent, Math.sin(ph / 1.2 * Math.PI));
+      else if (ph < 2.2) { const u = ph - 1.2; ['r1', 'r2', 'r'].forEach(id => { const p = P[`hub>${id}`]; if (p) comet(p, u, 0, C.accent, Math.sin(u * Math.PI)); }); }
+    }
+    if (st.pending && sync) {
+      const base = at(P['phone-hub'], .3);
+      for (let i = 0; i < st.pending; i++) {
+        const hop = reduce ? 0 : Math.abs(Math.sin(t * 3 + i * .9)) * 5;
+        ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(base.x - 8 + i * 9, base.y - 16 - hop, 3.3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+    const hubLabel = s.hub || (G.hub && G.hub.sub) || '';
+    if (labelEls.hub && hubLabel !== lastHub) { const sp = labelEls.hub.querySelector('span'); if (sp) sp.textContent = hubLabel; lastHub = hubLabel; }
+    if (labelEls.phone) {
+      const ptxt = sc.sKey === 'syncing' && !sc.periodic && sc.mKey !== 'kosync' && sc.mKey !== 'komga' && sc.mKey !== 'kavita' ? `${Math.min(42, d)}/42 series` : sc.sKey === 'local' ? '42 series · 2,4 GB' : '42 series';
+      const sp = labelEls.phone.querySelector('span'); if (sp.textContent !== ptxt) sp.textContent = ptxt;
+    }
+  }
+
+  function tick(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt; sceneT += dt;
+    const k = 1 - Math.exp(-dt / .09);
+    KEYS.forEach(key => { cur[key] += (scene.v[key] - cur[key]) * k; });
+    flowFade = Math.min(1, flowFade + dt / .4);
+    topoFade = Math.min(1, topoFade + dt / .35);
+    rot += dt * (scene.st.spin || 0);
+    marchOff += dt * Math.abs(scene.st.march || 0);
+    Object.keys(bumps).forEach(n => { bumps[n] = Math.max(0, bumps[n] - dt * 3.2); });
+    checkPop = checkPop.map((c, i) => (sceneT > i * .18 ? Math.min(1, c + dt * 3.5) : c));
+    if (scene.st.drawOn) drawOn = Math.min(1, drawOn + dt / 1.2);
+    const cn = scene.st.counter;
+    if (cn) {
+      counter += dt / cn.step;
+      const d = Math.min(cn.total, Math.floor((cn.start || 0) + counter));
+      updateStatusText(d);
+      if (d >= cn.total) { if (autoFinish && explainStep < 0) { autoFinish = false; finishSync(); } else counter = 0; }
+    }
+    render();
+    raf = requestAnimationFrame(tick);
+  }
+  function startLoop() { cancelAnimationFrame(raf); if (reduce) { render(); return; } last = performance.now(); raf = requestAnimationFrame(tick); }
+
+  function fill(str, d) { return str.replace('{d}', Math.min(42, d)).replace('{gb}', (d * 0.0209).toFixed(1).replace('.', ',')).replace('{d}/86', `${d}/86`); }
+  function updateStatusText(d) {
+    const raw = scene.text[0];
+    if (raw.includes('{')) $('statusText').textContent = scene.sKey === 'moveToServer' ? raw.replace('{d}', d).replace('{gb}', (d * 0.0209).toFixed(1).replace('.', ',')) : fill(raw, d);
+  }
+
+  let autoFinish = false;
+  function applyScene(next, topoChanged) {
+    scene = next; sceneT = 0; flowFade = 0; drawOn = next.st.drawOn ? 0 : 1; counter = 0; cycles.clear();
+    if (topoChanged) { topoFade = 0; Object.keys(bumps).forEach(k => delete bumps[k]); buildPaths(); buildLabels(); }
+    if (next.v.check) checkPop = [.15, .15, .15, .15];
+    if (reduce) { KEYS.forEach(key => { cur[key] = next.v[key]; }); drawOn = 1; flowFade = 1; topoFade = 1; checkPop = [1, 1, 1, 1]; }
+  }
+
+  // ---------- UI wiring ----------
+  const methodChips = $('methodChips'), chips = $('chips');
+  METHOD_ORDER.forEach(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = METHODS[k].chip; b.dataset.method = k;
+    b.addEventListener('click', () => setMethod(k)); methodChips.appendChild(b);
+  });
+  function buildStatusChips() {
+    chips.innerHTML = '';
+    METHODS[methodKey].statuses.forEach(k => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = STATUS[k].label; b.dataset.state = k;
+      b.addEventListener('click', () => setState(k)); chips.appendChild(b);
+    });
+  }
+  function setPills() {
+    const st = scene.st, m = scene.m;
+    const [txt, tone, still] = st.live;
+    $('liveText').textContent = txt;
+    const dot = $('liveDot');
+    dot.style.setProperty('--dot', tone === 'danger' ? 'var(--s-danger)' : tone === 'muted' ? 'var(--s-muted)' : 'var(--s-accent)');
+    dot.classList.toggle('still', !!still);
+    $('methodText').textContent = m.name;
+    const icons = {
+      server: '<rect x="1.5" y="1.5" width="11" height="4.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="8" width="11" height="4.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+      cloud: '<path d="M3.5 11h7a2.5 2.5 0 0 0 .3-5A3.6 3.6 0 0 0 4 5.2 2.9 2.9 0 0 0 3.5 11Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
+      phone: '<rect x="4" y="1.5" width="6" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+    };
+    $('methodPill').querySelector('svg').innerHTML = icons[m.pill];
+  }
+  function setLegend() {
+    $('legend').innerHTML = scene.m.legend.map(([l, on, note]) => `<span class="lg ${on ? 'on' : 'off'}" role="listitem">${l}${note ? ` <small>${note}</small>` : ''}</span>`).join('');
+  }
+  function setMethodRadios() {
+    document.querySelectorAll('#methodList [data-method]').forEach(b => b.querySelector('.radio').classList.toggle('on', b.dataset.method === methodKey));
+    document.querySelectorAll('#methodChips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.method === (methodKey === 'kavita' ? 'komga' : methodKey))));
+  }
+
+  function setMethod(k, status) {
+    const changed = k !== methodKey;
+    methodKey = k;
+    buildStatusChips(); setMethodRadios();
+    setState(status || METHODS[k].def, {}, changed);
+  }
+
+  function setState(k, opts = {}, topoChanged = false) {
+    stopExplain(false);
+    statusKey = k;
+    const next = sceneFor(methodKey, k);
+    applyScene(next, topoChanged || next.m !== topoM);
+    topoM = next.m;
+    autoFinish = !!opts.auto && k === 'syncing';
+    document.querySelectorAll('#chips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.state === k)));
+    const st = next.st, [status, explain, meaning] = next.text;
+    const start = st.counter ? (reduce ? (k === 'moveToServer' ? 34 : 24) : (st.counter.start || 0)) : 0;
+    $('statusText').textContent = status; updateStatusText(start);
+    $('explainText').textContent = explain;
+    $('meaning').innerHTML = meaning;
+    const cta = $('cta'), [label, mode] = st.cta || ['Sinkronkan sekarang', 'secondary'];
+    const soon = methodKey !== 'local' && methodKey !== 'suwayomi';
+    cta.textContent = soon && k !== 'syncing' ? 'Segera hadir' : label;
+    cta.disabled = mode === 'disabled' || (soon && k !== 'syncing');
+    if (soon && k === 'syncing') cta.disabled = true;
+    cta.classList.toggle('secondary', mode === 'secondary');
+    diagram.setAttribute('aria-label', `${$('statusText').textContent}. ${explain}`);
+    setLibIcon(st.icon); setPills(); setLegend(); setMethodRadios();
+    const showComplete = !!opts.firstSync;
+    $('kiriComplete').classList.toggle('show', showComplete);
+    clearTimeout(kiriTimer);
+    if (showComplete) kiriTimer = setTimeout(() => { $('kiriComplete').classList.remove('show'); $('hero').classList.remove('with-kiri'); }, 2600);
+    const longWait = k === 'waiting' && $('longWait').checked;
+    $('kiriOffline').classList.toggle('show', longWait);
+    $('banner').hidden = !longWait;
+    $('hero').classList.toggle('with-kiri', showComplete || longWait);
+    clearTimeout(flowTimer);
+    if (k === 'analyzing' && opts.auto) flowTimer = setTimeout(() => setState(opts.next || 'syncing', { auto: true }), reduce ? 1200 : 2800);
+    if (k === 'syncing' && reduce && opts.auto) flowTimer = setTimeout(finishSync, 1500);
+    render(); startLoop();
+  }
+  function finishSync() { setState('synced', { firstSync: true }); }
+
+  function setLibIcon(kind) {
+    const el = $('libIcon'), tip = $('libTip');
+    const cloud = '<path d="M7.5 20h12a4.5 4.5 0 0 0 .6-8.96A6.5 6.5 0 0 0 7.6 9.5 5.25 5.25 0 0 0 7.5 20Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>';
+    const map = {
+      none: ['', '', 'Tanpa sync: judul Library bersih, tanpa ikon.'],
+      check: [cloud + '<path d="m10.5 14.5 2.2 2.2 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>', 'var(--accent)', 'Tersinkron. Ketuk untuk membuka halaman Sinkronisasi.'],
+      spin: [cloud + '<g class="spin"><path d="M10 14a3.4 3.4 0 0 1 5.8-2.4M16.4 14a3.4 3.4 0 0 1-5.8 2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></g>', 'var(--accent)', 'Sedang bekerja. Animasi berhenti saat Reduce Motion aktif.'],
+      wait: [cloud + '<circle cx="13.5" cy="15" r="1.6" fill="currentColor"/>', 'var(--muted)', 'Menunggu: abu-abu, karena ini kondisi normal, bukan error.'],
+      alert: [cloud + '<path d="M13.5 11.5v3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="13.5" cy="17.3" r="1.1" fill="currentColor"/>', 'var(--danger)', 'Perlu tindakan: satu-satunya status berwarna merah.']
+    };
+    const [svg, color, tipText] = map[kind] || map.none;
+    el.innerHTML = svg ? `<svg class="lib-icon" style="color:${color}" viewBox="0 0 27 27" aria-hidden="true">${svg}</svg>` : '<small>(tanpa ikon)</small>';
+    tip.textContent = tipText;
+  }
+
+  // ---------- Explainer: local → connected → away ----------
+  const EXPLAIN = [
+    ['local', 'local', 'Tanpa sync, semuanya di iPhone.'],
+    ['suwayomi', 'syncing', 'Dengan sync, library dan progres ikut tersalin.'],
+    ['suwayomi', 'waiting', 'Server tidak terjangkau? Tetap bisa baca.']
+  ];
+  let saved = null;
+  function playExplain() {
+    clearTimeout(flowTimer);
+    if (explainStep < 0) saved = [methodKey, statusKey];
+    $('steps').classList.add('show');
+    $('statusBlock').hidden = true; $('cta').hidden = true; $('banner').hidden = true; $('legend').hidden = true;
+    $('kiriComplete').classList.remove('show'); $('kiriOffline').classList.remove('show'); $('hero').classList.remove('with-kiri');
+    goStep(0);
+  }
+  function goStep(i) {
+    explainStep = i;
+    const [mk, sk, caption] = EXPLAIN[i];
+    const next = sceneFor(mk, sk);
+    applyScene(next, next.m !== topoM); topoM = next.m;
+    const cap = $('caption'); cap.textContent = caption; cap.classList.add('show');
+    $('steps').querySelectorAll('button').forEach((b, j) => b.setAttribute('aria-current', j === i ? 'step' : 'false'));
+    diagram.setAttribute('aria-label', `Langkah ${i + 1} dari 3. ${caption}`);
+    Object.values(labelEls).forEach(el => { el.style.opacity = 0; });
+    $('liveText').textContent = `Penjelasan ${i + 1}/3`; $('liveDot').classList.add('still'); $('methodText').textContent = 'Cara kerja';
+    clearTimeout(explainTimer);
+    if (!reduce) explainTimer = setTimeout(() => (i < 2 ? goStep(i + 1) : stopExplain(true)), 3800);
+    render(); startLoop();
+  }
+  function stopExplain(restore) {
+    if (explainStep < 0) return;
+    explainStep = -1; clearTimeout(explainTimer);
+    $('steps').classList.remove('show'); $('caption').classList.remove('show');
+    $('statusBlock').hidden = false; $('cta').hidden = false; $('legend').hidden = false;
+    Object.values(labelEls).forEach(el => { el.style.opacity = 1; });
+    if (restore && saved) { methodKey = saved[0]; buildStatusChips(); setState(saved[1], {}, true); }
+  }
+  $('steps').querySelectorAll('button').forEach((b, j) => b.addEventListener('click', () => goStep(j)));
+  $('caption').addEventListener('click', () => { if (explainStep >= 0) explainStep < 2 ? goStep(explainStep + 1) : stopExplain(true); });
+  $('helpBtn').addEventListener('click', playExplain);
+  $('explainBtn').addEventListener('click', playExplain);
+
+  $('cta').addEventListener('click', () => {
+    if (methodKey === 'local') { methodKey = 'suwayomi'; buildStatusChips(); setState('analyzing', { auto: true, next: 'syncing' }, true); return; }
+    if (statusKey === 'synced') setState('syncing', { auto: true });
+    else if (statusKey === 'waiting' || statusKey === 'action') setState(methodKey === 'suwayomi' ? 'analyzing' : 'syncing', { auto: true, next: 'syncing' });
+    else if (statusKey === 'moveToServer') setState('synced');
+  });
+  document.querySelectorAll('#methodList [data-method]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.method;
+    if (k === 'suwayomi' && methodKey === 'local') { methodKey = 'suwayomi'; buildStatusChips(); setMethodRadios(); setState('analyzing', { auto: true, next: 'syncing' }, true); return; }
+    setMethod(k);
+  }));
+  document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(on)); b.querySelector('.switch').classList.toggle('on', on);
+  }));
+  $('reduceMotion').addEventListener('change', (e) => {
+    reduce = e.target.checked; document.body.classList.toggle('reduce', reduce);
+    if (explainStep >= 0) goStep(explainStep); else setState(statusKey);
+  });
+  mql.addEventListener?.('change', (e) => { $('reduceMotion').checked = e.matches; $('reduceMotion').dispatchEvent(new Event('change')); });
+  $('longWait').addEventListener('change', () => { if (!METHODS[methodKey].statuses.includes('waiting')) setMethod('suwayomi', 'waiting'); else setState('waiting'); });
+  $('appTheme').addEventListener('change', (e) => { screen.dataset.appTheme = e.target.value; readColors(); render(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelAnimationFrame(raf); else startLoop(); });
+
+  document.body.classList.toggle('reduce', reduce);
+  readColors();
+  new ResizeObserver(resize).observe(diagram);
+  methodKey = 'local';
+  buildStatusChips();
+  setState('local', {}, true);
+  resize();
+  let seen = false;
+  try { seen = localStorage.getItem('kuchie-sync-explainer-v2') === '1'; localStorage.setItem('kuchie-sync-explainer-v2', '1'); } catch (_) {}
+  if (!seen) setTimeout(playExplain, 600);
+})();
+</script>

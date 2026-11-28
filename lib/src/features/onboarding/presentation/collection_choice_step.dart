@@ -2,7 +2,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../utils/extensions/custom_extensions.dart';
 import '../../../utils/motion/reduce_motion.dart';
-import '../data/collection_mode.dart';
 import 'onboarding_motion.dart';
 
 String collectionText(
@@ -12,10 +11,15 @@ String collectionText(
 ) =>
     Localizations.localeOf(context).languageCode == 'id' ? indonesian : english;
 
-String collectionModeLabel(BuildContext context, CollectionMode mode) =>
-    mode == CollectionMode.local
-    ? collectionText(context, 'Local', 'Lokal')
-    : 'Server';
+/// How a fresh install starts (Kuchie 2.0): the library is always on this
+/// iPhone; a Suwayomi server, if there is one, joins through Sync.
+enum StartChoice {
+  /// Start reading here.
+  local,
+
+  /// Start here and connect a Suwayomi server for Sync right away.
+  connectServer,
+}
 
 class CollectionChoiceStep extends StatelessWidget {
   const CollectionChoiceStep({
@@ -25,8 +29,8 @@ class CollectionChoiceStep extends StatelessWidget {
     required this.appearance,
   });
 
-  final CollectionMode? selected;
-  final ValueChanged<CollectionMode> onSelected;
+  final StartChoice? selected;
+  final ValueChanged<StartChoice> onSelected;
   final Widget appearance;
 
   @override
@@ -51,8 +55,8 @@ class CollectionChoiceStep extends StatelessWidget {
           child: Text(
             collectionText(
               context,
-              'How would you like to read?',
-              'Bagaimana Anda ingin membaca?',
+              'Your library lives on this iPhone.',
+              'Library Anda tersimpan di iPhone ini.',
             ),
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -62,7 +66,7 @@ class CollectionChoiceStep extends StatelessWidget {
         const SizedBox(height: 20),
         MangaModeChooser(
           first: MangaChoice(
-            label: collectionModeLabel(context, CollectionMode.local),
+            label: collectionText(context, 'Start here', 'Mulai di sini'),
             caption: collectionText(
               context,
               'Import comics, add sources, and save chapters on this iPhone.',
@@ -72,22 +76,22 @@ class CollectionChoiceStep extends StatelessWidget {
             art: 'assets/kuchie/splash/kiri-ready.png',
           ),
           second: MangaChoice(
-            label: collectionModeLabel(context, CollectionMode.server),
+            label: collectionText(context, 'Add a server', 'Tambah server'),
             caption: collectionText(
               context,
-              'Connect to a Suwayomi server to read your existing collection.',
-              'Hubungkan server Suwayomi untuk membaca koleksi Anda.',
+              'Have Suwayomi? Sync your library, progress and downloads with it.',
+              'Punya Suwayomi? Sinkronkan library, progres, dan unduhan.',
             ),
-            icon: Icons.cloud_outlined,
+            icon: Icons.cloud_sync_outlined,
             art: 'assets/kuchie/character/loading.png',
           ),
           selected: switch (selected) {
-            CollectionMode.local => 0,
-            CollectionMode.server => 1,
+            StartChoice.local => 0,
+            StartChoice.connectServer => 1,
             null => null,
           },
           onSelected: (index) => onSelected(
-            index == 0 ? CollectionMode.local : CollectionMode.server,
+            index == 0 ? StartChoice.local : StartChoice.connectServer,
           ),
         ),
         const SizedBox(height: 14),
@@ -96,8 +100,8 @@ class CollectionChoiceStep extends StatelessWidget {
           child: Text(
             collectionText(
               context,
-              'You can switch anytime. Each mode has its own library.',
-              'Mode bisa diganti kapan saja. Koleksi tiap mode terpisah.',
+              'You can connect a server later in More → Sync.',
+              'Server bisa dihubungkan nanti di Lainnya → Sinkronisasi.',
             ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
