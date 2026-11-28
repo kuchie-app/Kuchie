@@ -72,6 +72,10 @@ To read a chapter, Kuchie uses the copy on the iPhone, then the server, then the
 
 Installing an extension on the iPhone also installs it on the server while sync is on. The Sync page lists extensions that differ: installed only here, only on the server, or missing from the server's stores.
 
+## Server tools
+
+While sync is on, **Sync → Suwayomi server → Advanced → Server** opens the server's own settings (sign-in, network, WebUI, OPDS, images, logs), its download settings, tracker logins and its backups. A series' **Tracking** sheet goes through the server too; **Manage trackers** there signs in. Uninstalling or updating extensions on the server is done in its WebUI.
+
 ## Disconnect
 
 **Sync → Suwayomi server → Disconnect**. Your library, progress and extensions stay on the iPhone; chapters on the server stay there. Kuchie offers to save them to the iPhone first.

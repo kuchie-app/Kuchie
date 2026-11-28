@@ -732,3 +732,59 @@ Belum dicoba lewat aplikasi di simulator dengan extension Mihon sungguhan, dan b
 3. Tulis `tool/qa/sync_spike/` untuk S1, S2, S3, dan S8. Keempatnya menentukan apakah desain bisa jalan apa adanya.
 4. Catat hasilnya di `docs/sync-spike-results.md`, lalu sesuaikan dokumen desain kalau perlu.
 5. Mulai PR 1 dan PR 4 secara paralel.
+
+---
+
+## 7. Kuchie 2.0.1: audit fitur 1.2.1 dan perbaikan sync
+
+Pemilik meminta semua fitur 1.2.1 tetap ada. Inventaris ini dibuat dari CHANGELOG 1.0.0–1.2.1 dan rute di tag `v1.2.1`, lalu dicek di simulator (`Kuchie QA iPhone 17 Pro`) yang terhubung ke server pengguna (Stable v2.4.2366, 909 series).
+
+Status: **Ada** = jalan di iOS 2.0.1 tanpa server; **Sync** = jalan lewat server yang terhubung; **WebUI** = hanya lewat WebUI Suwayomi; **Belum diuji** = jalurnya ada tapi tidak dicoba.
+
+### Mode Server 1.2.1
+
+| Fitur | 2.0.1 | Di mana |
+|---|---|---|
+| Library dan kategori server | Sync | Library Local, sync dua arah. Series tanpa extension di iPhone masuk sebagai "Butuh server" |
+| Membaca chapter series server | Sync | Extension di iPhone; series "Butuh server" lewat server (`ServerOnlySeriesScreen`) |
+| Progres, riwayat, bookmark | Sync | Sync dua arah |
+| Rating, tag, catatan, setelan reader per series | Sync | Sync (`flutter_rating`, `flutter_tags`, `kuchie_notes`, kunci reader) |
+| Updates (chapter baru) | Ada | Tab Updates Local mengecek source di iPhone |
+| Antrean unduhan server | Sync | Unduh ke server, antrean server di halaman Unduhan |
+| Setelan unduhan server (lokasi, CBZ, unduh otomatis, unduh di depan, hapus) | Sync | Sinkronisasi → Suwayomi → Lanjutan → Unduhan di server |
+| Tracker (AniList, MAL, Kitsu, dll.) | Sync | Sheet Tracking di halaman series; login lewat "Manage trackers" atau Lanjutan → Tracker |
+| Migrasi | Ada | Browse → Migrate (Local) |
+| Backup server (buat, pulihkan, otomatis) | Sync | Lanjutan → Backup di server. Backup iPhone di More → Backup & Restore |
+| Pengaturan server (login, jaringan, WebUI, OPDS, gambar, database, log) | Sync | Lanjutan → Pengaturan server |
+| Akun dan pengguna server | Sync, belum diuji | Lanjutan → Alamat cadangan (layar koneksi) → Kelola pengguna. Server QA v2.4.2366 belum punya skema `user` |
+| Extension di server: pasang | Sync | Saat hubungkan, dan halaman Sinkronisasi |
+| Extension di server: copot, perbarui | WebUI | Layar Extension mode Server membuka tab bar mode Server, jadi tidak dibuka di iOS |
+| Store extension di server | WebUI | Sama seperti di atas |
+| Pencarian jaringan, server tanpa login, basic, UI login | Sync | Alur hubungkan; server dengan login belum diuji |
+| Live Activity unduhan | Ada | Unduhan iPhone; antrean server lihat bagian 2.0.1 di bawah |
+
+### Mode Local 1.2.1
+
+| Fitur | 2.0.1 |
+|---|---|
+| Import CBZ/ZIP dan folder gambar | Ada |
+| Store Mihon (v2, legacy, `mihon://`), verifikasi tanda tangan APK | Ada |
+| Repo Kuchie v1, Shinigami bawaan | Ada. Shinigami sekarang ikut sync |
+| Source filters, setelan source, pin, Latest | Ada |
+| Simpan ke perangkat (1/5/10/semua), Unduhan, Background Download | Ada |
+| History, Updates, Reading Insights | Ada |
+| Library: filter, sort, display, kategori, badge, acak | Ada |
+| Backup & Restore otomatis | Ada |
+| Security and privacy, Incognito, Cloudflare, User agent | Ada |
+| Customize tabs, Default tab, ikon app, Live Activity | Ada |
+
+### Perbaikan di 2.0.1
+
+- Hubungkan memasang extension server di iPhone sebelum sync pertama; Library langsung terisi.
+- Shinigami bawaan dicocokkan dengan extension Shinigami server (URL server = `manga_id`/`chapter_id` API).
+- Series "Butuh server": halaman, reader lewat server, sampul redup dan label, pensiun saat extension terpasang.
+- Extension yang hilang dari server dicari lewat source id di store iPhone dan ditawarkan untuk kedua sisi. Store kini menyimpan source id; store lama dibaca ulang sekali.
+- Rute alat server dan login tracker dibuka di iOS selama sync aktif (`isSyncServerToolLocation`).
+- **Bug data:** chapter yang di server punya halaman tanpa `lastReadAt` dikirim balik sebagai halaman 0 pada sync penuh berikutnya. Di server pengguna 665 chapter kena (tanda dibaca dan bookmark tidak berubah). Diperbaiki di `eb03571`; 522 nilai halaman bisa dipulihkan dari snapshot catalog, 143 chapter Shinigami hanya dari backup otomatis server.
+
+**Status (28 November 2026):** butir 1–2 dan 5 dari rencana 2.0.1 selesai dan diuji di simulator ke server pengguna. Library 909/909 (46 Shinigami lewat adapter bawaan, 53 "Butuh server").

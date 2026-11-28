@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../routes/router_config.dart';
 import '../../local_collection/presentation/local_ui.dart';
 import '../../security/security_settings_screen.dart';
 import '../../settings/data/server_connection/server_url.dart';
@@ -192,6 +193,58 @@ class _SuwayomiAdvancedScreenState
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => _push(context, const ConnectionScreen()),
+            ),
+          ],
+        ),
+        SettingsGroupHeading(label: localText(context, 'Server', 'Server')),
+        SettingsGroupCard(
+          children: [
+            SettingsGroupRow(
+              icon: Icons.dns_outlined,
+              title: localText(context, 'Server settings', 'Pengaturan server'),
+              subtitle: localText(
+                context,
+                'Sign-in, network, WebUI, OPDS, images, logs',
+                'Login, jaringan, WebUI, OPDS, gambar, log',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => const ServerSettingsRoute().push(context),
+            ),
+            SettingsGroupRow(
+              icon: Icons.download_for_offline_outlined,
+              title: localText(
+                context,
+                'Downloads on the server',
+                'Unduhan di server',
+              ),
+              subtitle: localText(
+                context,
+                'Location, CBZ, auto-download, download ahead',
+                'Lokasi, CBZ, unduh otomatis, unduh di depan',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => const DownloadsSettingsRoute().push(context),
+            ),
+            SettingsGroupRow(
+              icon: Icons.sync_alt_rounded,
+              title: localText(context, 'Trackers', 'Tracker'),
+              subtitle: localText(
+                context,
+                'Sign in to AniList, MyAnimeList and others',
+                'Masuk ke AniList, MyAnimeList, dan lainnya',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => const TrackingSettingsRoute().push(context),
+            ),
+            SettingsGroupRow(
+              icon: Icons.settings_backup_restore_rounded,
+              title: localText(
+                context,
+                'Backups on the server',
+                'Backup di server',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => const BackupRoute().push(context),
             ),
           ],
         ),

@@ -72,6 +72,7 @@ import '../features/settings/presentation/settings/settings_pane_scope.dart';
 import '../features/settings/presentation/settings/settings_screen.dart';
 import '../features/settings/presentation/settings/settings_window.dart';
 import '../features/settings/presentation/sync/sync_screen.dart';
+import '../features/sync/controller/sync_engine_provider.dart';
 import '../features/tracking/presentation/settings/tracking_settings_screen.dart';
 import '../utils/extensions/custom_extensions.dart';
 import '../utils/motion/reduce_motion.dart';
@@ -176,6 +177,17 @@ void routeAfterIdentityChange(String location) {
   _pendingRouteAfterIdentityChange = location;
 }
 
+/// Server screens iOS opens while sync is on: settings, downloads, backups,
+/// accounts and tracker logins run on the server (design 3.10). Each is a detail page;
+/// the Server collection's tab screens stay closed.
+bool isSyncServerToolLocation(String location) => const [
+  '/more/settings/server',
+  '/more/settings/backup',
+  '/more/settings/downloads',
+  '/more/settings/tracking',
+  '/more/account',
+].any((prefix) => location == prefix || location.startsWith('$prefix/'));
+
 const localAppearanceLocation = '/local-appearance';
 const localReaderSettingsLocation = '/local-reader-settings';
 
@@ -271,7 +283,14 @@ GoRouter routerConfig(Ref ref) {
         if (!complete) {
           return atOnboarding ? null : const OnboardingRoute().location;
         }
-        return atLocal ? null : localCollectionLocation();
+        if (atLocal) return null;
+        // The sync server's own tools and tracker logins (Kuchie 1.2.1's
+        // Server collection) stay reachable while it is connected.
+        if (ref.read(syncEngineProvider).enabled &&
+            isSyncServerToolLocation(state.matchedLocation)) {
+          return null;
+        }
+        return localCollectionLocation();
       }
       if (!complete && !atOnboarding) return const OnboardingRoute().location;
       if (complete && atOnboarding) {
