@@ -112,15 +112,18 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                 ? DateTime.now().subtract(const Duration(days: 9))
                 : scene.figures.lastSuccessAt,
             celebrate: _celebrate,
-            // The connect flow and the engine come in later PRs; the
-            // preview plays what the action will do.
+            // The preview plays what the action would do.
             onPrimary: previewing
                 ? () => controller.playPreviewRun(
                     onFirstSync: _celebrateFirstSync,
                   )
-                : scene.cta == SyncCta.connect
-                ? () => openSuwayomiConnect(context)
-                : null,
+                : switch (scene.cta) {
+                    SyncCta.connect ||
+                    SyncCta.signIn => () => openSuwayomiConnect(context),
+                    SyncCta.syncNow ||
+                    SyncCta.retry => () => unawaited(controller.syncNow()),
+                    _ => null,
+                  },
           ),
         ),
         SettingsGroupHeading(label: localText(context, 'Method', 'Metode')),

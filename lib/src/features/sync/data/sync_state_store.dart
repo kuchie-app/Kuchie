@@ -49,6 +49,7 @@ class SyncStateStore {
   static const chapterCursorKey = 'sync.cursor.chapters';
   static const explainerSeenKey = 'sync.explainerSeen';
   static const connectChoiceKey = 'sync.suwayomi.connectChoice';
+  static const lastFullSyncAtKey = 'sync.lastFullSyncAt';
 
   /// Keys that belong to the connected server; cleared on disconnect.
   static const _serverKeys = [
@@ -58,6 +59,7 @@ class SyncStateStore {
     lastSuccessAtKey,
     lastErrorKey,
     chapterCursorKey,
+    lastFullSyncAtKey,
   ];
 
   SyncMethod get method => SyncMethod.fromName(_prefs.getString(methodKey));
@@ -106,6 +108,18 @@ class SyncStateStore {
 
   Future<void> setChapterCursor(int seconds) =>
       _prefs.setInt(chapterCursorKey, seconds);
+
+  /// The last cycle that compared every chapter, not just recent reads.
+  DateTime? get lastFullSyncAt => switch (_prefs.getInt(lastFullSyncAtKey)) {
+    final int millis => DateTime.fromMillisecondsSinceEpoch(
+      millis,
+      isUtc: true,
+    ),
+    null => null,
+  };
+
+  Future<void> setLastFullSyncAt(DateTime at) =>
+      _prefs.setInt(lastFullSyncAtKey, at.millisecondsSinceEpoch);
 
   /// Every kind is synced until the reader turns it off.
   bool includes(SyncDataKind kind) =>

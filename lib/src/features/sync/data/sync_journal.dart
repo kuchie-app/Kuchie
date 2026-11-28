@@ -172,6 +172,47 @@ class SyncJournal {
     ),
   );
 
+  /// Every agreed value of [kind] for [backend], by key; one read for a
+  /// whole cycle instead of one per chapter.
+  Future<Map<String, Map<String, Object?>>> bases(
+    String backend,
+    SyncRecordKind kind,
+  ) => _run((db) async {
+    final rows = await db
+        .customSelect(
+          'SELECT key, value FROM sync_base WHERE backend = ? AND kind = ?',
+          variables: [
+            Variable.withString(backend),
+            Variable.withString(kind.storedName),
+          ],
+        )
+        .get();
+    return {
+      for (final row in rows)
+        row.read<String>('key'): ?_decodeBase(row.read<String>('value')),
+    };
+  });
+
+  /// Stores several agreed values of [kind] in one transaction.
+  Future<void> putBases(
+    String backend,
+    SyncRecordKind kind,
+    Map<String, Map<String, Object?>> values,
+  ) async {
+    if (values.isEmpty) return;
+    await _run((db) async {
+      for (final MapEntry(:key, :value) in values.entries) {
+        await db.customStatement(
+          '''
+          INSERT INTO sync_base (backend, kind, key, value) VALUES (?, ?, ?, ?)
+          ON CONFLICT(backend, kind, key) DO UPDATE SET value = excluded.value
+          ''',
+          [backend, kind.storedName, key, jsonEncode(value)],
+        );
+      }
+    });
+  }
+
   Future<void> removeBase(String backend, SyncRecordKind kind, String key) =>
       _run(
         (db) => db.customStatement(
@@ -334,4 +375,15 @@ class SyncTransfer {
   String toString() =>
       'SyncTransfer($seriesId, $chapterId, ${state.name}, '
       'remote: $remoteChapterId, keepLocal: $keepLocal, error: $error)';
+}
+
+Map<String, Object?>? _decodeBase(String value) {
+  try {
+    return switch (jsonDecode(value)) {
+      final Map<String, Object?> decoded => decoded,
+      _ => null,
+    };
+  } on FormatException {
+    return null;
+  }
 }

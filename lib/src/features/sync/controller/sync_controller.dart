@@ -8,6 +8,8 @@ import '../domain/diagram/sync_methods.dart';
 import '../domain/diagram/sync_scene.dart';
 import '../domain/sync_method.dart';
 import '../domain/sync_status.dart';
+import 'sync_engine.dart';
+import 'sync_engine_provider.dart';
 
 /// What the Sync page, the More row and the Library icon show.
 class SyncOverview {
@@ -103,22 +105,49 @@ class SyncPreview {
 
 class SyncController extends Notifier<SyncOverview> {
   SyncPreview? _preview;
+  SyncStatus? _status;
   final _timers = <Timer>[];
 
   @override
   SyncOverview build() {
     ref.onDispose(_cancelTimers);
-    final store = ref.watch(syncStateStoreProvider);
-    final method = store.method;
+    ref.watch(syncStateStoreProvider);
+    ref.watch(serverUrlProvider);
+    final engine = ref.watch(syncEngineProvider);
+    engine.onStatus = _onStatus;
+    ref.onDispose(() {
+      if (engine.onStatus == _onStatus) engine.onStatus = null;
+    });
+    unawaited(engine.prepare().catchError((Object _) {}));
+    return _compose();
+  }
+
+  SyncOverview _compose() {
+    final store = ref.read(syncStateStoreProvider);
+    // A server just connected counts as Suwayomi until its first sync
+    // switches the method on.
+    final method =
+        store.method == SyncMethod.none && ref.read(syncEngineProvider).enabled
+        ? SyncMethod.suwayomi
+        : store.method;
     return SyncOverview(
       method: method,
       status: method == SyncMethod.none
           ? const SyncOff()
-          : SyncIdle(lastSuccessAt: store.lastSuccessAt),
-      serverAddress: ref.watch(serverUrlProvider),
+          : _status ?? SyncIdle(lastSuccessAt: store.lastSuccessAt),
+      serverAddress: ref.read(serverUrlProvider),
       preview: _preview,
     );
   }
+
+  void _onStatus(SyncStatus status) {
+    _status = status;
+    state = _compose();
+  }
+
+  /// Runs a full cycle now: Sync now, the Library icon, pull-to-refresh.
+  Future<SyncReport> syncNow() =>
+      ref.read(syncEngineProvider).sync(manual: true);
 
   void _cancelTimers() {
     for (final timer in _timers) {

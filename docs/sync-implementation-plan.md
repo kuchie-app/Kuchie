@@ -495,6 +495,18 @@ lib/src/features/sync/controller/sync_engine.dart
 
 **Selesai kalau:** sync berjalan dua arah terhadap server QA nyata. Cek manual dengan WebUI Suwayomi.
 
+**Status (28 November 2026):** engine, backend Suwayomi, dan tes fake backend selesai. Belum dicoba ke server QA nyata. Keputusan yang diambil:
+
+- `LocalCatalog` mendapat `syncSeries()`, `syncChapterStates()`, dan `applySync()`. `applySync` menulis semua hasil pull dalam satu transaksi dan tidak menulis outbox.
+- ID chapter lokal adalah SHA-256 dari URL chapter (`kuchieLocatorId`), jadi chapter server dicocokkan lewat `url` tanpa tabel link. Hanya series yang disimpan di `sync_links`.
+- Base chapter menyimpan `lastReadAt` milik server. Waktu baca server yang masih sama dengan base dianggap waktu baca iPhone, supaya stempel server dari push Kuchie sendiri tidak terbaca sebagai bacaan baru.
+- Pull bertahap: `SyncChaptersSince(kursor)` ditambah `SyncChaptersOfManga` untuk series yang punya perubahan chapter di outbox. Pull penuh saat sync manual, sync pertama, atau setiap 24 jam. Sidik jari per series belum dipakai; perubahan `isRead`/bookmark dari klien lain menunggu pull penuh.
+- `lastPageRead` yang dibuang server (S2) dicoba lagi lewat `fetchChapterPages`, paling banyak 10 chapter per siklus. Base chapter disimpan sesuai jawaban server, jadi yang masih ditolak dikirim lagi di siklus berikutnya.
+- Jenis data yang dimatikan (progres, bookmark, library) tidak ikut merge. Base untuk field itu tetap nilai server, supaya saat dinyalakan lagi perubahan di iPhone ikut terkirim.
+- Outbox hanya dipangkas kalau siklus tanpa error per series. Base tetap sumber kebenaran.
+- Status engine masuk ke `SyncController`. Tombol *Sinkronkan sekarang* dan *Coba lagi* menjalankan siklus manual, dan alur hubungkan memulai sync pertama setelah pilihan disimpan.
+- **Belum:** membuat manga baru di server. Series yang belum ada di server (`MangaBySourceUrl` kosong) dilaporkan sebagai `notOnServer` dan dicoba lagi. Butuh encoder backup Mihon untuk `restoreBackup` (admin/Stable) atau `fetchSourceManga` + `updateMangas` (pengguna biasa, S4b). Juga belum: `sync.suwayomi.userId` dari klaim `sub`, penghapusan kategori, dan error per series yang disimpan (PR 13).
+
 ### PR 9: Pemicu dan background
 
 - `sync_scheduler.dart`:

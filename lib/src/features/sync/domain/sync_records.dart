@@ -107,6 +107,21 @@ class ChapterState {
   /// `lastReadAt`. Null when it never was.
   final DateTime? readAt;
 
+  /// Whether it says anything at all: never read, opened or bookmarked.
+  bool get isBlank => !read && page == 0 && !bookmarked && readAt == null;
+
+  ChapterState copyWith({
+    bool? read,
+    int? page,
+    bool? bookmarked,
+    DateTime? Function()? readAt,
+  }) => ChapterState(
+    read: read ?? this.read,
+    page: page ?? this.page,
+    bookmarked: bookmarked ?? this.bookmarked,
+    readAt: readAt == null ? this.readAt : readAt(),
+  );
+
   Map<String, Object?> toJson() => {
     'read': read,
     'page': page,

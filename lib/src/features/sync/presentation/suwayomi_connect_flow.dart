@@ -11,6 +11,7 @@ import '../../onboarding/presentation/onboarding_screen.dart';
 import '../../security/security_settings_screen.dart';
 import '../../settings/widgets/settings_group_card/settings_group_card.dart';
 import '../controller/connect_analysis.dart';
+import '../controller/sync_controller.dart';
 import '../data/suwayomi/suwayomi_reachability.dart';
 import '../data/sync_state_store.dart';
 import '../domain/diagram/sync_methods.dart';
@@ -83,6 +84,8 @@ class _SuwayomiConnectFlowState extends ConsumerState<SuwayomiConnectFlow> {
 
   Future<void> _save(ConnectChoice choice) async {
     await ref.read(syncStateStoreProvider).setConnectChoice(choice);
+    // The first sync runs in the background; the Sync page shows it.
+    unawaited(ref.read(syncControllerProvider.notifier).syncNow());
     if (mounted) {
       setState(() {
         _saved = choice;
@@ -448,7 +451,7 @@ class _SavedStep extends StatelessWidget {
       children: [
         const SizedBox(height: 24),
         Text(
-          localText(context, 'Choice saved', 'Pilihan disimpan'),
+          localText(context, 'Sync started', 'Sinkronisasi dimulai'),
           style: theme.textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
@@ -456,9 +459,10 @@ class _SavedStep extends StatelessWidget {
           localText(
             context,
             'First sync: ${_choiceTitle(context, choice).toLowerCase()}. '
-                'Nothing has changed on this iPhone or the server yet.',
+                'It runs in the background; the Sync page shows how it goes.',
             'Sync pertama: ${_choiceTitle(context, choice).toLowerCase()}. '
-                'Belum ada yang berubah di iPhone maupun di server.',
+                'Berjalan di latar belakang; halaman Sinkronisasi '
+                'menampilkan prosesnya.',
           ),
           style: theme.textTheme.bodyMedium,
         ),

@@ -1,6 +1,19 @@
 // Which Local series is which Suwayomi manga (spike S1: `sourceId` plus the
 // manga URL, exactly as stored, with no normalizer).
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:pointycastle/digests/sha256.dart';
+
+/// The id Kuchie gives a Mihon manga or chapter: the SHA-256 of its URL, as
+/// `LocalSources` derives it from a runtime locator's stable part. A server
+/// URL is already that stable part.
+String kuchieLocatorId(String url) => SHA256Digest()
+    .process(Uint8List.fromList(utf8.encode(url)))
+    .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+    .join();
+
 /// A Mihon source on this iPhone is `<package>:<source id>`; the source id
 /// is the one Suwayomi uses. Built-in and Kuchie repo sources have no colon.
 ({String package, String sourceId})? parseLocalSource(String id) {

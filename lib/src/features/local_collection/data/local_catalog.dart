@@ -14,7 +14,7 @@ import 'package:pointycastle/digests/sha256.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../sync/domain/sync_change.dart';
-import '../../sync/domain/sync_records.dart' show categoryKey;
+import '../../sync/domain/sync_records.dart' show ChapterState, categoryKey;
 
 const _maxPages = 4000;
 const _maxPageBytes = 64 * 1024 * 1024;
@@ -1281,6 +1281,239 @@ class LocalCatalog {
         ]);
       });
 
+  /// Every series row with its library flag, source and categories, without
+  /// chapters or pages. What a sync cycle compares with the server.
+  Future<List<LocalSyncSeries>> syncSeries() => _metadata.run(() async {
+    final db = await _database;
+    final categories = <String, List<String>>{};
+    for (final row
+        in await db
+            .customSelect(
+              'SELECT series_id, name FROM series_categories ORDER BY name',
+            )
+            .get()) {
+      categories
+          .putIfAbsent(row.read<String>('series_id'), () => [])
+          .add(row.read<String>('name'));
+    }
+    return [
+      for (final row
+          in await db
+              .customSelect(
+                'SELECT id, title, in_library, source FROM series ORDER BY id',
+              )
+              .get())
+        LocalSyncSeries(
+          id: row.read<String>('id'),
+          title: row.read<String>('title'),
+          inLibrary: row.readNullable<int>('in_library') != 0,
+          source: _decodeSeriesSource(row.readNullable<String>('source')),
+          categories: categories[row.read<String>('id')] ?? const [],
+        ),
+    ];
+  });
+
+  /// The reading state of every chapter of [seriesId] this iPhone knows:
+  /// saved chapters, chapters read online (History) and marked ones.
+  /// Chapters with none of these are absent, which means unread.
+  Future<Map<String, ChapterState>> syncChapterStates(
+    String seriesId,
+  ) => _metadata.run(() async {
+    final db = await _database;
+    final args = [Variable.withString(seriesId)];
+    final marks = <String, ({bool read, bool bookmarked})>{
+      for (final row
+          in await db
+              .customSelect(
+                'SELECT chapter_id, read, bookmarked FROM chapter_marks '
+                'WHERE series_id = ?',
+                variables: args,
+              )
+              .get())
+        row.read<String>('chapter_id'): (
+          read: row.read<int>('read') != 0,
+          bookmarked: row.read<int>('bookmarked') != 0,
+        ),
+    };
+    // A chapter both saved and read online keeps the later read.
+    final reads = <String, ({int page, int? readAt, bool bookmarked})>{};
+    void addRead(String id, int page, int? readAt, bool bookmarked) {
+      final known = reads[id];
+      final later =
+          known == null || (readAt != null && (known.readAt ?? -1) < readAt);
+      reads[id] = (
+        page: later ? page : known.page,
+        readAt: later ? readAt : known.readAt,
+        bookmarked: bookmarked || (known?.bookmarked ?? false),
+      );
+    }
+
+    for (final row
+        in await db
+            .customSelect(
+              'SELECT chapter_id, progress, last_read_at FROM remote_history '
+              'WHERE series_id = ?',
+              variables: args,
+            )
+            .get()) {
+      addRead(
+        row.read<String>('chapter_id'),
+        row.read<int>('progress'),
+        row.read<int>('last_read_at'),
+        false,
+      );
+    }
+    for (final row
+        in await db
+            .customSelect(
+              'SELECT id, progress, bookmarked, last_read_at FROM chapters '
+              'WHERE series_id = ? AND ready = 1',
+              variables: args,
+            )
+            .get()) {
+      final progress = row.read<int>('progress');
+      final readAt = row.readNullable<int>('last_read_at');
+      final bookmarked = row.read<int>('bookmarked') != 0;
+      if (progress == 0 && readAt == null && !bookmarked) continue;
+      addRead(row.read<String>('id'), progress, readAt, bookmarked);
+    }
+    return {
+      for (final id in {...marks.keys, ...reads.keys})
+        id: ChapterState(
+          read: marks[id]?.read ?? false,
+          page: reads[id]?.page ?? 0,
+          bookmarked:
+              (marks[id]?.bookmarked ?? false) ||
+              (reads[id]?.bookmarked ?? false),
+          readAt: switch (reads[id]?.readAt) {
+            final int millis => DateTime.fromMillisecondsSinceEpoch(
+              millis,
+              isUtc: true,
+            ),
+            null => null,
+          },
+        ),
+    };
+  });
+
+  /// Writes what a sync cycle pulled, in one transaction. Nothing of it goes
+  /// to the sync outbox: these are the server's changes, not the reader's.
+  Future<void> applySync(LocalSyncWrite write) => _metadata.run(() async {
+    if (write.isEmpty) return;
+    final db = await _database;
+    await db.transaction(() async {
+      for (final series in write.series) {
+        if (series.inLibrary) {
+          await db.customStatement(
+            '''
+            INSERT INTO series (id, title, source, in_library)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(id) DO UPDATE SET in_library = 1,
+              source = COALESCE(excluded.source, series.source)
+            ''',
+            [
+              series.id,
+              _nonEmptyName(series.title, 'title'),
+              _encodeSeriesSource(series.source),
+            ],
+          );
+        } else {
+          await db.customStatement(
+            'UPDATE series SET in_library = 0 WHERE id = ?',
+            [series.id],
+          );
+        }
+      }
+      for (final name in write.categories) {
+        await db.customStatement(
+          'INSERT OR IGNORE INTO categories (name) VALUES (?)',
+          [_nonEmptyName(name, 'category')],
+        );
+      }
+      for (final entry in write.memberships.entries) {
+        final exists = await db
+            .customSelect(
+              'SELECT 1 FROM series WHERE id = ?',
+              variables: [Variable.withString(entry.key)],
+            )
+            .getSingleOrNull();
+        if (exists == null) continue;
+        await db.customStatement(
+          'DELETE FROM series_categories WHERE series_id = ?',
+          [entry.key],
+        );
+        for (final name in entry.value) {
+          await db.customStatement(
+            'INSERT OR IGNORE INTO series_categories (series_id, name) '
+            'SELECT ?, name FROM categories WHERE name = ?',
+            [entry.key, name],
+          );
+        }
+      }
+      for (final chapter in write.chapters) {
+        final state = chapter.state;
+        await db.customStatement(
+          '''
+          INSERT INTO chapter_marks (series_id, chapter_id, read, bookmarked)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(series_id, chapter_id) DO UPDATE SET
+            read = excluded.read, bookmarked = excluded.bookmarked
+          ''',
+          [
+            chapter.seriesId,
+            chapter.chapterId,
+            state.read ? 1 : 0,
+            state.bookmarked ? 1 : 0,
+          ],
+        );
+        final readAt = state.readAt?.millisecondsSinceEpoch;
+        final saved = await db.customUpdate(
+          '''
+          UPDATE chapters SET progress = ?, bookmarked = ?, last_read_at = ?
+          WHERE series_id = ? AND id = ? AND ready = 1
+          ''',
+          variables: [
+            Variable.withInt(state.page),
+            Variable.withInt(state.bookmarked ? 1 : 0),
+            Variable(readAt),
+            Variable.withString(chapter.seriesId),
+            Variable.withString(chapter.chapterId),
+          ],
+        );
+        if (saved > 0) continue;
+        if (readAt == null) {
+          await db.customStatement(
+            'DELETE FROM remote_history WHERE series_id = ? AND chapter_id = ?',
+            [chapter.seriesId, chapter.chapterId],
+          );
+          continue;
+        }
+        await db.customStatement(
+          '''
+          INSERT INTO remote_history
+            (series_id, series_title, source, chapter_id, chapter_title, progress, last_read_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(series_id, chapter_id) DO UPDATE SET
+            source = COALESCE(excluded.source, remote_history.source),
+            chapter_title = excluded.chapter_title,
+            progress = excluded.progress,
+            last_read_at = excluded.last_read_at
+          ''',
+          [
+            chapter.seriesId,
+            _nonEmptyName(chapter.seriesTitle, 'seriesTitle'),
+            _encodeSeriesSource(chapter.source),
+            chapter.chapterId,
+            _nonEmptyName(chapter.chapterTitle, 'chapterTitle'),
+            state.page,
+            readAt,
+          ],
+        );
+      }
+      await _removeEmptySeries(db);
+    });
+  });
+
   /// Exports library, category and reading metadata. Page files stay on the device.
   Future<void> exportMetadata(File destination) async {
     final contents = await _metadata.run(() async {
@@ -1497,6 +1730,84 @@ class LocalCatalog {
       }),
     );
   }
+}
+
+/// A series row as sync compares it: no chapters, no pages.
+class LocalSyncSeries {
+  const LocalSyncSeries({
+    required this.id,
+    required this.title,
+    required this.inLibrary,
+    this.source,
+    this.categories = const [],
+  });
+
+  final String id;
+  final String title;
+  final bool inLibrary;
+  final LocalSeriesSource? source;
+
+  /// Category names, as the reader typed them.
+  final List<String> categories;
+}
+
+/// A series a sync cycle adds to or takes off the library.
+class LocalSyncSeriesWrite {
+  const LocalSyncSeriesWrite({
+    required this.id,
+    required this.title,
+    required this.inLibrary,
+    this.source,
+  });
+
+  final String id;
+  final String title;
+  final bool inLibrary;
+  final LocalSeriesSource? source;
+}
+
+/// A chapter's reading state a sync cycle pulled.
+class LocalSyncChapterWrite {
+  const LocalSyncChapterWrite({
+    required this.seriesId,
+    required this.seriesTitle,
+    required this.chapterId,
+    required this.chapterTitle,
+    required this.state,
+    this.source,
+  });
+
+  final String seriesId;
+  final String seriesTitle;
+  final LocalSeriesSource? source;
+  final String chapterId;
+  final String chapterTitle;
+  final ChapterState state;
+}
+
+/// Everything one sync cycle writes to the catalog, applied at once.
+class LocalSyncWrite {
+  const LocalSyncWrite({
+    this.series = const [],
+    this.categories = const {},
+    this.memberships = const {},
+    this.chapters = const [],
+  });
+
+  final List<LocalSyncSeriesWrite> series;
+
+  /// Category names to create when missing.
+  final Set<String> categories;
+
+  /// Series id → the category names it belongs to, replacing the old ones.
+  final Map<String, Set<String>> memberships;
+  final List<LocalSyncChapterWrite> chapters;
+
+  bool get isEmpty =>
+      series.isEmpty &&
+      categories.isEmpty &&
+      memberships.isEmpty &&
+      chapters.isEmpty;
 }
 
 typedef _ChapterMetadata = ({
