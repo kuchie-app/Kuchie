@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kuchie/src/features/sync/controller/connect_analysis.dart';
+import 'package:kuchie/src/features/sync/controller/extension_sync.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine.dart';
 import 'package:kuchie/src/features/sync/controller/sync_engine_provider.dart';
+import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_backend.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_identity.dart';
 import 'package:kuchie/src/features/sync/data/suwayomi/suwayomi_library_reader.dart';
 import 'package:kuchie/src/features/sync/data/sync_state_store.dart';
@@ -33,6 +35,33 @@ class _RecordingEngine extends SyncEngine {
   Future<SyncReport> sync({bool manual = false}) async {
     runs.add(manual);
     return const SyncReport(SyncOutcome.skipped);
+  }
+}
+
+/// Records installs from the server, and what the engine had run by then.
+class _FakeExtensionSync extends Fake implements ExtensionSync {
+  _FakeExtensionSync(this.engine);
+
+  final _RecordingEngine engine;
+  final syncsBeforeInstall = <int>[];
+  bool? syncAfter;
+
+  @override
+  Future<ServerExtensionsReport> installFromServer(
+    ExtensionSuggestions suggestions, {
+    void Function(String step)? onStep,
+    bool syncAfter = true,
+  }) async {
+    syncsBeforeInstall.add(engine.runs.length);
+    this.syncAfter = syncAfter;
+    for (final extension in suggestions.toInstall) {
+      onStep?.call(extension.name);
+    }
+    return ServerExtensionsReport(
+      installed: [
+        for (final extension in suggestions.toInstall) extension.name,
+      ],
+    );
   }
 }
 
@@ -169,6 +198,74 @@ void main() {
       await tester.tap(find.text('Start sync'));
       expect(saved, [ConnectChoice.useServer]);
     });
+  });
+
+  testWidgets('starting installs the server extensions before the first '
+      'sync', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final engine = _RecordingEngine(SyncStateStore(prefs));
+    final extensions = _FakeExtensionSync(engine);
+    final empty = _analyze([], [_remote(1, 'a')]);
+    final analysis = ConnectAnalysis(
+      serverAddress: empty.serverAddress,
+      localCount: empty.localCount,
+      remoteCount: empty.remoteCount,
+      match: empty.match,
+      extensions: compareExtensions(
+        server: const [
+          ServerExtension(
+            package: 'a.one',
+            name: 'One',
+            language: 'id',
+            installed: true,
+          ),
+          ServerExtension(
+            package: 'a.two',
+            name: 'Two',
+            language: 'id',
+            installed: true,
+          ),
+        ],
+        here: const {},
+        seriesByPackage: const {'a.one': 3},
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          connectAnalysisProvider.overrideWith((ref) async => analysis),
+          syncEngineProvider.overrideWithValue(engine),
+          extensionSyncProvider.overrideWithValue(extensions),
+          extensionSuggestionsProvider.overrideWith((ref) async => null),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SuwayomiConnectFlow(skipServerStep: true),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.text('Also installs 2 extensions from the server'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Start sync'));
+    await tester.tap(find.text('Start sync'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(extensions.syncsBeforeInstall, [0]);
+    expect(extensions.syncAfter, isFalse);
+    expect(engine.runs, [true]);
+    expect(
+      find.text('2 extensions installed from the server.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the flow saves the choice and starts the first sync', (

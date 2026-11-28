@@ -263,6 +263,17 @@ class ExtensionSync {
     );
   }
 
+  /// Extensions installed on the server, for location badges; null while
+  /// sync is off or the server can't be reached.
+  Future<Set<String>?> serverInstalled() async {
+    final backend = await _backend();
+    if (backend == null) return null;
+    return {
+      for (final extension in await backend.extensions())
+        if (extension.installed) extension.package,
+    };
+  }
+
   /// Installs [packages] on the server; returns those that failed.
   Future<List<String>> installOnServer(Iterable<String> packages) async {
     final backend = await _backend();
@@ -408,4 +419,9 @@ final extensionSyncProvider = Provider<ExtensionSync>((ref) {
 final extensionSuggestionsProvider =
     FutureProvider.autoDispose<ExtensionSuggestions?>(
       (ref) => ref.watch(extensionSyncProvider).suggestions(),
+    );
+
+final serverExtensionPackagesProvider =
+    FutureProvider.autoDispose<Set<String>?>(
+      (ref) => ref.watch(extensionSyncProvider).serverInstalled(),
     );

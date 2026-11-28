@@ -14,6 +14,7 @@ class ExtensionCatalogTile extends StatelessWidget {
     required this.onTap,
     this.restricted = false,
     this.permissionLabel,
+    this.badge,
   });
 
   final String name;
@@ -24,6 +25,10 @@ class ExtensionCatalogTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool restricted;
   final String? permissionLabel;
+
+  /// Shown at the end of the second line, such as where the extension is
+  /// installed.
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -47,12 +52,14 @@ class ExtensionCatalogTile extends StatelessWidget {
             ),
           if (restricted)
             TextSpan(
-              text: context.l10n.nsfw18,
+              text: '${context.l10n.nsfw18} ',
               style: TextStyle(
                 fontWeight: FontWeight.w400,
                 color: context.colorScheme.error,
               ),
             ),
+          if (badge case final badge?)
+            WidgetSpan(alignment: PlaceholderAlignment.middle, child: badge),
         ],
       ),
     ),

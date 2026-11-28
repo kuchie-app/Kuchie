@@ -98,7 +98,8 @@ private struct DownloadActivityDisplay {
       return Text("Server downloads")
     }
     if context.state.effectiveSource == .local {
-      return Text("Local collection downloads")
+      // Kuchie 2.0 has one collection, on this iPhone.
+      return Text("iPhone downloads")
     }
     return progress == nil ? Text("Chapter downloads") : Text("Downloading chapter")
   }

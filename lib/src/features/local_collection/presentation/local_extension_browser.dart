@@ -68,6 +68,7 @@ import '../../sync/controller/server_chapter_pages.dart';
 import '../../sync/controller/server_series.dart';
 import '../../sync/controller/server_transfers.dart';
 import '../../sync/data/sync_journal.dart' show SyncTransferState;
+import '../../sync/presentation/extension_location_badge.dart';
 import '../../sync/presentation/move_to_server_sheet.dart';
 import '../../tracking/presentation/hub/track_sheet.dart';
 import '../data/chapter_page_resolver.dart';
@@ -856,6 +857,10 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
       return ExtensionCatalogTile(
         onTap: () => _showExtensionInfo(data, package: package),
         icon: _extensionIcon(package.icon),
+        badge: ExtensionLocationBadge(
+          package: package.id,
+          installedHere: update,
+        ),
         name: package.name,
         language: _languageName(package.language),
         version: package.version,
@@ -878,6 +883,10 @@ class _LocalExtensionBrowserState extends State<LocalExtensionBrowser>
     Widget extensionTile(LocalExtension extension) => ExtensionCatalogTile(
       onTap: () => _showExtensionInfo(data, extension: extension),
       icon: _extensionIcon(extension.icon),
+      badge: ExtensionLocationBadge(
+        package: extension.packageId,
+        installedHere: true,
+      ),
       name: extension.packageName,
       language: _languageName(extension.packageLanguage),
       version: extension.version,

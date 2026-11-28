@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../local_collection/data/local_catalog.dart';
@@ -65,6 +66,37 @@ class ServerTransfers {
   /// Called whenever the transfers change, for the Downloads page.
   void Function()? onChanged;
 
+  /// Transfers still on their way and how many of this run of them have
+  /// finished, for the Live Activity. Resets when none are left.
+  final status = ValueNotifier<({int open, int finished})>((
+    open: 0,
+    finished: 0,
+  ));
+  final _batch = <(String, String)>{};
+
+  void _publish(List<SyncTransfer> open) {
+    final keys = {
+      for (final transfer in open) (transfer.seriesId, transfer.chapterId),
+    };
+    if (keys.isEmpty) {
+      _batch.clear();
+    } else {
+      _batch.addAll(keys);
+    }
+    status.value = (
+      open: keys.length,
+      finished: keys.isEmpty ? 0 : _batch.length - keys.length,
+    );
+  }
+
+  Future<void> _publishOpen() async {
+    _publish(
+      await (await _journal()).transfers(
+        states: {SyncTransferState.queued, SyncTransferState.requested},
+      ),
+    );
+  }
+
   Future<SyncJournal> _journal() async => SyncJournal(await catalog());
 
   /// Downloads a chapter on the server. Nothing is saved here.
@@ -96,6 +128,7 @@ class ServerTransfers {
       );
     }
     onChanged?.call();
+    await _publishOpen();
     await run();
   }
 
@@ -103,6 +136,7 @@ class ServerTransfers {
   Future<void> cancel(String seriesId, String chapterId) async {
     await (await _journal()).removeTransfer(seriesId, chapterId);
     onChanged?.call();
+    await _publishOpen();
   }
 
   /// Advances every transfer once; runs again if asked meanwhile.
@@ -140,6 +174,7 @@ class ServerTransfers {
       states: {SyncTransferState.queued, SyncTransferState.requested},
     );
     if (open.isEmpty) {
+      _publish(const []);
       stopWatching();
       return;
     }
@@ -257,6 +292,7 @@ class ServerTransfers {
     final waiting = await journal.transfers(
       states: {SyncTransferState.queued, SyncTransferState.requested},
     );
+    _publish(waiting);
     waiting.isEmpty ? stopWatching() : watch();
   }
 
@@ -288,6 +324,7 @@ class ServerTransfers {
       );
     }
     onChanged?.call();
+    await _publishOpen();
     await run();
   }
 
@@ -354,6 +391,8 @@ class ServerTransfers {
     onChanged?.call();
   }
 
+  // [status] is left to the garbage collector: the Live Activity host may
+  // still be detaching from it.
   void dispose() => stopWatching();
 }
 
