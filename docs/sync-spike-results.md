@@ -10,6 +10,7 @@ Spike S1–S8 dari [sync-implementation-plan.md](sync-implementation-plan.md) (P
 | S2 `lastReadAt` | **Terdokumentasi**, dengan dua jebakan: satuan detik, dan `lastPageRead` dibuang kalau server belum pernah membuka chapter. | Progres yang dibuang didorong lewat `restoreBackup`. Kursor bertahap tidak boleh hanya memakai `lastReadAt`. |
 | S3 Buat manga | **Lolos lewat `restoreBackup`** (50/50). SEARCH 47/50 (94%), di bawah ambang. | `restoreBackup` dengan backup minimal menjadi cara utama. SEARCH tidak dipakai. |
 | S4 Auth | **Lolos.** UI login, basic auth, dan simple login berjalan lewat HTTP biasa, termasuk refresh token. | Klien sync ringan, tanpa `AccountSessionStartup`. |
+| S4b Multi-pengguna (preview v2.4.2512) | **Library dan progres per pengguna.** `restoreBackup` oleh pengguna biasa melapor SUCCESS tapi tidak menerapkan apa pun. Basic auth dan field lama di level atas dihapus. | Restore hanya dipakai untuk akun admin. Untuk pengguna biasa, chapter dibuka dulu (`fetchChapterPages`), lalu `updateChapters`. Semua dokumen sync divalidasi ke server preview. |
 | S5 Kinerja | **Lolos jauh di bawah ambang.** Pull penuh 50.533 chapter selesai dalam 0,6–1,0 detik. Pull bertahap 0,54 detik. | Pull penuh cukup murah untuk setiap sync manual dan rekonsiliasi harian. Paging opsional. |
 | S6 iCloud | **Belum diuji di perangkat.** Dokumentasi Apple: Personal Team (Apple ID gratis) tidak mendapat kapabilitas iCloud. | iCloud menunggu distribusi App Store/TestFlight (PR 22+, sesuai rencana). |
 | S7 Extension | **Lolos untuk `pkgName` dan `signingKey`.** Gagal untuk URL store: Kuchie dan server menyimpan URL berbeda untuk store yang sama. | Store dipetakan lewat `signingKey`, bukan URL. Extension lewat `pkgName`. |
@@ -110,6 +111,39 @@ Calon: series dari daftar Latest yang belum ada di server. 25 diuji per cara per
 
 **Keputusan:** lolos. Klien sync memakai kredensial dari `features/auth` (`auth_credentials_store`), mendeteksi `Unauthorized` di body GraphQL, refresh sekali, lalu menampilkan banner "Login kedaluwarsa" (8, kasus 11a) kalau masih gagal.
 
+## S4b Multi-pengguna (preview v2.4.2512)
+
+`results/s4b-multi-user.json`, skrip `s4b_multi_user.py`. Server preview resmi `Suwayomi-Server-v2.4.2512.jar` (22 November 2026, SHA-256 cocok dengan digest rilis GitHub), dijalankan dengan `tool/qa/server.py`. Datanya katalog lokal server (source `0`, tiga series QA), jadi tidak butuh extension atau internet. Server dikembalikan ke `NONE` setelahnya.
+
+**Skema dan auth:**
+
+- `AuthMode` tinggal `NONE`, `SIMPLE_LOGIN`, dan `UI_LOGIN`. Basic auth dihapus.
+- Field lama di `MangaType` dan `ChapterType` (`inLibrary`, `isRead`, `lastPageRead`, `lastReadAt`, dan lainnya) sudah **dihapus**, bukan lagi deprecated. Yang tersisa hanya `user { … }`. Input `condition`/`filter` (`inLibrary`, `lastReadAt`, dan lainnya) dan patch mutasi tidak berubah.
+- Ke-19 operasi di `sync.graphql` (PR 5) valid di server ini. Query dijalankan langsung. Mutasi dikirim tanpa variabel, sehingga lolos validasi dokumen dan baru ditolak di tahap variabel.
+- Pengguna 1 (`admin`, role ADMIN) dibuat lewat migrasi. Dalam mode `NONE`, semua permintaan adalah pengguna 1, dan `login` ditolak ("already logged-in"). Kata sandi admin bawaan hanya bisa diatur lewat `authUsername`/`authPassword` di setelan server; `setPassword` menolak untuk pengguna ini. `register` dari pengguna 1 membuat pengguna biasa (role USER, izin unduh dan extension).
+- JWT sekarang membawa `sub` (id pengguna), `roles`, dan `permissions`.
+
+**Per pengguna atau bersama:**
+
+| Data | Hasil |
+|---|---|
+| Library (`user.inLibrary`, `inLibraryAt`) | Per pengguna. Admin menambah series, pengguna kedua tetap `false`, dan `mangas(condition: {inLibrary: true})` menghitung per pengguna. |
+| Progres (`isRead`, `isBookmarked`, `lastPageRead`, `lastReadAt`) | Per pengguna. Masing-masing hanya melihat progresnya sendiri. |
+| Riwayat (`chapters(filter: {lastReadAt > 0})`) | Per pengguna. |
+| `lastReadAt` | Tetap waktu server dalam **detik**, diisi saat mutasi membawa `lastPageRead` (sama dengan S2). |
+| `restoreBackup` | Admin: diterapkan (`isRead`, `lastPageRead`, dan `lastReadAt` dari riwayat backup). Pengguna biasa: status `SUCCESS`, tapi **tidak ada yang berubah** untuk siapa pun. |
+| Unduhan | Belum terjawab. Chapter dari source lokal tidak pernah selesai diunduh dalam 60 detik. Perlu diuji ulang dengan source sungguhan (S8), sebelum PR 15. |
+
+**Keputusan:**
+
+- Kuchie 2.0 mendukung Stable v2.4.2366 (lewat `LegacyUserFieldsLink`) dan preview v2.4.2512. Basic auth hanya ada di Stable; detail Suwayomi menampilkan pesan yang jelas kalau server tidak lagi menerima mode itu.
+- Pengguna yang disinkronkan adalah pengguna pemilik token. `sync.suwayomi.userId` (PR 4) diisi dari klaim `sub`. Kalau `sub` berubah untuk alamat yang sama, itu dianggap server atau akun berubah ("Perlu tindakan").
+- `restoreBackup` hanya dipakai kalau token punya role ADMIN (atau server tanpa pengguna, yaitu Stable). Untuk pengguna biasa:
+  - membuat manga: `fetchSourceManga` lalu `updateMangas(inLibrary: true)`; S3 mencatat SEARCH 94%, jadi series yang gagal ditemukan menjadi "Perlu perhatian";
+  - `lastPageRead` pada chapter yang belum dibuka server: `fetchChapterPages` dulu (supaya `pageCount` diketahui), lalu `updateChapters`;
+  - waktu baca asli tidak bisa dibawa; server mencatat waktu push.
+- Hasil restore selalu diperiksa dengan query ulang, karena status `SUCCESS` tidak membuktikan apa pun (sama dengan S3).
+
 ## S5 Kinerja
 
 Seed: 500 series × 100 chapter lewat `restoreBackup` (URL palsu di bawah source MangaDex, tanpa akses jaringan), sekitar 0,5 detik per 100 series. Total library 554 series dan 50.533 chapter. `results/s5-performance.json`.
@@ -172,7 +206,7 @@ Tidak bisa diuji di sesi ini. Pengujiannya butuh Apple ID pengguna, pendaftaran 
 
 ## Keputusan terbuka
 
-1. **Versi Suwayomi minimum untuk Kuchie 2.0.** Skema di repo (`user { … }`) berasal dari build yang lebih baru daripada Stable v2.4.2366. Preview terbaru saat ini adalah v2.4.2512. Kuchie sudah menangani perbedaan ini: `LegacyUserFieldsLink` (`lib/src/utils/graphql/legacy_user_fields_link.dart`) memeriksa `ChapterType` lewat introspeksi, lalu menulis ulang `user { … }` menjadi field level atas untuk server lama. Klien sync (PR 4) memakai link yang sama, jadi dokumen sync bisa ditulis dengan `user.*`. Yang belum diuji adalah perilaku server multi-pengguna: apakah `lastReadAt`, restore, dan unduhan per pengguna atau global. Rekomendasi: ulangi S2, S3b, S4, dan S8 dengan JAR preview sebelum PR 5.
+1. **Versi Suwayomi minimum untuk Kuchie 2.0.** Skema di repo (`user { … }`) berasal dari build yang lebih baru daripada Stable v2.4.2366. Preview terbaru saat ini adalah v2.4.2512. Kuchie sudah menangani perbedaan ini: `LegacyUserFieldsLink` (`lib/src/utils/graphql/legacy_user_fields_link.dart`) memeriksa `ChapterType` lewat introspeksi, lalu menulis ulang `user { … }` menjadi field level atas untuk server lama. Klien sync (PR 4) memakai link yang sama, jadi dokumen sync bisa ditulis dengan `user.*`. Perilaku multi-pengguna sudah diuji di S4b (28 November 2026): library dan progres per pengguna, restore hanya untuk admin. Yang masih terbuka: unduhan per pengguna atau bersama (S8 dengan source sungguhan di server preview, sebelum PR 15).
 2. **Bug H2 paging dan `pageCount` saat disk penuh**: laporkan ke Suwayomi? Kuchie sudah punya jalan memutar untuk keduanya.
 
 ## Menjalankan ulang
@@ -188,6 +222,7 @@ python3 s2_last_read_at.py --manga-id <id> --fetch-pages
 python3 s3_create_manga.py --apk <apk> --source <id> --name "<nama source>"
 python3 s3b_restore_merge.py --source 2499283573021220255 --name MangaDex
 python3 s4_auth.py
+python3 s4b_multi_user.py      # server preview: --jar ~/development/suwayomi/Suwayomi-Server-v2.4.2512.jar
 python3 s5_performance.py
 python3 s8_download_proof.py --server-root <root>
 python3 s8_download_proof.py --scenario full --downloads-path <volume kecil>

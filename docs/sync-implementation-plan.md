@@ -486,6 +486,8 @@ lib/src/features/sync/controller/sync_engine.dart
 
 **Selesai kalau:** sync berjalan dua arah terhadap server QA nyata. Cek manual dengan WebUI Suwayomi.
 
+**Dari spike S4b (28 November 2026, preview v2.4.2512):** library dan progres per pengguna. `restoreBackup` hanya berefek untuk token dengan role ADMIN (atau server Stable tanpa pengguna). Untuk pengguna biasa, engine membuat manga lewat `fetchSourceManga` + `updateMangas(inLibrary: true)`, dan mengirim `lastPageRead` setelah `fetchChapterPages`. `sync.suwayomi.userId` diisi dari klaim `sub` di JWT. Lihat [sync-spike-results.md](sync-spike-results.md#s4b-multi-pengguna-preview-v242512).
+
 ### PR 9: Pemicu dan background
 
 - `sync_scheduler.dart`:
